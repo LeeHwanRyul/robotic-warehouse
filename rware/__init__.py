@@ -3,6 +3,8 @@ import itertools
 from gymnasium import register
 
 from rware.warehouse import RewardType, ObservationType
+from rware.multi_team_warehouse import MultiTeamWarehouse, TeamRewardMode
+from rware.multi_team_grid import MultiTeamGrid
 
 _sizes = {
     "tiny": (1, 3),
@@ -35,6 +37,64 @@ for size, diff, agents in _perms:
             "max_inactivity_steps": None,
             "max_steps": 500,
             "reward_type": RewardType.INDIVIDUAL,
+        },
+    )
+
+
+_multi_team_rware_setups = [
+    ("tiny", 4, 2),
+    ("small", 6, 2),
+    ("small", 6, 3),
+    ("medium", 8, 2),
+    ("medium", 10, 3),
+]
+
+for size, agents, teams in _multi_team_rware_setups:
+    per_team_requests = max(1, agents // teams)
+    register(
+        id=f"rware-multiteam-{size}-{agents}ag-{teams}teams-v0",
+        entry_point="rware.multi_team_warehouse:MultiTeamWarehouse",
+        kwargs={
+            "column_height": 8,
+            "shelf_rows": _sizes[size][0],
+            "shelf_columns": _sizes[size][1],
+            "n_agents": agents,
+            "msg_bits": 0,
+            "sensor_range": 1,
+            "request_queue_size": per_team_requests * teams,
+            "request_queue_size_per_team": per_team_requests,
+            "max_inactivity_steps": None,
+            "max_steps": 500,
+            "reward_type": RewardType.INDIVIDUAL,
+            "n_teams": teams,
+            "team_reward_mode": TeamRewardMode.TEAM,
+        },
+    )
+
+
+_multi_team_grid_setups = [
+    ("small", (12, 12), 4, 2, 2, 0.03, 100),
+    ("main", (15, 15), 6, 2, 3, 0.05, 200),
+    ("main", (15, 15), 6, 3, 2, 0.05, 200),
+    ("large", (20, 20), 8, 2, 4, 0.07, 300),
+    ("large", (24, 24), 10, 3, 3, 0.07, 300),
+]
+
+for label, grid_size, agents, teams, targets, obstacle_density, max_steps in _multi_team_grid_setups:
+    register(
+        id=f"mtgrid-{label}-{agents}ag-{teams}teams-v0",
+        entry_point="rware.multi_team_grid:MultiTeamGrid",
+        kwargs={
+            "grid_size": grid_size,
+            "n_agents": agents,
+            "n_teams": teams,
+            "msg_bits": 0,
+            "sensor_range": 2,
+            "targets_per_team": targets,
+            "obstacle_density": obstacle_density,
+            "target_layout": "zones",
+            "team_reward_mode": TeamRewardMode.TEAM,
+            "max_steps": max_steps,
         },
     )
 

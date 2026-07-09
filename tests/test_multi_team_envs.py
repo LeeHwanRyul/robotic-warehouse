@@ -1,0 +1,131 @@
+import os
+import sys
+
+import gymnasium as gym
+import numpy as np
+import pytest
+
+
+TEST_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_DIR = os.path.abspath(os.path.join(TEST_DIR, os.pardir))
+sys.path.insert(0, PROJECT_DIR)
+
+from rware.multi_team_grid import GridAction, MultiTeamGrid
+from rware.multi_team_warehouse import MultiTeamWarehouse, TeamRewardMode
+from rware.warehouse import Action, Direction, RewardType
+
+
+def test_multiteam_rware_hides_team_info_by_default():
+    env = MultiTeamWarehouse(
+        shelf_columns=3,
+        column_height=8,
+        shelf_rows=3,
+        n_agents=4,
+        msg_bits=0,
+        sensor_range=1,
+        request_queue_size=4,
+        request_queue_size_per_team=2,
+        max_inactivity_steps=None,
+        max_steps=50,
+        reward_type=RewardType.INDIVIDUAL,
+        n_teams=2,
+        team_assignments=[0, 1, 0, 1],
+    )
+    obs, info = env.reset(seed=7)
+
+    assert env.observation_space.contains(obs)
+    assert "agent_team_ids" not in info
+    assert env.get_oracle_team_assignments().tolist() == [0, 1, 0, 1]
+    assert len(env.request_queue) == 4
+    for team_id, team_queue in enumerate(env.team_request_queues):
+        assert len(team_queue) == 2
+        assert all(env.shelf_team_ids[shelf.id] == team_id for shelf in team_queue)
+
+
+def test_multiteam_rware_rewards_only_latent_shelf_team():
+    env = MultiTeamWarehouse(
+        shelf_columns=3,
+        column_height=8,
+        shelf_rows=3,
+        n_agents=2,
+        msg_bits=0,
+        sensor_range=1,
+        request_queue_size=2,
+        request_queue_size_per_team=1,
+        max_inactivity_steps=None,
+        max_steps=50,
+        reward_type=RewardType.INDIVIDUAL,
+        n_teams=2,
+        team_assignments=[0, 1],
+        team_reward_mode=TeamRewardMode.TEAM,
+    )
+    env.reset(seed=11)
+
+    goal_x, goal_y = env.goals[0]
+    shelf = env.shelfs[0]
+    env.shelf_team_ids[shelf.id] = 0
+    env.shelfs_by_team[0] = [shelf]
+    env.team_request_queues = [[shelf], [env.shelfs[1]]]
+    env._sync_global_request_queue()
+
+    env.agents[0].x = shelf.x = goal_x
+    env.agents[0].y = shelf.y = goal_y - 1
+    env.agents[0].dir = Direction.DOWN
+    env.agents[0].carrying_shelf = shelf
+    env.agents[1].x = 0
+    env.agents[1].y = 0
+    env.agents[1].dir = Direction.RIGHT
+    env._recalc_grid()
+
+    _, rewards, _, _, info = env.step([Action.FORWARD, Action.NOOP])
+
+    assert rewards[0] == pytest.approx(1.0)
+    assert rewards[1] == pytest.approx(0.0)
+    assert info["deliveries"] == 1
+
+
+def test_multiteam_grid_collection_and_hidden_oracle():
+    env = MultiTeamGrid(
+        grid_size=(6, 6),
+        n_agents=2,
+        n_teams=2,
+        sensor_range=1,
+        max_steps=10,
+        team_assignments=[0, 1],
+        targets_per_team=1,
+        obstacle_density=0.0,
+        team_reward_mode=TeamRewardMode.TEAM,
+    )
+    obs, info = env.reset(seed=3)
+
+    assert env.observation_space.contains(obs)
+    assert "agent_team_ids" not in info
+    assert env.get_oracle_team_assignments().tolist() == [0, 1]
+
+    env.agent_positions = np.asarray([[1, 1], [4, 4]], dtype=np.int32)
+    env.target_positions = {(2, 1): 0}
+
+    obs, rewards, done, truncated, info = env.step([GridAction.DOWN, GridAction.NOOP])
+
+    assert env.observation_space.contains(obs)
+    assert rewards == pytest.approx([1.0, 0.0])
+    assert not done
+    assert not truncated
+    assert info["collections"] == 1
+    assert len(env.target_positions) == 1
+
+
+def test_registered_multiteam_envs_can_step():
+    import rware  # noqa: F401
+
+    for env_id in [
+        "rware-multiteam-tiny-4ag-2teams-v0",
+        "mtgrid-small-4ag-2teams-v0",
+    ]:
+        env = gym.make(env_id)
+        obs, info = env.reset(seed=5)
+        assert env.observation_space.contains(obs)
+        assert "agent_team_ids" not in info
+        obs, rewards, done, truncated, info = env.step(env.action_space.sample())
+        assert env.observation_space.contains(obs)
+        assert len(rewards) == env.unwrapped.n_agents

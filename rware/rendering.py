@@ -92,10 +92,20 @@ class Viewer(object):
         self.grid_size = 30
         self.icon_size = 20
 
-        self.width = 1 + self.cols * (self.grid_size + 1)
-        self.height = 2 + self.rows * (self.grid_size + 1)
+        # Original RWARE map area.
+        self.map_width = 1 + self.cols * (self.grid_size + 1)
+        self.map_height = 2 + self.rows * (self.grid_size + 1)
+
+        # Extra right-side debug panel for per-agent local observations.
+        # This does not affect the environment state or observations.
+        self.side_panel_width = 260
+        self.side_panel_padding = 10
+        self.mini_grid_size = 13
+
+        self.width = self.map_width + self.side_panel_width
+        self.height = self.map_height
         self.window = pyglet.window.Window(
-            width=self.width, height=self.height, display=display
+            width=self.width, height=self.height, display=display, resizable=True
         )
         self.window.on_close = self.window_closed_by_user
         self.isopen = True
@@ -118,16 +128,61 @@ class Viewer(object):
             translation=(-left * scalex, -bottom * scaley), scale=(scalex, scaley)
         )
 
+    def _ensure_window_size_for_side_panel(self, env):
+        """Resize horizontally so agent local views wrap into extra columns.
+
+        The main warehouse map keeps its original height. If the right panel
+        cannot fit all local views vertically, the panel becomes wider and the
+        remaining local views are drawn in additional columns.
+        """
+        if not hasattr(env, "agents") or not hasattr(env, "sensor_range"):
+            required_width = int(self.map_width + self.side_panel_width)
+            required_height = int(self.map_height)
+        else:
+            n_agents = len(env.agents)
+            r = int(env.sensor_range)
+            view_size = 2 * r + 1
+            block_h = view_size * self.mini_grid_size
+
+            title_h = 24
+            label_h = 14
+            row_gap = 36
+            agent_block_h = label_h + block_h + row_gap
+
+            available_h = max(1, self.map_height - 2 * self.side_panel_padding - title_h)
+            rows_per_col = max(1, int(available_h // agent_block_h))
+            n_panel_cols = max(1, int(math.ceil(n_agents / rows_per_col)))
+
+            block_w = view_size * self.mini_grid_size
+            panel_col_width = max(125, block_w + 45)
+            required_side_panel_width = (
+                2 * self.side_panel_padding + n_panel_cols * panel_col_width
+            )
+
+            # Keep the map height fixed; expand only horizontally.
+            required_width = int(self.map_width + required_side_panel_width)
+            required_height = int(self.map_height)
+
+        if self.window.width != required_width or self.window.height != required_height:
+            self.window.set_size(required_width, required_height)
+            self.width = required_width
+            self.height = required_height
+
     def render(self, env, return_rgb_array=False):
+        self._ensure_window_size_for_side_panel(env)
+
         glClearColor(*_BACKGROUND_COLOR, 0)
         self.window.clear()
         self.window.switch_to()
         self.window.dispatch_events()
 
         self._draw_grid()
+        self._draw_agent_views_on_map(env)
         self._draw_goals(env)
         self._draw_shelfs(env)
+        self._draw_training_comm_edges(env)
         self._draw_agents(env)
+        self._draw_side_panel(env)
 
         if return_rgb_array:
             buffer = pyglet.image.get_buffer_manager().get_color_buffer()
@@ -137,6 +192,292 @@ class Viewer(object):
             arr = arr[::-1, :, 0:3]
         self.window.flip()
         return arr if return_rgb_array else self.isopen
+    
+    _TEAM_COLORS = [
+        (220, 80, 80),    # team 0: red
+        (80, 120, 220),   # team 1: blue
+        (80, 180, 100),   # team 2: green
+        (220, 170, 60),   # team 3: yellow
+        (170, 90, 200),   # team 4: purple
+    ]
+
+
+    def _team_color(self, team_id):
+        return self._TEAM_COLORS[int(team_id) % len(self._TEAM_COLORS)]
+
+
+    def _light_color(self, color, alpha=0.45):
+        return tuple(
+            int(c + (255 - c) * alpha)
+            for c in color
+        )
+    def _dark_color(self, color, alpha=0.35):
+        return tuple(
+            int(c * (1.0 - alpha))
+            for c in color
+        )
+
+    def _cell_center(self, x, y):
+        """Return screen-space center of a warehouse cell."""
+        render_y = self.rows - int(y) - 1
+        cx = (self.grid_size + 1) * int(x) + self.grid_size // 2 + 1
+        cy = (self.grid_size + 1) * render_y + self.grid_size // 2 + 1
+        return cx, cy
+
+    def _add_filled_rect(self, batch, x0, y0, x1, y1, color):
+        batch.add(
+            4,
+            gl.GL_QUADS,
+            None,
+            ("v2f", (x0, y0, x1, y0, x1, y1, x0, y1)),
+            ("c3B", 4 * tuple(color)),
+        )
+
+    def _add_rect_outline(self, batch, x0, y0, x1, y1, color):
+        color = tuple(color)
+        batch.add(2, gl.GL_LINES, None, ("v2f", (x0, y0, x1, y0)), ("c3B", (*color, *color)))
+        batch.add(2, gl.GL_LINES, None, ("v2f", (x1, y0, x1, y1)), ("c3B", (*color, *color)))
+        batch.add(2, gl.GL_LINES, None, ("v2f", (x1, y1, x0, y1)), ("c3B", (*color, *color)))
+        batch.add(2, gl.GL_LINES, None, ("v2f", (x0, y1, x0, y0)), ("c3B", (*color, *color)))
+
+    def _draw_agent_views_on_map(self, env):
+        """Draw each agent's current sensor-range box on the main map."""
+        if not hasattr(env, "sensor_range"):
+            return
+
+        batch = pyglet.graphics.Batch()
+        r = int(env.sensor_range)
+
+        for agent in env.agents:
+            if hasattr(env, "agent_team_ids"):
+                color = self._light_color(self._team_color(env.agent_team_ids[agent.id - 1]), 0.25)
+            else:
+                color = (160, 160, 160)
+
+            x0 = max(0, int(agent.x) - r)
+            x1 = min(self.cols - 1, int(agent.x) + r)
+            y0 = max(0, int(agent.y) - r)
+            y1 = min(self.rows - 1, int(agent.y) + r)
+
+            # Convert environment y-range to pyglet y-range.
+            render_y_bottom = self.rows - y1 - 1
+            render_y_top = self.rows - y0 - 1
+
+            left = (self.grid_size + 1) * x0 + 1
+            right = (self.grid_size + 1) * (x1 + 1)
+            bottom = (self.grid_size + 1) * render_y_bottom + 1
+            top = (self.grid_size + 1) * (render_y_top + 1)
+
+            self._add_rect_outline(batch, left, bottom, right, top, color)
+
+        batch.draw()
+
+    def _draw_training_comm_edges(self, env):
+        """Draw dynamic communication/network edges between agents on the main map."""
+        edges = getattr(env, "training_comm_edges", [])
+        if not edges:
+            return
+
+        batch = pyglet.graphics.Batch()
+        for i, j in edges:
+            if i < 0 or j < 0 or i >= len(env.agents) or j >= len(env.agents):
+                continue
+            ai = env.agents[int(i)]
+            aj = env.agents[int(j)]
+            x1, y1 = self._cell_center(ai.x, ai.y)
+            x2, y2 = self._cell_center(aj.x, aj.y)
+
+            # Black edge with a simple line. Agents are drawn after this, so circles stay visible.
+            color = (20, 20, 20)
+            batch.add(
+                2,
+                gl.GL_LINES,
+                None,
+                ("v2f", (x1, y1, x2, y2)),
+                ("c3B", (*color, *color)),
+            )
+        batch.draw()
+
+    def _draw_side_panel(self, env):
+        """Draw a right-side panel containing each agent's local field of view.
+
+        Local views are arranged column-wise. When the panel height is not
+        enough, remaining agents are drawn in a new column to the right instead
+        of increasing the window height.
+        """
+        panel_origin_x = self.map_width + 1
+        panel_x0 = self.map_width + self.side_panel_padding
+        top = self.map_height - self.side_panel_padding
+
+        batch = pyglet.graphics.Batch()
+        # Panel background and border.
+        self._add_filled_rect(batch, panel_origin_x, 0, self.width, self.map_height, (245, 245, 245))
+        self._add_rect_outline(batch, panel_origin_x, 1, self.width - 1, self.map_height - 1, (80, 80, 80))
+        batch.draw()
+
+        title = pyglet.text.Label(
+            "Agent local views",
+            font_name="Calibri",
+            font_size=12,
+            bold=True,
+            x=panel_x0,
+            y=top,
+            anchor_x="left",
+            anchor_y="top",
+            color=(*_BLACK, 255),
+        )
+        title.draw()
+
+        if not hasattr(env, "sensor_range"):
+            return
+
+        r = int(env.sensor_range)
+        view_size = 2 * r + 1
+        cell = self.mini_grid_size
+        block_w = view_size * cell
+        block_h = view_size * cell
+
+        title_h = 24
+        label_h = 14
+        row_gap = 36
+        agent_block_h = label_h + block_h + row_gap
+
+        available_h = max(1, self.map_height - 2 * self.side_panel_padding - title_h)
+        rows_per_col = max(1, int(available_h // agent_block_h))
+        panel_col_width = max(125, block_w + 45)
+
+        for idx, agent in enumerate(env.agents):
+            col_idx = idx // rows_per_col
+            row_idx = idx % rows_per_col
+
+            col_x0 = panel_x0 + col_idx * panel_col_width
+            y_cursor = top - title_h - row_idx * agent_block_h
+
+            if hasattr(env, "agent_team_ids"):
+                team_id = int(env.agent_team_ids[agent.id - 1])
+                agent_color = self._team_color(team_id)
+                title_text = f"A{agent.id} / true T{team_id}"
+            else:
+                agent_color = _AGENT_COLOR
+                title_text = f"A{agent.id}"
+
+            if hasattr(env, "inferred_team_ids"):
+                pred = int(env.inferred_team_ids[agent.id - 1])
+                conf = float(env.inferred_team_confidence[agent.id - 1]) if hasattr(env, "inferred_team_confidence") else 0.0
+                if pred >= 0:
+                    title_text += f" / pred T{pred} ({conf:.2f})"
+
+            label = pyglet.text.Label(
+                title_text,
+                font_name="Calibri",
+                font_size=10,
+                bold=True,
+                x=col_x0,
+                y=y_cursor,
+                anchor_x="left",
+                anchor_y="top",
+                color=(*agent_color, 255),
+            )
+            label.draw()
+
+            grid_x0 = col_x0
+            grid_y0 = y_cursor - label_h - block_h
+            self._draw_agent_local_view(env, agent, grid_x0, grid_y0, cell, r)
+
+    def _draw_agent_local_view(self, env, center_agent, x0, y0, cell, r):
+        """Draw one agent-centered local observation panel."""
+        view_size = 2 * r + 1
+        batch = pyglet.graphics.Batch()
+
+        shelf_by_pos = {(int(shelf.x), int(shelf.y)): shelf for shelf in env.shelfs}
+        agent_by_pos = {(int(agent.x), int(agent.y)): agent for agent in env.agents}
+        goals_by_pos = {tuple(map(int, goal)) for goal in getattr(env, "goals", [])}
+        request_ids = {shelf.id for shelf in getattr(env, "request_queue", [])}
+
+        # Background cells.
+        for dy in range(-r, r + 1):
+            for dx in range(-r, r + 1):
+                wx = int(center_agent.x) + dx
+                wy = int(center_agent.y) + dy
+                lx = dx + r
+                ly = dy + r
+                # In the mini panel, top row corresponds to smaller environment y.
+                px0 = x0 + lx * cell
+                py0 = y0 + (view_size - 1 - ly) * cell
+                px1 = px0 + cell
+                py1 = py0 + cell
+
+                if wx < 0 or wx >= self.cols or wy < 0 or wy >= self.rows:
+                    fill = (210, 210, 210)
+                else:
+                    fill = (255, 255, 255)
+                    if (wx, wy) in goals_by_pos:
+                        if hasattr(env, "goal_team_ids") and (wx, wy) in env.goal_team_ids:
+                            fill = self._light_color(self._team_color(env.goal_team_ids[(wx, wy)]), 0.35)
+                        else:
+                            fill = (220, 220, 220)
+
+                self._add_filled_rect(batch, px0, py0, px1, py1, fill)
+                self._add_rect_outline(batch, px0, py0, px1, py1, (150, 150, 150))
+
+                shelf = shelf_by_pos.get((wx, wy))
+                if shelf is not None:
+                    if hasattr(env, "shelf_team_ids") and shelf.id in env.shelf_team_ids:
+                        color = self._team_color(env.shelf_team_ids[shelf.id])
+                        if shelf.id in request_ids:
+                            color = self._light_color(color, 0.35)
+                    else:
+                        color = _SHELF_REQ_COLOR if shelf.id in request_ids else _SHELF_COLOR
+                    pad = 2
+                    self._add_filled_rect(batch, px0 + pad, py0 + pad, px1 - pad, py1 - pad, color)
+
+        batch.draw()
+
+        # Draw agents after shelves so they stay visible.
+        for dy in range(-r, r + 1):
+            for dx in range(-r, r + 1):
+                wx = int(center_agent.x) + dx
+                wy = int(center_agent.y) + dy
+                agent = agent_by_pos.get((wx, wy))
+                if agent is None:
+                    continue
+
+                lx = dx + r
+                ly = dy + r
+                cx = x0 + lx * cell + cell / 2
+                cy = y0 + (view_size - 1 - ly) * cell + cell / 2
+                radius = max(3, cell / 3)
+
+                if hasattr(env, "agent_team_ids"):
+                    color = self._team_color(env.agent_team_ids[agent.id - 1])
+                else:
+                    color = _AGENT_COLOR
+                if agent.id == center_agent.id:
+                    color = self._dark_color(color, 0.15)
+
+                verts = []
+                resolution = 10
+                for k in range(resolution):
+                    angle = 2 * math.pi * k / resolution
+                    verts += [radius * math.cos(angle) + cx, radius * math.sin(angle) + cy]
+                circle = pyglet.graphics.vertex_list(resolution, ("v2f", verts))
+                glColor3ub(*color)
+                circle.draw(GL_POLYGON)
+
+        # Center mark.
+        center_label = pyglet.text.Label(
+            str(center_agent.id),
+            font_name="Calibri",
+            font_size=8,
+            bold=True,
+            x=x0 + r * cell + cell / 2,
+            y=y0 + r * cell + cell / 2,
+            anchor_x="center",
+            anchor_y="center",
+            color=(*_WHITE, 255),
+        )
+        center_label.draw()
+
 
     def _draw_grid(self):
         batch = pyglet.graphics.Batch()
@@ -183,10 +524,22 @@ class Viewer(object):
         for shelf in env.shelfs:
             x, y = shelf.x, shelf.y
             y = self.rows - y - 1  # pyglet rendering is reversed
-            shelf_color = (
-                _SHELF_REQ_COLOR if shelf in env.request_queue else _SHELF_COLOR
-            )
+            
+            if hasattr(env, "shelf_team_ids") and shelf.id in env.shelf_team_ids:
+                team_id = env.shelf_team_ids[shelf.id]
+                base_color = self._team_color(team_id)
 
+                # requested shelf는 더 밝게 표시
+                shelf_color = self._light_color(base_color) if shelf in env.request_queue else base_color
+            else:
+                shelf_color = ( _SHELF_REQ_COLOR if shelf in env.request_queue else _SHELF_COLOR)
+            
+            # ##################################
+            """shelf_color = (
+                _SHELF_REQ_COLOR if shelf in env.request_queue else _SHELF_COLOR
+            )"""
+            # ##################################
+            
             batch.add(
                 4,
                 gl.GL_QUADS,
@@ -213,6 +566,12 @@ class Viewer(object):
 
         # draw goal boxes
         for goal in env.goals:
+            raw_goal = tuple(map(int, goal))
+            if hasattr(env, "goal_team_ids") and raw_goal in env.goal_team_ids:
+                goal_color = self._team_color(env.goal_team_ids[raw_goal])
+            else:
+                goal_color = _GOAL_COLOR
+
             x, y = goal
             y = self.rows - y - 1  # pyglet rendering is reversed
             batch.add(
@@ -232,18 +591,24 @@ class Viewer(object):
                         (self.grid_size + 1) * (y + 1),  # BL - Y
                     ),
                 ),
-                ("c3B", 4 * _GOAL_COLOR),
+                ("c3B", 4 * goal_color),
             )
         batch.draw()
 
         # draw goal labels
         for goal in env.goals:
+            raw_goal = tuple(map(int, goal))
+            if hasattr(env, "goal_team_ids") and raw_goal in env.goal_team_ids:
+                label_text = f"G{env.goal_team_ids[raw_goal]}"
+            else:
+                label_text = "G"
+
             x, y = goal
             y = self.rows - y - 1
             label_x = x * (self.grid_size + 1) + (1 / 2) * (self.grid_size + 1)
             label_y = (self.grid_size + 1) * y + (1 / 2) * (self.grid_size + 1)
             label = pyglet.text.Label(
-                "G",
+                label_text,
                 font_name="Calibri",
                 font_size=18,
                 bold=False,
@@ -286,8 +651,18 @@ class Viewer(object):
                 verts += [x, y]
             circle = pyglet.graphics.vertex_list(resolution, ("v2f", verts))
 
-            draw_color = _AGENT_LOADED_COLOR if agent.carrying_shelf else _AGENT_COLOR
+            # ########################################
+            # draw_color = _AGENT_LOADED_COLOR if agent.carrying_shelf else _AGENT_COLOR
+            # ########################################
+            if hasattr(env, "agent_team_ids"):
+                team_id = env.agent_team_ids[agent.id - 1]
+                base_color = self._team_color(team_id)
 
+                # shelf를 들고 있으면 더 밝은 팀 색으로 표시
+                draw_color = self._light_color(base_color) if agent.carrying_shelf else base_color
+            else:
+                draw_color = _AGENT_LOADED_COLOR if agent.carrying_shelf else _AGENT_COLOR
+            
             glColor3ub(*draw_color)
             circle.draw(GL_POLYGON)
 

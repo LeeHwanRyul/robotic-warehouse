@@ -25,6 +25,7 @@
 - [Environment Parameters](#environment-parameters)
   - [Naming Scheme](#naming-scheme)
   - [Custom layout](#custom-layout)
+- [Latent Multi-Team Environments](#latent-multi-team-environments)
 - [Installation](#installation)
 - [Getting Started](#getting-started)
 - [Human Play](#human-play)
@@ -131,6 +132,45 @@ This will transform "X"s to shelves and "G"s to goal locations with a result lik
 
 
 A detailed explanation of all parameters can be found [here](https://github.com/semitable/robotic-warehouse/blob/4307b1fe3afa26de4ca4003fd04ab1319879832a/robotic_warehouse/warehouse.py#L132)
+
+# Latent Multi-Team Environments
+
+This fork adds two environments for latent team discovery experiments:
+
+- `MultiTeamWarehouse`: an RWARE variant where shelves are partitioned into hidden team objectives, and agents receive rewards according to hidden agent-team membership.
+- `MultiTeamGrid`: a lightweight synthetic grid where target types are visible, but each agent's rewarded target type/team is hidden.
+
+Team IDs are not included in observations or default `info`. For oracle grouping baselines, call:
+
+```python
+team_ids = env.unwrapped.get_oracle_team_assignments()
+team_members = env.unwrapped.get_team_members()
+```
+
+Recommended Gymnasium IDs:
+
+```python
+import gymnasium as gym
+import rware
+
+# Small validation
+env = gym.make("rware-multiteam-tiny-4ag-2teams-v0")
+env = gym.make("mtgrid-small-4ag-2teams-v0")
+
+# Main experiments
+env = gym.make("rware-multiteam-small-6ag-2teams-v0")
+env = gym.make("rware-multiteam-small-6ag-3teams-v0")
+env = gym.make("mtgrid-main-6ag-2teams-v0")
+env = gym.make("mtgrid-main-6ag-3teams-v0")
+
+# Scalability
+env = gym.make("rware-multiteam-medium-8ag-2teams-v0")
+env = gym.make("rware-multiteam-medium-10ag-3teams-v0")
+env = gym.make("mtgrid-large-8ag-2teams-v0")
+env = gym.make("mtgrid-large-10ag-3teams-v0")
+```
+
+Both environments support `msg_bits`, local partial observations, fixed or reset-shuffled hidden teams, and `TeamRewardMode.TEAM`/`INDIVIDUAL`/`ALL` reward modes.
 
 # Installation
 

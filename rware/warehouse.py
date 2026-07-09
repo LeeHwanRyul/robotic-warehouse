@@ -1045,7 +1045,7 @@ if __name__ == "__main__":
     env.reset()
     from tqdm import tqdm
 
-    # env.render()
+    env.render()
 
     for _ in tqdm(range(1000000)):
         # time.sleep(0.05)

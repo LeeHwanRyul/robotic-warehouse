@@ -364,7 +364,7 @@ def test_inactivity_1(env_0):
     assert done
 
 
-@pytest.mark.parametrize("time_limit,", [1, 100, 200])
+@pytest.mark.parametrize("time_limit", [1, 100, 200])
 def test_time_limit(time_limit):
     env = Warehouse(
         shelf_columns=1,

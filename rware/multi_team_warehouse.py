@@ -1,0 +1,754 @@
+from enum import Enum
+from typing import Dict, List, Optional, Sequence, Tuple
+
+import networkx as nx
+import numpy as np
+
+from rware.warehouse import (
+    _LAYER_AGENTS,
+    _LAYER_SHELFS,
+    Action,
+    ImageLayer,
+    ObservationType,
+    RewardType,
+    Shelf,
+    Warehouse,
+)
+
+
+class TeamRewardMode(Enum):
+    TEAM = "team"
+    INDIVIDUAL = "individual"
+    ALL = "all"
+
+
+def _coerce_team_reward_mode(mode) -> TeamRewardMode:
+    if isinstance(mode, TeamRewardMode):
+        return mode
+    return TeamRewardMode(str(mode).lower())
+
+
+def _balanced_assignments(n_agents: int, n_teams: int) -> np.ndarray:
+    return np.asarray([agent_id % n_teams for agent_id in range(n_agents)], dtype=np.int32)
+
+
+def _coerce_team_sizes(value, n_teams: int, fallback_total: int) -> List[int]:
+    if value is None:
+        per_team = max(1, int(np.ceil(fallback_total / n_teams)))
+        return [per_team for _ in range(n_teams)]
+    if isinstance(value, int):
+        return [value for _ in range(n_teams)]
+    values = [int(v) for v in value]
+    if len(values) != n_teams:
+        raise ValueError("request_queue_size_per_team must have one value per team")
+    return values
+
+
+class MultiTeamWarehouse(Warehouse):
+    """RWARE variant with hidden agent teams and team-specific shelf requests.
+
+    The observation and action API remains compatible with the base RWARE
+    environment. Hidden agent team IDs are used only for rewards and request
+    replacement, so algorithms must infer team structure from local experience.
+    """
+
+    def __init__(
+        self,
+        shelf_columns: int,
+        column_height: int,
+        shelf_rows: int,
+        n_agents: int,
+        msg_bits: int,
+        sensor_range: int,
+        request_queue_size: int,
+        max_inactivity_steps: Optional[int],
+        max_steps: Optional[int],
+        reward_type: RewardType = RewardType.INDIVIDUAL,
+        layout: Optional[str] = None,
+        observation_type: ObservationType = ObservationType.FLATTENED,
+        image_observation_layers: List[ImageLayer] = [
+            ImageLayer.SHELVES,
+            ImageLayer.REQUESTS,
+            ImageLayer.AGENTS,
+            ImageLayer.GOALS,
+            ImageLayer.ACCESSIBLE,
+        ],
+        image_observation_directional: bool = True,
+        normalised_coordinates: bool = False,
+        render_mode: str = "human",
+        n_teams: int = 2,
+        team_assignments: Optional[Sequence[int]] = None,
+        shuffle_team_assignments_on_reset: bool = False,
+        request_queue_size_per_team: Optional[Sequence[int]] = None,
+        team_reward_mode: TeamRewardMode = TeamRewardMode.TEAM,
+        shelf_team_mode: str = "soft_zones",
+        shelf_soft_zone_ratio: float = 0.7,
+        shelf_soft_zone_axis: str = "x",
+        goal_team_mode: str = "soft_zones",
+        team_goal_positions: Optional[Sequence[Sequence[Tuple[int, int]]]] = None,
+        goals_per_team: int = 1,
+        soft_goal_separation: float = 0.55,
+        require_matching_team_goal: bool = True,
+        delivery_reward: float = 1.0,
+        wrong_team_penalty: float = 0.0,
+        step_penalty: float = 0.0,
+        failed_forward_penalty: float = 0.0,
+        reveal_team_info: bool = False,
+        communication_range: Optional[int] = None,
+        team_edge_threshold: float = 0.5,
+        use_physical_comm_range: bool = True,
+    ):
+        if n_teams < 1:
+            raise ValueError("n_teams must be positive")
+        if n_teams > n_agents:
+            raise ValueError("n_teams cannot exceed n_agents")
+
+        super().__init__(
+            shelf_columns=shelf_columns,
+            column_height=column_height,
+            shelf_rows=shelf_rows,
+            n_agents=n_agents,
+            msg_bits=msg_bits,
+            sensor_range=sensor_range,
+            request_queue_size=request_queue_size,
+            max_inactivity_steps=max_inactivity_steps,
+            max_steps=max_steps,
+            reward_type=reward_type,
+            layout=layout,
+            observation_type=observation_type,
+            image_observation_layers=image_observation_layers,
+            image_observation_directional=image_observation_directional,
+            normalised_coordinates=normalised_coordinates,
+            render_mode=render_mode,
+        )
+
+        self._base_goals = [tuple(map(int, goal)) for goal in self.goals]
+
+        if team_assignments is None:
+            base_assignments = _balanced_assignments(n_agents, n_teams)
+        else:
+            base_assignments = np.asarray(team_assignments, dtype=np.int32)
+            if base_assignments.shape != (n_agents,):
+                raise ValueError("team_assignments must contain one team id per agent")
+            if np.any(base_assignments < 0) or np.any(base_assignments >= n_teams):
+                raise ValueError("team_assignments must be in [0, n_teams)")
+            missing_teams = set(range(n_teams)) - set(base_assignments.tolist())
+            if missing_teams:
+                raise ValueError(f"Each team must contain at least one agent: missing {missing_teams}")
+
+        self.n_teams = n_teams
+        self._base_agent_team_ids = base_assignments
+        self.agent_team_ids = base_assignments.copy()
+        self.shuffle_team_assignments_on_reset = shuffle_team_assignments_on_reset
+        self.request_queue_size_per_team = _coerce_team_sizes(
+            request_queue_size_per_team, n_teams, request_queue_size
+        )
+        self.team_reward_mode = _coerce_team_reward_mode(team_reward_mode)
+        self.shelf_team_mode = str(shelf_team_mode).lower()
+        self.shelf_soft_zone_ratio = float(shelf_soft_zone_ratio)
+        self.shelf_soft_zone_axis = str(shelf_soft_zone_axis).lower()
+        self.goal_team_mode = str(goal_team_mode).lower()
+        self._manual_team_goal_positions = team_goal_positions
+        self.goals_per_team = int(goals_per_team)
+        self.soft_goal_separation = float(soft_goal_separation)
+        self.require_matching_team_goal = bool(require_matching_team_goal)
+
+        if not 0.0 <= self.shelf_soft_zone_ratio <= 1.0:
+            raise ValueError("shelf_soft_zone_ratio must be in [0, 1]")
+        if self.shelf_soft_zone_axis not in ["x", "y"]:
+            raise ValueError("shelf_soft_zone_axis must be 'x' or 'y'")
+        if self.goals_per_team < 1:
+            raise ValueError("goals_per_team must be positive")
+        if not 0.0 <= self.soft_goal_separation <= 1.0:
+            raise ValueError("soft_goal_separation must be in [0, 1]")
+        self.delivery_reward = float(delivery_reward)
+        self.wrong_team_penalty = float(wrong_team_penalty)
+        self.step_penalty = float(step_penalty)
+        self.failed_forward_penalty = float(failed_forward_penalty)
+        self.reveal_team_info = reveal_team_info
+
+        self.shelf_team_ids: Dict[int, int] = {}
+        self.shelfs_by_team: List[List[Shelf]] = [[] for _ in range(n_teams)]
+        self.team_request_queues: List[List[Shelf]] = [[] for _ in range(n_teams)]
+        self.goal_team_ids: Dict[Tuple[int, int], int] = {}
+        self.goals_by_team: List[List[Tuple[int, int]]] = [[] for _ in range(n_teams)]
+        self.team_delivery_counts = np.zeros(n_teams, dtype=np.int64)
+        self._last_delivery_events = []
+
+        # Learned / inferred dynamic communication graph.
+        # This is for training-time selective sharing or debugging. It is not
+        # included in the agents' observations.
+        self.communication_range = int(sensor_range if communication_range is None else communication_range)
+        self.team_edge_threshold = float(team_edge_threshold)
+        self.use_physical_comm_range = bool(use_physical_comm_range)
+        self.inferred_team_ids = -np.ones(self.n_agents, dtype=np.int32)
+        self.inferred_team_confidence = np.zeros(self.n_agents, dtype=np.float32)
+        self.training_comm_adj = np.zeros((self.n_agents, self.n_agents), dtype=np.float32)
+        self.training_comm_edges: List[Tuple[int, int]] = []
+
+    def get_oracle_team_assignments(self) -> np.ndarray:
+        return self.agent_team_ids.copy()
+
+    def get_team_members(self) -> List[List[int]]:
+        return [
+            np.flatnonzero(self.agent_team_ids == team_id).astype(np.int32).tolist()
+            for team_id in range(self.n_teams)
+        ]
+
+    def _home_zone_id(self, x: int, y: int) -> int:
+        """Return the spatial home zone id for a grid cell.
+
+        This is used only to create task distributions. The team id is still
+        hidden from observations unless the user enables debug info/rendering.
+        """
+        height, width = self.grid_size
+        if self.shelf_soft_zone_axis == "y":
+            coord = int(y)
+            extent = int(height)
+        else:
+            coord = int(x)
+            extent = int(width)
+
+        zone_edges = np.linspace(0, extent, self.n_teams + 1)
+        zone_id = int(np.searchsorted(zone_edges, coord, side="right") - 1)
+        return int(np.clip(zone_id, 0, self.n_teams - 1))
+
+    def _assign_shelf_teams(self):
+        self.shelf_team_ids = {}
+        self.shelfs_by_team = [[] for _ in range(self.n_teams)]
+
+        if self.shelf_team_mode == "round_robin":
+            ordered_shelfs = sorted(self.shelfs, key=lambda shelf: (shelf.x, shelf.y, shelf.id))
+            for idx, shelf in enumerate(ordered_shelfs):
+                team_id = idx % self.n_teams
+                self.shelf_team_ids[shelf.id] = team_id
+                self.shelfs_by_team[team_id].append(shelf)
+            return
+
+        if self.shelf_team_mode not in ["zones", "soft_zones"]:
+            raise ValueError("shelf_team_mode must be 'zones', 'soft_zones', or 'round_robin'")
+
+        for shelf in self.shelfs:
+            home_team = self._home_zone_id(shelf.x, shelf.y)
+
+            if self.shelf_team_mode == "soft_zones" and self.n_teams > 1:
+                # With probability shelf_soft_zone_ratio, keep the shelf assigned
+                # to its spatial home zone. Otherwise assign it to another team.
+                # Example: ratio=0.7 gives roughly 70:30 mixing for two teams.
+                if float(self.np_random.random()) < self.shelf_soft_zone_ratio:
+                    team_id = home_team
+                else:
+                    other_teams = [team for team in range(self.n_teams) if team != home_team]
+                    team_id = int(self.np_random.choice(other_teams))
+            else:
+                team_id = home_team
+
+            self.shelf_team_ids[shelf.id] = int(team_id)
+            self.shelfs_by_team[int(team_id)].append(shelf)
+
+        # Make sure every team owns at least one shelf so every team can have
+        # a non-empty request queue. This is especially important for small maps.
+        empty_teams = [idx for idx, shelfs in enumerate(self.shelfs_by_team) if not shelfs]
+        if empty_teams:
+            ordered_shelfs = sorted(self.shelfs, key=lambda shelf: (shelf.x, shelf.y, shelf.id))
+            for missing_team in empty_teams:
+                donor_team = int(np.argmax([len(shelfs) for shelfs in self.shelfs_by_team]))
+                if not self.shelfs_by_team[donor_team]:
+                    shelf = ordered_shelfs[missing_team % len(ordered_shelfs)]
+                else:
+                    shelf = self.shelfs_by_team[donor_team].pop()
+                self.shelf_team_ids[shelf.id] = int(missing_team)
+                self.shelfs_by_team[missing_team].append(shelf)
+
+    def get_shelf_zone_team_counts(self) -> np.ndarray:
+        """Debug helper: counts[home_zone, assigned_team]."""
+        counts = np.zeros((self.n_teams, self.n_teams), dtype=np.int64)
+        for shelf in self.shelfs:
+            home_zone = self._home_zone_id(shelf.x, shelf.y)
+            assigned_team = self.shelf_team_ids.get(shelf.id)
+            if assigned_team is not None:
+                counts[home_zone, int(assigned_team)] += 1
+        return counts
+
+    def _nearest_highway_cell(self, target_x: int, target_y: int, used: set) -> Tuple[int, int]:
+        height, width = self.grid_size
+        candidates = []
+        for y in range(height):
+            for x in range(width):
+                if (x, y) in used:
+                    continue
+                if self._is_highway(x, y):
+                    dist = abs(x - target_x) + abs(y - target_y)
+                    candidates.append((dist, x, y))
+
+        if candidates:
+            _, x, y = min(candidates, key=lambda item: item[0])
+            return int(x), int(y)
+
+        # Fallback: if the layout has no highway cells for some reason.
+        x = int(np.clip(target_x, 0, width - 1))
+        y = int(np.clip(target_y, 0, height - 1))
+        return x, y
+
+    def _make_default_team_goals(self) -> List[List[Tuple[int, int]]]:
+        """Create one reachable goal position per team, spread along the x-axis."""
+        height, width = self.grid_size
+        base_goals = self._base_goals or [(width // 2, height - 1)]
+        used = set()
+        goals_by_team: List[List[Tuple[int, int]]] = [[] for _ in range(self.n_teams)]
+
+        for team_id in range(self.n_teams):
+            target_x = int(round((team_id + 0.5) * width / self.n_teams - 0.5))
+            target_y = int(base_goals[team_id % len(base_goals)][1])
+            goal = self._nearest_highway_cell(target_x, target_y, used)
+            used.add(goal)
+            goals_by_team[team_id].append(goal)
+
+        return goals_by_team
+
+    def _make_soft_zone_team_goals(self) -> List[List[Tuple[int, int]]]:
+        """Create moderately separated team goals instead of far corner goals.
+
+        soft_goal_separation=0.0 puts all team goals near the global center;
+        soft_goal_separation=1.0 puts them near each team's full zone center.
+        Values around 0.45--0.65 are useful for latent-team experiments:
+        agents share the same warehouse space, but long-term trajectories still
+        contain a weak team-specific directional signal.
+        """
+        height, width = self.grid_size
+        base_goals = [tuple(map(int, goal)) for goal in (self._base_goals or [])]
+        base_y_values = sorted({int(goal[1]) for goal in base_goals})
+        if not base_y_values:
+            base_y_values = [height - 1]
+        if len(base_y_values) == 1 and self.goals_per_team > 1:
+            # Use top/bottom lanes when the base layout exposes only one y-level.
+            base_y_values = sorted({0, height - 1})
+
+        used = set()
+        goals_by_team: List[List[Tuple[int, int]]] = [[] for _ in range(self.n_teams)]
+        global_center_x = (width - 1) / 2.0
+
+        for team_id in range(self.n_teams):
+            zone_center_x = (team_id + 0.5) * width / self.n_teams - 0.5
+            target_x_base = global_center_x + (zone_center_x - global_center_x) * self.soft_goal_separation
+
+            for k in range(self.goals_per_team):
+                y = base_y_values[k % len(base_y_values)]
+                # Small alternating offset prevents multiple goals from collapsing
+                # to the exact same cell when goals_per_team > 1.
+                offset = (k // len(base_y_values)) - ((self.goals_per_team - 1) / 2.0)
+                target_x = int(round(target_x_base + offset))
+                goal = self._nearest_highway_cell(target_x, int(y), used)
+                used.add(goal)
+                goals_by_team[team_id].append(goal)
+
+        return goals_by_team
+
+    def _assign_existing_goals_to_teams(self) -> Optional[List[List[Tuple[int, int]]]]:
+        """Split existing RWARE goals by zone or round-robin when enough goals exist."""
+        goals = [tuple(map(int, goal)) for goal in self._base_goals]
+        if len(goals) < self.n_teams:
+            return None
+
+        goals_by_team: List[List[Tuple[int, int]]] = [[] for _ in range(self.n_teams)]
+
+        if self.goal_team_mode == "round_robin":
+            for idx, goal in enumerate(sorted(goals, key=lambda g: (g[0], g[1]))):
+                goals_by_team[idx % self.n_teams].append(goal)
+            return goals_by_team
+
+        if self.goal_team_mode not in ["auto", "zones"]:
+            raise ValueError("goal_team_mode must be 'auto', 'zones', 'soft_zones', or 'round_robin'")
+
+        width = self.grid_size[1]
+        zone_edges = np.linspace(0, width, self.n_teams + 1)
+        for goal in goals:
+            x, _ = goal
+            team_id = int(np.searchsorted(zone_edges, x, side="right") - 1)
+            team_id = int(np.clip(team_id, 0, self.n_teams - 1))
+            goals_by_team[team_id].append(goal)
+
+        if any(len(team_goals) == 0 for team_goals in goals_by_team):
+            goals_by_team = [[] for _ in range(self.n_teams)]
+            for idx, goal in enumerate(sorted(goals, key=lambda g: (g[0], g[1]))):
+                goals_by_team[idx % self.n_teams].append(goal)
+
+        return goals_by_team
+
+    def _assign_team_goals(self):
+        """Set env.goals and create goal -> team mapping.
+
+        If team_goal_positions is provided, use it directly.
+        Otherwise, split existing goals when possible; if there are too few
+        existing goals, generate one reachable goal position per team.
+        """
+        if self._manual_team_goal_positions is not None:
+            values = list(self._manual_team_goal_positions)
+            if len(values) != self.n_teams:
+                raise ValueError("team_goal_positions must contain one goal list per team")
+            goals_by_team = []
+            for team_id, team_goals in enumerate(values):
+                coerced = [tuple(map(int, goal)) for goal in team_goals]
+                if not coerced:
+                    raise ValueError(f"Team {team_id} must have at least one goal")
+                goals_by_team.append(coerced)
+        else:
+            if self.goal_team_mode == "soft_zones":
+                goals_by_team = self._make_soft_zone_team_goals()
+            else:
+                goals_by_team = self._assign_existing_goals_to_teams()
+                if goals_by_team is None:
+                    goals_by_team = self._make_default_team_goals()
+
+        self.goals_by_team = goals_by_team
+        self.goal_team_ids = {}
+        merged_goals = []
+        for team_id, team_goals in enumerate(self.goals_by_team):
+            for goal in team_goals:
+                goal = tuple(map(int, goal))
+                self.goal_team_ids[goal] = int(team_id)
+                merged_goals.append(goal)
+
+        self.goals = merged_goals
+
+    def _make_team_request_queues(self):
+        self.team_request_queues = []
+        for team_id in range(self.n_teams):
+            candidates = self.shelfs_by_team[team_id]
+            queue_size = min(self.request_queue_size_per_team[team_id], len(candidates))
+            if queue_size <= 0:
+                self.team_request_queues.append([])
+                continue
+            requested = self.np_random.choice(candidates, size=queue_size, replace=False)
+            self.team_request_queues.append(list(requested))
+        self._sync_global_request_queue()
+
+    def _sync_global_request_queue(self):
+        self.request_queue = [
+            shelf for team_queue in self.team_request_queues for shelf in team_queue
+        ]
+
+    def _replace_team_request(self, team_id: int, delivered_shelf: Shelf):
+        team_queue = self.team_request_queues[team_id]
+        if delivered_shelf not in team_queue:
+            return
+        candidates = [
+            shelf
+            for shelf in self.shelfs_by_team[team_id]
+            if shelf not in team_queue
+        ]
+        replacement = (
+            self.np_random.choice(candidates)
+            if candidates
+            else delivered_shelf
+        )
+        team_queue[team_queue.index(delivered_shelf)] = replacement
+        self._sync_global_request_queue()
+
+    def _reward_delivery(self, rewards: np.ndarray, team_id: int, carrier_id: int) -> List[int]:
+        rewarded_agents: List[int] = []
+        if self.team_reward_mode == TeamRewardMode.ALL:
+            rewards += self.delivery_reward
+            rewarded_agents = list(range(self.n_agents))
+        elif self.team_reward_mode == TeamRewardMode.INDIVIDUAL:
+            if carrier_id > 0 and self.agent_team_ids[carrier_id - 1] == team_id:
+                rewards[carrier_id - 1] += self.delivery_reward
+                rewarded_agents = [carrier_id - 1]
+        elif self.team_reward_mode == TeamRewardMode.TEAM:
+            team_members = np.flatnonzero(self.agent_team_ids == team_id)
+            rewards[team_members] += self.delivery_reward
+            rewarded_agents = team_members.astype(np.int32).tolist()
+        else:
+            raise ValueError(f"Unsupported team reward mode: {self.team_reward_mode}")
+
+        if (
+            self.wrong_team_penalty
+            and carrier_id > 0
+            and self.agent_team_ids[carrier_id - 1] != team_id
+        ):
+            rewards[carrier_id - 1] -= self.wrong_team_penalty
+
+        return rewarded_agents
+
+    def set_inferred_team_assignments(
+        self,
+        inferred_team_ids,
+        confidence=None,
+        update_graph: bool = True,
+    ):
+        """Set learned team predictions and update the training communication graph.
+
+        Use this from the learning algorithm. Do not use true labels here during
+        actual training, except for oracle/debug baselines.
+        """
+        inferred_team_ids = np.asarray(inferred_team_ids, dtype=np.int32)
+        if inferred_team_ids.shape != (self.n_agents,):
+            raise ValueError("inferred_team_ids must have shape (n_agents,)")
+        self.inferred_team_ids = inferred_team_ids.copy()
+
+        if confidence is None:
+            self.inferred_team_confidence = np.ones(self.n_agents, dtype=np.float32)
+        else:
+            confidence = np.asarray(confidence, dtype=np.float32)
+            if confidence.shape != (self.n_agents,):
+                raise ValueError("confidence must have shape (n_agents,)")
+            self.inferred_team_confidence = confidence.copy()
+
+        if update_graph:
+            self.update_training_comm_graph()
+        return self.training_comm_adj.copy()
+
+    def set_training_comm_edges(self, edges):
+        """Manually set communication edges for debugging or visualization."""
+        self.training_comm_adj = np.zeros((self.n_agents, self.n_agents), dtype=np.float32)
+        self.training_comm_edges = []
+        for i, j in edges:
+            i, j = int(i), int(j)
+            if i == j:
+                continue
+            if not (0 <= i < self.n_agents and 0 <= j < self.n_agents):
+                continue
+            self.training_comm_adj[i, j] = 1.0
+            self.training_comm_adj[j, i] = 1.0
+            edge = (min(i, j), max(i, j))
+            if edge not in self.training_comm_edges:
+                self.training_comm_edges.append(edge)
+        return self.training_comm_adj.copy()
+
+    def _agents_within_comm_range(self, i: int, j: int) -> bool:
+        ai = self.agents[int(i)]
+        aj = self.agents[int(j)]
+        dx = abs(int(ai.x) - int(aj.x))
+        dy = abs(int(ai.y) - int(aj.y))
+        # Match the square local observation window used by sensor_range.
+        return max(dx, dy) <= self.communication_range
+
+    def update_training_comm_graph(self):
+        """Build a time-varying graph from inferred team labels and distance.
+
+        Edge i--j exists when:
+        1. both agents have valid inferred team ids,
+        2. the inferred team ids match,
+        3. both predictions exceed the confidence threshold,
+        4. optionally, the agents are within communication_range.
+        """
+        self.training_comm_adj = np.zeros((self.n_agents, self.n_agents), dtype=np.float32)
+        self.training_comm_edges = []
+
+        for i in range(self.n_agents):
+            for j in range(i + 1, self.n_agents):
+                same_team = (
+                    self.inferred_team_ids[i] >= 0
+                    and self.inferred_team_ids[i] == self.inferred_team_ids[j]
+                )
+                confident = (
+                    self.inferred_team_confidence[i] >= self.team_edge_threshold
+                    and self.inferred_team_confidence[j] >= self.team_edge_threshold
+                )
+                physically_connected = (
+                    True if not self.use_physical_comm_range else self._agents_within_comm_range(i, j)
+                )
+
+                if same_team and confident and physically_connected:
+                    self.training_comm_adj[i, j] = 1.0
+                    self.training_comm_adj[j, i] = 1.0
+                    self.training_comm_edges.append((i, j))
+
+        return self.training_comm_adj.copy()
+
+    def reset(self, seed=None, options=None):
+        obs, _ = super().reset(seed=seed, options=options)
+
+        if self.shuffle_team_assignments_on_reset:
+            self.agent_team_ids = self.np_random.permutation(self._base_agent_team_ids)
+        else:
+            self.agent_team_ids = self._base_agent_team_ids.copy()
+
+        self._assign_shelf_teams()
+        self._assign_team_goals()
+        self._make_team_request_queues()
+        self.team_delivery_counts[:] = 0
+        self._last_delivery_events = []
+        self.inferred_team_ids[:] = -1
+        self.inferred_team_confidence[:] = 0.0
+        self.update_training_comm_graph()
+
+        obs = tuple([self._make_obs(agent) for agent in self.agents])
+        return obs, self._get_info()
+
+    def _get_info(self):
+        info = {
+            "deliveries": len(self._last_delivery_events),
+        }
+        if self.reveal_team_info:
+            info.update(
+                {
+                    "agent_team_ids": self.agent_team_ids.copy(),
+                    "team_members": self.get_team_members(),
+                    "team_delivery_counts": self.team_delivery_counts.copy(),
+                    "delivery_events": list(self._last_delivery_events),
+                    "team_request_ids": [
+                        [shelf.id for shelf in team_queue]
+                        for team_queue in self.team_request_queues
+                    ],
+                    "shelf_team_mode": self.shelf_team_mode,
+                    "shelf_soft_zone_ratio": self.shelf_soft_zone_ratio,
+                    "shelf_zone_team_counts": self.get_shelf_zone_team_counts(),
+                    "team_goal_positions": [
+                        list(team_goals) for team_goals in self.goals_by_team
+                    ],
+                    "goal_team_ids": dict(self.goal_team_ids),
+                    "inferred_team_ids": self.inferred_team_ids.copy(),
+                    "inferred_team_confidence": self.inferred_team_confidence.copy(),
+                    "training_comm_adj": self.training_comm_adj.copy(),
+                    "training_comm_edges": list(self.training_comm_edges),
+                    "communication_range": self.communication_range,
+                }
+            )
+        return info
+
+    def step(
+        self, actions: List[Action]
+    ) -> Tuple[List[np.ndarray], List[float], bool, bool, Dict]:
+        assert len(actions) == len(self.agents)
+        self._last_delivery_events = []
+
+        for agent, action in zip(self.agents, actions):
+            if self.msg_bits > 0:
+                agent.req_action = Action(action[0])
+                agent.message[:] = action[1:]
+            else:
+                agent.req_action = Action(action)
+
+        commited_agents = set()
+        movement_graph = nx.DiGraph()
+
+        for agent in self.agents:
+            start = agent.x, agent.y
+            target = agent.req_location(self.grid_size)
+
+            if (
+                agent.carrying_shelf
+                and start != target
+                and self.grid[_LAYER_SHELFS, target[1], target[0]]
+                and not (
+                    self.grid[_LAYER_AGENTS, target[1], target[0]]
+                    and self.agents[
+                        self.grid[_LAYER_AGENTS, target[1], target[0]] - 1
+                    ].carrying_shelf
+                )
+            ):
+                agent.req_action = Action.NOOP
+                movement_graph.add_edge(start, start)
+            else:
+                movement_graph.add_edge(start, target)
+
+        weak_components = [
+            movement_graph.subgraph(c).copy()
+            for c in nx.weakly_connected_components(movement_graph)
+        ]
+
+        for component in weak_components:
+            try:
+                cycle = nx.algorithms.find_cycle(component)
+                if len(cycle) == 2:
+                    continue
+                for edge in cycle:
+                    start_node = edge[0]
+                    agent_id = self.grid[_LAYER_AGENTS, start_node[1], start_node[0]]
+                    if agent_id > 0:
+                        commited_agents.add(agent_id)
+            except nx.NetworkXNoCycle:
+                longest_path = nx.algorithms.dag_longest_path(component)
+                for x, y in longest_path:
+                    agent_id = self.grid[_LAYER_AGENTS, y, x]
+                    if agent_id:
+                        commited_agents.add(agent_id)
+
+        commited_agents = set([self.agents[id_ - 1] for id_ in commited_agents])
+        failed_agents = set(self.agents) - commited_agents
+
+        rewards = np.zeros(self.n_agents, dtype=np.float32)
+        if self.step_penalty:
+            rewards += self.step_penalty
+
+        for agent in failed_agents:
+            assert agent.req_action == Action.FORWARD
+            agent.req_action = Action.NOOP
+            if self.failed_forward_penalty:
+                rewards[agent.id - 1] -= self.failed_forward_penalty
+
+        for agent in self.agents:
+            agent.prev_x, agent.prev_y = agent.x, agent.y
+
+            if agent.req_action == Action.FORWARD:
+                agent.x, agent.y = agent.req_location(self.grid_size)
+                if agent.carrying_shelf:
+                    agent.carrying_shelf.x, agent.carrying_shelf.y = agent.x, agent.y
+            elif agent.req_action in [Action.LEFT, Action.RIGHT]:
+                agent.dir = agent.req_direction()
+            elif agent.req_action == Action.TOGGLE_LOAD and not agent.carrying_shelf:
+                shelf_id = self.grid[_LAYER_SHELFS, agent.y, agent.x]
+                if shelf_id:
+                    agent.carrying_shelf = self.shelfs[shelf_id - 1]
+            elif agent.req_action == Action.TOGGLE_LOAD and agent.carrying_shelf:
+                if not self._is_highway(agent.x, agent.y):
+                    agent.carrying_shelf = None
+                agent.has_delivered = False
+
+        self._recalc_grid()
+
+        shelf_delivered = False
+        for goal_x, goal_y in self.goals:
+            shelf_id = self.grid[_LAYER_SHELFS, goal_y, goal_x]
+            if not shelf_id:
+                continue
+            shelf = self.shelfs[shelf_id - 1]
+
+            if shelf not in self.request_queue:
+                continue
+
+            team_id = self.shelf_team_ids[shelf.id]
+            goal = (int(goal_x), int(goal_y))
+            goal_team_id = self.goal_team_ids.get(goal)
+
+            if self.require_matching_team_goal and goal_team_id != team_id:
+                continue
+
+            shelf_delivered = True
+            carrier_id = self.grid[_LAYER_AGENTS, goal_y, goal_x]
+            rewarded_agents = self._reward_delivery(rewards, team_id, carrier_id)
+            self.team_delivery_counts[team_id] += 1
+            self._replace_team_request(team_id, shelf)
+
+            event = {
+                "shelf_id": shelf.id,
+                "team_id": team_id,
+                "goal": goal,
+                "goal_team_id": int(goal_team_id) if goal_team_id is not None else None,
+                "carrier_id": int(carrier_id),
+                "rewarded_agents": rewarded_agents,
+            }
+            if carrier_id > 0:
+                event["carrier_team_id"] = int(self.agent_team_ids[carrier_id - 1])
+            self._last_delivery_events.append(event)
+
+        if shelf_delivered:
+            self._cur_inactive_steps = 0
+        else:
+            self._cur_inactive_steps += 1
+        self._cur_steps += 1
+
+        if (
+            self.max_inactivity_steps
+            and self._cur_inactive_steps >= self.max_inactivity_steps
+        ) or (self.max_steps and self._cur_steps >= self.max_steps):
+            done = True
+        else:
+            done = False
+        truncated = False
+
+        new_obs = tuple([self._make_obs(agent) for agent in self.agents])
+        self.update_training_comm_graph()
+        info = self._get_info()
+        return new_obs, list(rewards), done, truncated, info
