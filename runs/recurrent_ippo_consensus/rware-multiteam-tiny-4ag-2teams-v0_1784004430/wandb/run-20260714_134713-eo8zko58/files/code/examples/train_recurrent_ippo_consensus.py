@@ -236,8 +236,6 @@ class TrainConfig:
     graph_mode: str
     probe_interval: int
     policy_probe_batch_size: int
-    probe_source: str
-    objective_probe_fraction: float
     policy_similarity_temperature: float
     comm_graph_mode: str
     probe_episodes: int
@@ -246,9 +244,6 @@ class TrainConfig:
     min_probe_count: int
     uncertainty_scale: float
     value_uncertainty_decay: float
-    graph_join_threshold: float
-    graph_leave_threshold: float
-    graph_dwell_updates: int
     critic_consensus_tau: float
     consensus_interval: int
     save_dir: str
@@ -287,24 +282,12 @@ class TeamGraphEstimator:
         min_probe_count: int,
         uncertainty_scale: float,
         value_uncertainty_decay: float,
-        join_threshold: Optional[float] = None,
-        leave_threshold: Optional[float] = None,
-        dwell_updates: int = 1,
     ):
         self.n_agents = int(n_agents)
         self.edge_threshold = float(edge_threshold)
         self.min_probe_count = int(min_probe_count)
         self.uncertainty_scale = float(uncertainty_scale)
         self.value_uncertainty_decay = float(value_uncertainty_decay)
-        self.join_threshold = (
-            self.edge_threshold if join_threshold is None else float(join_threshold)
-        )
-        self.leave_threshold = (
-            self.join_threshold if leave_threshold is None else float(leave_threshold)
-        )
-        if self.leave_threshold > self.join_threshold:
-            raise ValueError("leave_threshold must be <= join_threshold")
-        self.dwell_updates = max(int(dwell_updates), 1)
 
         shape = (self.n_agents, self.n_agents)
         self.count = np.zeros(shape, dtype=np.float64)
@@ -312,9 +295,6 @@ class TeamGraphEstimator:
         self.m2 = np.zeros(shape, dtype=np.float64)
         self.value_uncertainty = np.ones(self.n_agents, dtype=np.float64)
         self.last_neighbor_adjacency = np.zeros(shape, dtype=np.float32)
-        self.stable_adjacency = np.zeros(shape, dtype=np.float32)
-        self.join_streak = np.zeros(shape, dtype=np.int32)
-        self.leave_streak = np.zeros(shape, dtype=np.int32)
 
     def update_pair_score(self, i: int, j: int, score: float) -> None:
         i, j = int(i), int(j)
@@ -410,65 +390,8 @@ class TeamGraphEstimator:
                 weights[j, i] = weight
         return weights
 
-    def update_stable_adjacency(self) -> np.ndarray:
-        weights = self.weight_matrix()
-        if (
-            self.dwell_updates <= 1
-            and abs(self.join_threshold - self.leave_threshold) < 1e-12
-        ):
-            self.stable_adjacency = (
-                weights >= self.join_threshold
-            ).astype(np.float32)
-            np.fill_diagonal(self.stable_adjacency, 0.0)
-            return self.stable_adjacency.copy()
-
-        for i in range(self.n_agents):
-            for j in range(i + 1, self.n_agents):
-                weight = float(weights[i, j])
-                active = self.stable_adjacency[i, j] > 0.0
-
-                if active:
-                    if weight <= self.leave_threshold:
-                        self.leave_streak[i, j] += 1
-                        self.leave_streak[j, i] = self.leave_streak[i, j]
-                        self.join_streak[i, j] = 0
-                        self.join_streak[j, i] = 0
-                        if self.leave_streak[i, j] >= self.dwell_updates:
-                            self.stable_adjacency[i, j] = 0.0
-                            self.stable_adjacency[j, i] = 0.0
-                            self.leave_streak[i, j] = 0
-                            self.leave_streak[j, i] = 0
-                    else:
-                        self.leave_streak[i, j] = 0
-                        self.leave_streak[j, i] = 0
-                else:
-                    if weight >= self.join_threshold:
-                        self.join_streak[i, j] += 1
-                        self.join_streak[j, i] = self.join_streak[i, j]
-                        self.leave_streak[i, j] = 0
-                        self.leave_streak[j, i] = 0
-                        if self.join_streak[i, j] >= self.dwell_updates:
-                            self.stable_adjacency[i, j] = 1.0
-                            self.stable_adjacency[j, i] = 1.0
-                            self.join_streak[i, j] = 0
-                            self.join_streak[j, i] = 0
-                    else:
-                        self.join_streak[i, j] = 0
-                        self.join_streak[j, i] = 0
-
-        np.fill_diagonal(self.stable_adjacency, 0.0)
-        return self.stable_adjacency.copy()
-
     def adjacency(self) -> np.ndarray:
-        if (
-            self.dwell_updates <= 1
-            and abs(self.join_threshold - self.leave_threshold) < 1e-12
-        ):
-            return (self.weight_matrix() >= self.join_threshold).astype(np.float32)
-        return self.stable_adjacency.copy()
-
-    def consensus_weight_matrix(self) -> np.ndarray:
-        return self.weight_matrix() * self.adjacency()
+        return (self.weight_matrix() >= self.edge_threshold).astype(np.float32)
 
     def clusters(self) -> List[List[int]]:
         return clusters_from_adjacency(self.adjacency())
@@ -480,9 +403,6 @@ class TeamGraphEstimator:
             "m2": self.m2.copy(),
             "value_uncertainty": self.value_uncertainty.copy(),
             "last_neighbor_adjacency": self.last_neighbor_adjacency.copy(),
-            "stable_adjacency": self.stable_adjacency.copy(),
-            "join_streak": self.join_streak.copy(),
-            "leave_streak": self.leave_streak.copy(),
         }
 
 
@@ -673,307 +593,6 @@ def sample_common_probe_obs(
     replace = count > pool.shape[0]
     indices = rng.choice(pool.shape[0], size=count, replace=replace)
     return pool[torch.as_tensor(indices, dtype=torch.long)]
-
-
-def _sensor_location_index(sensor_range: int, dy: int, dx: int) -> Optional[int]:
-    if abs(dy) > sensor_range or abs(dx) > sensor_range:
-        return None
-    width = 1 + 2 * sensor_range
-    return int((dy + sensor_range) * width + (dx + sensor_range))
-
-
-def _sample_cardinal_offsets(
-    sensor_range: int,
-    rng: np.random.Generator,
-) -> List[Tuple[int, int]]:
-    if sensor_range <= 0:
-        return [(0, 0)]
-    offsets = [(0, 1), (1, 0), (0, -1), (-1, 0)]
-    rng.shuffle(offsets)
-    return offsets
-
-
-def _build_mtgrid_objective_probe_bank(
-    env: gym.Env,
-    obs_dim: int,
-    batch_size: int,
-    rng: np.random.Generator,
-) -> Optional[torch.Tensor]:
-    unwrapped = env.unwrapped
-    required = ["n_teams", "msg_bits", "sensor_range", "grid_size"]
-    if not all(hasattr(unwrapped, name) for name in required):
-        return None
-
-    n_teams = int(unwrapped.n_teams)
-    msg_bits = int(unwrapped.msg_bits)
-    sensor_range = int(unwrapped.sensor_range)
-    cell_features = 2 + msg_bits + n_teams
-    expected_dim = 2 + (1 + 2 * sensor_range) ** 2 * cell_features
-    if expected_dim != obs_dim:
-        return None
-
-    target_offset = 2 + msg_bits
-    probes: List[np.ndarray] = []
-    categories = ["goal", "conflict", "neutral"]
-    height, width = tuple(map(int, unwrapped.grid_size))
-
-    for probe_id in range(max(int(batch_size), 1)):
-        obs = np.zeros(obs_dim, dtype=np.float32)
-        if getattr(unwrapped, "normalised_coordinates", True):
-            obs[0] = 0.5
-            obs[1] = 0.5
-        else:
-            obs[0] = max(0, height // 2)
-            obs[1] = max(0, width // 2)
-
-        category = categories[probe_id % len(categories)]
-        offsets = _sample_cardinal_offsets(sensor_range, rng)
-
-        if category == "goal":
-            dy, dx = offsets[0]
-            team_id = probe_id % n_teams
-            loc = _sensor_location_index(sensor_range, dy, dx)
-            if loc is not None:
-                base = 2 + loc * cell_features
-                obs[base + target_offset + team_id] = 1.0
-
-        elif category == "conflict":
-            for team_id, (dy, dx) in enumerate(offsets[: min(n_teams, len(offsets))]):
-                loc = _sensor_location_index(sensor_range, dy, dx)
-                if loc is None:
-                    continue
-                base = 2 + loc * cell_features
-                obs[base + target_offset + (team_id % n_teams)] = 1.0
-
-        else:
-            # Neutral probes expose generic navigation/avoidance pressure without
-            # a team-specific target. They help separate task preference from
-            # shared obstacle-avoidance behavior.
-            dy, dx = offsets[0]
-            loc = _sensor_location_index(sensor_range, dy, dx)
-            if loc is not None:
-                base = 2 + loc * cell_features
-                obs[base] = 1.0
-
-        probes.append(obs)
-
-    return torch.as_tensor(np.stack(probes, axis=0), dtype=torch.float32)
-
-
-def _build_rware_objective_probe_bank(
-    env: gym.Env,
-    obs_dim: int,
-    batch_size: int,
-    rng: np.random.Generator,
-) -> Optional[torch.Tensor]:
-    unwrapped = env.unwrapped
-    required = [
-        "_obs_bits_for_self",
-        "_obs_bits_per_agent",
-        "_obs_bits_per_shelf",
-        "msg_bits",
-        "sensor_range",
-        "grid_size",
-    ]
-    if not all(hasattr(unwrapped, name) for name in required):
-        return None
-
-    self_bits = int(unwrapped._obs_bits_for_self)
-    per_agent = int(unwrapped._obs_bits_per_agent)
-    per_shelf = int(unwrapped._obs_bits_per_shelf)
-    sensor_range = int(unwrapped.sensor_range)
-    cell_stride = per_agent + per_shelf
-    expected_dim = self_bits + (1 + 2 * sensor_range) ** 2 * cell_stride
-    if expected_dim != obs_dim:
-        return None
-
-    probes: List[np.ndarray] = []
-    categories = ["pickup", "approach", "conflict", "neutral"]
-    height, width = tuple(map(int, unwrapped.grid_size))
-    normalised = bool(getattr(unwrapped, "normalised_coordinates", False))
-
-    for probe_id in range(max(int(batch_size), 1)):
-        obs = np.zeros(obs_dim, dtype=np.float32)
-        if normalised:
-            obs[0] = 0.5
-            obs[1] = 0.5
-        else:
-            obs[0] = max(0, width // 2)
-            obs[1] = max(0, height // 2)
-        obs[2] = 1.0 if categories[probe_id % len(categories)] == "conflict" else 0.0
-
-        direction_id = probe_id % 4
-        obs[3 + direction_id] = 1.0
-        obs[7] = 1.0
-
-        # Match Warehouse._get_default_obs: empty cells still carry the default
-        # one-hot direction for the absent-agent placeholder.
-        for loc in range((1 + 2 * sensor_range) ** 2):
-            base = self_bits + loc * cell_stride
-            obs[base + 1] = 1.0
-
-        def set_shelf(dy: int, dx: int, requested: bool) -> None:
-            loc = _sensor_location_index(sensor_range, dy, dx)
-            if loc is None:
-                return
-            base = self_bits + loc * cell_stride + per_agent
-            obs[base] = 1.0
-            obs[base + 1] = 1.0 if requested else 0.0
-
-        category = categories[probe_id % len(categories)]
-        offsets = _sample_cardinal_offsets(sensor_range, rng)
-
-        if category == "pickup":
-            set_shelf(0, 0, requested=True)
-        elif category == "approach":
-            dy, dx = offsets[0]
-            set_shelf(dy, dx, requested=True)
-        elif category == "conflict":
-            if offsets:
-                set_shelf(offsets[0][0], offsets[0][1], requested=True)
-            if len(offsets) > 1:
-                set_shelf(offsets[1][0], offsets[1][1], requested=False)
-        else:
-            if offsets:
-                set_shelf(offsets[0][0], offsets[0][1], requested=False)
-
-        probes.append(obs)
-
-    return torch.as_tensor(np.stack(probes, axis=0), dtype=torch.float32)
-
-
-def _objective_visibility_scores(env: gym.Env, obs_pool: torch.Tensor) -> np.ndarray:
-    unwrapped = env.unwrapped
-    pool = obs_pool.cpu().numpy()
-
-    if all(
-        hasattr(unwrapped, name)
-        for name in ["n_teams", "msg_bits", "sensor_range", "grid_size"]
-    ):
-        n_teams = int(unwrapped.n_teams)
-        msg_bits = int(unwrapped.msg_bits)
-        sensor_range = int(unwrapped.sensor_range)
-        cell_features = 2 + msg_bits + n_teams
-        expected_dim = 2 + (1 + 2 * sensor_range) ** 2 * cell_features
-        if pool.shape[1] == expected_dim:
-            target_offset = 2 + msg_bits
-            scores = np.zeros(pool.shape[0], dtype=np.float32)
-            for loc in range((1 + 2 * sensor_range) ** 2):
-                base = 2 + loc * cell_features
-                scores += pool[:, base + target_offset : base + target_offset + n_teams].sum(axis=1)
-            return scores
-
-    if all(
-        hasattr(unwrapped, name)
-        for name in [
-            "_obs_bits_for_self",
-            "_obs_bits_per_agent",
-            "_obs_bits_per_shelf",
-            "sensor_range",
-        ]
-    ):
-        self_bits = int(unwrapped._obs_bits_for_self)
-        per_agent = int(unwrapped._obs_bits_per_agent)
-        per_shelf = int(unwrapped._obs_bits_per_shelf)
-        sensor_range = int(unwrapped.sensor_range)
-        cell_stride = per_agent + per_shelf
-        expected_dim = self_bits + (1 + 2 * sensor_range) ** 2 * cell_stride
-        if pool.shape[1] == expected_dim:
-            scores = np.zeros(pool.shape[0], dtype=np.float32)
-            for loc in range((1 + 2 * sensor_range) ** 2):
-                base = self_bits + loc * cell_stride + per_agent
-                scores += pool[:, base + 1]
-            return scores
-
-    return np.zeros(pool.shape[0], dtype=np.float32)
-
-
-def sample_objective_rollout_probe_obs(
-    env: gym.Env,
-    rollout: Rollout,
-    batch_size: int,
-    rng: np.random.Generator,
-) -> torch.Tensor:
-    pool = rollout.obs.reshape(-1, rollout.obs.shape[-1])
-    scores = _objective_visibility_scores(env, pool)
-    candidate_indices = np.flatnonzero(scores > 0.0)
-    if candidate_indices.size == 0:
-        return sample_common_probe_obs(rollout, batch_size, rng)
-
-    count = min(max(int(batch_size), 1), int(candidate_indices.size))
-    replace = count > candidate_indices.size
-    sampled = rng.choice(candidate_indices, size=count, replace=replace)
-    return pool[torch.as_tensor(sampled, dtype=torch.long)]
-
-
-def build_objective_probe_bank(
-    env: gym.Env,
-    obs_dim: int,
-    batch_size: int,
-    rng: np.random.Generator,
-) -> Optional[torch.Tensor]:
-    for builder in (
-        _build_mtgrid_objective_probe_bank,
-        _build_rware_objective_probe_bank,
-    ):
-        probes = builder(env, obs_dim, batch_size, rng)
-        if probes is not None:
-            return probes
-    return None
-
-
-def sample_policy_probe_obs(
-    cfg: TrainConfig,
-    env: gym.Env,
-    rollout: Rollout,
-    rng: np.random.Generator,
-) -> Tuple[torch.Tensor, Dict[str, float]]:
-    batch_size = max(int(cfg.policy_probe_batch_size), 1)
-    obs_dim = int(rollout.obs.shape[-1])
-    source = cfg.probe_source
-    meta = {
-        "objective_probe_count": 0.0,
-        "rollout_probe_count": 0.0,
-    }
-
-    if source == "rollout":
-        probes = sample_common_probe_obs(rollout, batch_size, rng)
-        meta["rollout_probe_count"] = float(probes.shape[0])
-        return probes, meta
-
-    if source == "objective-rollout":
-        probes = sample_objective_rollout_probe_obs(env, rollout, batch_size, rng)
-        meta["objective_probe_count"] = float(probes.shape[0])
-        return probes, meta
-
-    if source == "objective":
-        probes = build_objective_probe_bank(env, obs_dim, batch_size, rng)
-        if probes is None:
-            probes = sample_objective_rollout_probe_obs(env, rollout, batch_size, rng)
-        meta["objective_probe_count"] = float(probes.shape[0])
-        return probes, meta
-
-    if source == "mixed":
-        objective_count = int(round(batch_size * cfg.objective_probe_fraction))
-        objective_count = int(np.clip(objective_count, 1, batch_size))
-        rollout_count = batch_size - objective_count
-        objective_probes = build_objective_probe_bank(env, obs_dim, objective_count, rng)
-        if objective_probes is None:
-            objective_probes = sample_objective_rollout_probe_obs(
-                env,
-                rollout,
-                objective_count,
-                rng,
-            )
-        probes = [objective_probes]
-        meta["objective_probe_count"] = float(objective_probes.shape[0])
-        if rollout_count > 0:
-            rollout_probes = sample_common_probe_obs(rollout, rollout_count, rng)
-            probes.append(rollout_probes)
-            meta["rollout_probe_count"] = float(rollout_probes.shape[0])
-        return torch.cat(probes, dim=0), meta
-
-    raise ValueError("--probe-source must be rollout, objective-rollout, objective, or mixed")
 
 
 @torch.no_grad()
@@ -1496,7 +1115,11 @@ def run_policy_similarity_probes(
 ) -> Dict[str, float]:
     n_agents = len(agents)
     neighbor_adj = communication_adjacency(env, n_agents, mode=cfg.comm_graph_mode)
-    probe_obs, probe_meta = sample_policy_probe_obs(cfg, env, rollout, rng)
+    probe_obs = sample_common_probe_obs(
+        rollout,
+        batch_size=cfg.policy_probe_batch_size,
+        rng=rng,
+    )
     similarity = policy_similarity_matrix(
         agents,
         probe_obs,
@@ -1522,7 +1145,6 @@ def run_policy_similarity_probes(
         if active_weights.size
         else float("nan"),
         "probe_count": float(probe_obs.shape[0]),
-        **probe_meta,
     }
 
 
@@ -1836,22 +1458,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--probe-interval", type=int, default=10)
     parser.add_argument("--policy-probe-batch-size", type=int, default=64)
-    parser.add_argument(
-        "--probe-source",
-        default="mixed",
-        choices=["rollout", "objective-rollout", "objective", "mixed"],
-        help=(
-            "Source for common policy probes. 'rollout' keeps the original "
-            "random rollout probes; 'objective' uses environment-specific "
-            "objective-revealing probes; 'mixed' combines both."
-        ),
-    )
-    parser.add_argument(
-        "--objective-probe-fraction",
-        type=float,
-        default=0.5,
-        help="Fraction of mixed probes drawn from the objective probe bank.",
-    )
     parser.add_argument("--policy-similarity-temperature", type=float, default=0.25)
     parser.add_argument(
         "--comm-graph-mode",
@@ -1875,24 +1481,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--min-probe-count", type=int, default=2)
     parser.add_argument("--uncertainty-scale", type=float, default=1.0)
     parser.add_argument("--value-uncertainty-decay", type=float, default=0.95)
-    parser.add_argument(
-        "--graph-join-threshold",
-        type=float,
-        default=0.0,
-        help="Stable edge join threshold. 0 uses --edge-threshold.",
-    )
-    parser.add_argument(
-        "--graph-leave-threshold",
-        type=float,
-        default=0.0,
-        help="Stable edge leave threshold. 0 uses the join threshold.",
-    )
-    parser.add_argument(
-        "--graph-dwell-updates",
-        type=int,
-        default=1,
-        help="Consecutive adjacency updates required before an edge changes state.",
-    )
     parser.add_argument("--critic-consensus-tau", type=float, default=0.1)
     parser.add_argument("--consensus-interval", type=int, default=1)
     parser.add_argument("--save-dir", default="runs/recurrent_ippo_consensus")
@@ -1957,10 +1545,6 @@ def main() -> None:
         raise ValueError("--rollout-steps must be divisible by --sequence-length")
     if cfg.minibatch_chunks < 1:
         raise ValueError("--minibatch-chunks must be positive")
-    if not 0.0 <= cfg.objective_probe_fraction <= 1.0:
-        raise ValueError("--objective-probe-fraction must be in [0, 1]")
-    if cfg.graph_dwell_updates < 1:
-        raise ValueError("--graph-dwell-updates must be positive")
 
     set_global_seeds(cfg.seed)
     rng = np.random.default_rng(cfg.seed)
@@ -1994,25 +1578,12 @@ def main() -> None:
         torch.optim.Adam(agent.parameters(), lr=cfg.learning_rate, eps=1e-5)
         for agent in agents
     ]
-    graph_join_threshold = (
-        cfg.edge_threshold
-        if cfg.graph_join_threshold <= 0.0
-        else cfg.graph_join_threshold
-    )
-    graph_leave_threshold = (
-        graph_join_threshold
-        if cfg.graph_leave_threshold <= 0.0
-        else cfg.graph_leave_threshold
-    )
     graph_estimator = TeamGraphEstimator(
         n_agents=n_agents,
         edge_threshold=cfg.edge_threshold,
         min_probe_count=cfg.min_probe_count,
         uncertainty_scale=cfg.uncertainty_scale,
         value_uncertainty_decay=cfg.value_uncertainty_decay,
-        join_threshold=graph_join_threshold,
-        leave_threshold=graph_leave_threshold,
-        dwell_updates=cfg.graph_dwell_updates,
     )
 
     actor_h = torch.zeros((n_agents, cfg.recurrent_hidden_dim), device=device)
@@ -2114,8 +1685,7 @@ def main() -> None:
             consensus_weights = np.zeros((n_agents, n_agents), dtype=np.float32)
             log_clusters = [[idx] for idx in range(n_agents)]
         else:
-            graph_estimator.update_stable_adjacency()
-            consensus_weights = graph_estimator.consensus_weight_matrix()
+            consensus_weights = graph_estimator.weight_matrix()
             log_clusters = graph_estimator.clusters()
 
         consensus_updates = 0
@@ -2124,13 +1694,13 @@ def main() -> None:
                 agents,
                 consensus_weights,
                 tau=cfg.critic_consensus_tau,
-                min_weight=0.0,
+                min_weight=cfg.edge_threshold,
             )
 
         env_steps = iteration * cfg.rollout_steps
         elapsed = max(time.time() - start_time, 1e-6)
         sps = env_steps / elapsed
-        log_adj = (consensus_weights > 0.0).astype(np.float32)
+        log_adj = (consensus_weights >= cfg.edge_threshold).astype(np.float32)
         true_clusters = oracle_clusters(env)
         wandb_payload: Dict[str, object] = {
             "train/env_steps": float(env_steps),

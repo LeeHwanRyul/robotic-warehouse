@@ -1,4 +1,4 @@
-# Recurrent IPPO Consensus Example
+# Recurrent IPPO Policy-Probe Consensus Example
 
 This folder contains training code for latent-team RWARE experiments.
 
@@ -8,12 +8,18 @@ This folder contains training code for latent-team RWARE experiments.
 
 - fully decentralized recurrent actors and critics,
 - IPPO clipped policy/value updates,
-- sparse counterfactual probing to estimate latent inter-agent influence,
-- uncertainty-aware team graph construction from probe variance and critic TD error,
-- clustered critic consensus by soft-averaging critic parameters inside inferred graph clusters.
+- sparse common-probe policy comparisons among communication neighbors,
+- uncertainty-aware team confidence weights from policy similarity and critic TD error,
+- confidence-weighted intra-team critic consensus.
 
 Actors and critics only consume each agent's local observation. The graph is used only for
 training-time critic consensus and can be inspected through the environment's training graph hooks.
+The default `--graph-mode policy` matches the project proposal: each update samples a small
+common probe set, compares neighboring policies on that same probe set, and shares critic
+information only across high-confidence edges. By default, `--probe-source mixed` combines
+the original random rollout probes with objective-revealing probes that expose task-relevant
+targets or requested shelves. The previous return-influence perturbation variant is still
+available as `--graph-mode influence`.
 
 ## Install
 
@@ -66,4 +72,22 @@ python examples/train_recurrent_ippo_consensus.py --graph-mode none
 
 # Oracle team clusters for an upper-bound/debug baseline.
 python examples/train_recurrent_ippo_consensus.py --graph-mode oracle
+
+# Legacy return-influence probing baseline.
+python examples/train_recurrent_ippo_consensus.py --graph-mode influence
+
+# Compare every pair instead of only physical communication neighbors.
+python examples/train_recurrent_ippo_consensus.py --comm-graph-mode complete
+
+# Original rollout-only policy probing baseline.
+python examples/train_recurrent_ippo_consensus.py --probe-source rollout
+
+# Objective probe bank only.
+python examples/train_recurrent_ippo_consensus.py --probe-source objective
+
+# Stabilize graph edges with hysteresis and dwell time.
+python examples/train_recurrent_ippo_consensus.py \
+  --graph-join-threshold 0.7 \
+  --graph-leave-threshold 0.5 \
+  --graph-dwell-updates 3
 ```

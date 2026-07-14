@@ -1,0 +1,132 @@
+_wandb:
+    value:
+        cli_version: 0.28.0
+        code_path: code/examples/train_recurrent_ippo_consensus.py
+        m: []
+        python_version: 3.10.20
+        t:
+            "1":
+                - 1
+            "3":
+                - 13
+                - 16
+            "4": 3.10.20
+            "5": 0.28.0
+            "8":
+                - 3
+            "12": 0.28.0
+            "13": windows-amd64
+clip_coef:
+    value: 0.2
+comm_graph_mode:
+    value: physical
+consensus_interval:
+    value: 1
+critic_consensus_tau:
+    value: 0.1
+device:
+    value: auto
+edge_threshold:
+    value: 0.2
+entropy_coef:
+    value: 0.01
+env_id:
+    value: rware-multiteam-tiny-4ag-2teams-v0
+env_kwargs_json:
+    value: '{}'
+eval_episodes:
+    value: 5
+eval_horizon:
+    value: 500
+eval_interval:
+    value: 0
+eval_render_episodes:
+    value: 1
+eval_render_fps:
+    value: 10
+eval_render_mode:
+    value: human
+exp_name:
+    value: rware-multiteam-tiny-4ag-2teams-v0_1784008318
+gae_lambda:
+    value: 0.95
+gamma:
+    value: 0.99
+graph_dwell_updates:
+    value: 3
+graph_join_threshold:
+    value: 0.7
+graph_leave_threshold:
+    value: 0.5
+graph_mode:
+    value: policy
+learning_rate:
+    value: 0.0003
+log_interval:
+    value: 1
+max_grad_norm:
+    value: 0.5
+min_probe_count:
+    value: 2
+minibatch_chunks:
+    value: 8
+mlp_hidden_dim:
+    value: 128
+objective_probe_fraction:
+    value: 0.5
+policy_probe_batch_size:
+    value: 64
+policy_similarity_temperature:
+    value: 0.25
+ppo_epochs:
+    value: 4
+probe_episodes:
+    value: 4
+probe_horizon:
+    value: 120
+probe_interval:
+    value: 10
+probe_source:
+    value: mixed
+recurrent_hidden_dim:
+    value: 128
+render_eval:
+    value: false
+rollout_steps:
+    value: 512
+save_dir:
+    value: runs/recurrent_ippo_consensus
+save_interval:
+    value: 50
+seed:
+    value: 1
+sensor_range:
+    value: 0
+sequence_length:
+    value: 32
+total_timesteps:
+    value: 1000000
+track:
+    value: true
+uncertainty_scale:
+    value: 1
+value_clip_coef:
+    value: 0.2
+value_loss_coef:
+    value: 0.5
+value_uncertainty_decay:
+    value: 0.95
+wandb_entity:
+    value: ""
+wandb_group:
+    value: ""
+wandb_log_eval_video:
+    value: false
+wandb_mode:
+    value: online
+wandb_name:
+    value: ""
+wandb_project:
+    value: rware-recurrent-ippo
+wandb_tags:
+    value: ""
