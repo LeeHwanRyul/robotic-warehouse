@@ -1,0 +1,16 @@
+warning: in the working copy of 'setup.py', LF will be replaced by CRLF the next time Git touches it
+diff --git a/setup.py b/setup.py
+index 3458de6..47decb1 100644
+--- a/setup.py
++++ b/setup.py
+@@ -27,6 +27,9 @@ setup(
+         "pyglet<2",
+         "networkx",
+     ],
+-    extras_require={"test": ["pytest"]},
++    extras_require={
++        "test": ["pytest"],
++        "rl": ["torch", "wandb"],
++    },
+     include_package_data=True,
+ )

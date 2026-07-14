@@ -27,6 +27,9 @@ setup(
         "pyglet<2",
         "networkx",
     ],
-    extras_require={"test": ["pytest"]},
+    extras_require={
+        "test": ["pytest"],
+        "rl": ["torch", "wandb"],
+    },
     include_package_data=True,
 )

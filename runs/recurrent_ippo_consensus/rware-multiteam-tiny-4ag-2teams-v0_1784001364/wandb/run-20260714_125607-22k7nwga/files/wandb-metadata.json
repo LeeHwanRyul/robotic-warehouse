@@ -1,0 +1,48 @@
+{
+  "os": "Windows-10-10.0.26200-SP0",
+  "python": "CPython 3.10.20",
+  "startedAt": "2026-07-14T03:56:07.524251Z",
+  "args": [
+    "--track",
+    "--wandb-project",
+    "rware-recurrent-ippo",
+    "--eval-interval",
+    "1000",
+    "--wandb-log-eval-video"
+  ],
+  "program": "C:\\RWARE\\MARL_RWARE\\third_party\\robotic-warehouse\\examples\\train_recurrent_ippo_consensus.py",
+  "codePath": "examples\\train_recurrent_ippo_consensus.py",
+  "codePathLocal": "examples\\train_recurrent_ippo_consensus.py",
+  "git": {
+    "remote": "https://github.com/LeeHwanRyul/robotic-warehouse.git",
+    "commit": "e8237edb5b23689fe1b904265e9bdb1fd31ef002"
+  },
+  "email": "t98339@hanyang.ac.kr",
+  "root": "runs\\recurrent_ippo_consensus\\rware-multiteam-tiny-4ag-2teams-v0_1784001364",
+  "host": "DESKTOP-03ASKH8",
+  "executable": "C:\\Users\\95101\\anaconda3\\envs\\RWARE_Project\\python.exe",
+  "cpu_count": 20,
+  "cpu_count_logical": 20,
+  "gpu": "NVIDIA GeForce RTX 5070 Ti",
+  "gpu_count": 1,
+  "disk": {
+    "/": {
+      "total": "1999397941248",
+      "used": "206838042624"
+    }
+  },
+  "memory": {
+    "total": "33577902080"
+  },
+  "gpu_nvidia": [
+    {
+      "name": "NVIDIA GeForce RTX 5070 Ti",
+      "memoryTotal": "17094934528",
+      "cudaCores": 8960,
+      "architecture": "Blackwell",
+      "uuid": "GPU-6bec4baa-2327-0f6e-d811-fa242ee2685b"
+    }
+  ],
+  "cudaVersion": "12.9",
+  "writerId": "ke1addcens9ce15gw5yo4ltj5gvl0j17"
+}
