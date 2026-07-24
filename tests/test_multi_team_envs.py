@@ -153,6 +153,52 @@ def test_multiteam_rware_reward_shaping_tracks_local_task_progress():
     assert info["deliveries"] == 0
 
 
+def test_multiteam_rware_movement_shaping_discourages_idle_actions():
+    env = MultiTeamWarehouse(
+        shelf_columns=3,
+        column_height=1,
+        shelf_rows=1,
+        n_agents=1,
+        msg_bits=0,
+        sensor_range=1,
+        request_queue_size=1,
+        request_queue_size_per_team=1,
+        max_inactivity_steps=None,
+        max_steps=20,
+        reward_type=RewardType.INDIVIDUAL,
+        layout=".....\n.x.g.\n.....",
+        n_teams=1,
+        team_assignments=[0],
+        team_reward_mode=TeamRewardMode.INDIVIDUAL,
+        forward_movement_reward=0.03,
+        stationary_action_penalty=0.04,
+        reveal_team_info=True,
+    )
+    env.reset(seed=17)
+
+    shelf = env.shelfs[0]
+    shelf.x = 3
+    shelf.y = 1
+    env.shelf_team_ids = {shelf.id: 0}
+    env.shelfs_by_team = [[shelf]]
+    env.team_request_queues = [[shelf]]
+    env._sync_global_request_queue()
+
+    env.agents[0].x = 1
+    env.agents[0].y = 1
+    env.agents[0].dir = Direction.RIGHT
+    env.agents[0].carrying_shelf = None
+    env._recalc_grid()
+
+    _, rewards, _, _, info = env.step([Action.LEFT])
+    assert rewards[0] == pytest.approx(-0.04)
+    assert info["reward_shaping"][0] == pytest.approx(-0.04)
+
+    _, rewards, _, _, info = env.step([Action.FORWARD])
+    assert rewards[0] == pytest.approx(0.03)
+    assert info["reward_shaping"][0] == pytest.approx(0.03)
+
+
 def test_multiteam_grid_collection_and_hidden_oracle():
     env = MultiTeamGrid(
         grid_size=(6, 6),

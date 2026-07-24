@@ -93,6 +93,8 @@ class MultiTeamWarehouse(Warehouse):
         wrong_team_penalty: float = 0.0,
         step_penalty: float = 0.0,
         failed_forward_penalty: float = 0.0,
+        forward_movement_reward: float = 0.0,
+        stationary_action_penalty: float = 0.0,
         requested_shelf_pickup_reward: float = 0.0,
         requested_shelf_progress_reward: float = 0.0,
         goal_progress_reward: float = 0.0,
@@ -173,6 +175,8 @@ class MultiTeamWarehouse(Warehouse):
         self.wrong_team_penalty = float(wrong_team_penalty)
         self.step_penalty = float(step_penalty)
         self.failed_forward_penalty = float(failed_forward_penalty)
+        self.forward_movement_reward = float(forward_movement_reward)
+        self.stationary_action_penalty = float(stationary_action_penalty)
         self.requested_shelf_pickup_reward = float(requested_shelf_pickup_reward)
         self.requested_shelf_progress_reward = float(requested_shelf_progress_reward)
         self.goal_progress_reward = float(goal_progress_reward)
@@ -187,6 +191,8 @@ class MultiTeamWarehouse(Warehouse):
             "goal_progress_reward",
             "delivered_shelf_drop_reward",
             "premature_drop_penalty",
+            "forward_movement_reward",
+            "stationary_action_penalty",
             "wrong_shelf_pickup_penalty",
             "unrequested_shelf_pickup_penalty",
         ]:
@@ -780,6 +786,8 @@ class MultiTeamWarehouse(Warehouse):
         if self.step_penalty:
             rewards += self.step_penalty
         shaping_rewards = np.zeros(self.n_agents, dtype=np.float32)
+        requested_actions = [agent.req_action for agent in self.agents]
+        before_positions = [(agent.x, agent.y) for agent in self.agents]
         before_carried_shelves = [agent.carrying_shelf for agent in self.agents]
         before_requested_shelf_distances = [
             (
@@ -833,6 +841,16 @@ class MultiTeamWarehouse(Warehouse):
 
         for agent_id, agent in enumerate(self.agents):
             carried_before = before_carried_shelves[agent_id]
+            moved = before_positions[agent_id] != (agent.x, agent.y)
+            carrying_changed = carried_before is not agent.carrying_shelf
+            if moved:
+                shaping_rewards[agent_id] += self.forward_movement_reward
+            elif (
+                requested_actions[agent_id] != Action.FORWARD
+                and not carrying_changed
+            ):
+                shaping_rewards[agent_id] -= self.stationary_action_penalty
+
             if carried_before is None and agent.carrying_shelf is None:
                 shaping_rewards[agent_id] += self._progress_reward(
                     before_requested_shelf_distances[agent_id],
