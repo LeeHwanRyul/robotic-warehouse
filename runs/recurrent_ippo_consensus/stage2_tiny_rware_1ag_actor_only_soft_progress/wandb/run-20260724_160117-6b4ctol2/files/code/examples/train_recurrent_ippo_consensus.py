@@ -596,15 +596,7 @@ def infer_team_count(env_id: str, env_kwargs: Dict[str, Any]) -> Optional[int]:
 
 TRANSFER_COMPONENT_PREFIXES: Dict[str, Tuple[str, ...]] = {
     "actor": ("actor_encoder.", "actor_rnn.", "actor_head."),
-    "actor_body": ("actor_encoder.", "actor_rnn."),
-    "actor_encoder": ("actor_encoder.",),
-    "actor_rnn": ("actor_rnn.",),
-    "actor_head": ("actor_head.",),
     "critic": ("critic_encoder.", "critic_rnn.", "critic_head."),
-    "critic_body": ("critic_encoder.", "critic_rnn."),
-    "critic_encoder": ("critic_encoder.",),
-    "critic_rnn": ("critic_rnn.",),
-    "critic_head": ("critic_head.",),
 }
 
 

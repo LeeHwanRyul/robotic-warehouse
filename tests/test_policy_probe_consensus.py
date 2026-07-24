@@ -214,3 +214,54 @@ def test_curriculum_transfer_copies_actor_round_robin_and_resets_critic(tmp_path
             assert torch.allclose(param, torch.full_like(param, expected))
         for before, param in zip(critic_before[agent_id], agent.critic_parameters()):
             assert torch.allclose(param, before)
+
+
+def test_curriculum_transfer_actor_body_leaves_policy_head_fresh(tmp_path):
+    source_agent = RecurrentActorCritic(
+        obs_dim=3,
+        action_dim=2,
+        mlp_hidden_dim=4,
+        recurrent_hidden_dim=4,
+    )
+    for name, param in source_agent.named_parameters():
+        if name.startswith("actor_"):
+            param.data.fill_(0.5)
+        if name.startswith("critic_"):
+            param.data.fill_(0.75)
+
+    checkpoint_path = tmp_path / "stage1.pt"
+    torch.save({"agents": [source_agent.state_dict()]}, checkpoint_path)
+
+    target_agent = RecurrentActorCritic(
+        obs_dim=3,
+        action_dim=2,
+        mlp_hidden_dim=4,
+        recurrent_hidden_dim=4,
+    )
+    head_before = {
+        name: param.detach().clone()
+        for name, param in target_agent.named_parameters()
+        if name.startswith("actor_head.")
+    }
+    critic_before = {
+        name: param.detach().clone()
+        for name, param in target_agent.named_parameters()
+        if name.startswith("critic_")
+    }
+
+    report = transfer_checkpoint_to_agents(
+        str(checkpoint_path),
+        [target_agent],
+        parse_transfer_components("actor_body"),
+        torch.device("cpu"),
+    )
+
+    assert report["components"] == ["actor_body"]
+    assert report["copied_tensors"] > 0
+    for name, param in target_agent.named_parameters():
+        if name.startswith(("actor_encoder.", "actor_rnn.")):
+            assert torch.allclose(param, torch.full_like(param, 0.5))
+        elif name.startswith("actor_head."):
+            assert torch.allclose(param, head_before[name])
+        elif name.startswith("critic_"):
+            assert torch.allclose(param, critic_before[name])

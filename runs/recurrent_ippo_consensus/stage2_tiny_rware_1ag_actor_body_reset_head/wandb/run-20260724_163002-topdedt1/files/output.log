@@ -1,0 +1,18 @@
+env=rware-multiteam-tiny-4ag-2teams-v0 agents=1 obs_dim=183 action_dim=5 device=cuda
+transfer=['actor_body'] source_agents=1 target_agents=1 copied_tensors=10 skipped_tensors=0
+C:\Users\95101\anaconda3\envs\RWARE_Project\lib\site-packages\gymnasium\utils\passive_env_checker.py:244: UserWarning: [33mWARN: The reward returned by `step()` must be a float, int, np.integer or np.floating, actual type: <class 'list'>[0m
+  logger.warn(
+iter=0005 steps=2560 sps=311.0 return=-0.675 len=500.0 events=0.00 pi_loss=-0.0032 v_loss=0.0016 ent=1.533 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0010 steps=5120 sps=327.2 return=-1.680 len=500.0 events=0.00 pi_loss=-0.0079 v_loss=0.0037 ent=1.503 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0015 steps=7680 sps=346.3 return=-1.085 len=500.0 events=0.00 pi_loss=-0.0033 v_loss=0.0011 ent=1.427 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0020 steps=10240 sps=359.9 return=-0.500 len=500.0 events=0.00 pi_loss=-0.0011 v_loss=0.0005 ent=1.522 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0025 steps=12800 sps=367.7 return=-0.850 len=500.0 events=0.00 pi_loss=-0.0033 v_loss=0.0008 ent=1.516 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+eval iter=0025 return=-0.098 length=500.0
+m[2K[1mwandb[0m: [38;5;178m⣽[0m Encoding video...
+iter=0030 steps=15360 sps=238.7 return=-0.505 len=500.0 events=0.00 pi_loss=-0.0049 v_loss=0.0008 ent=1.503 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0035 steps=17920 sps=243.5 return=-0.840 len=500.0 events=0.00 pi_loss=-0.0025 v_loss=0.0005 ent=1.425 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0040 steps=20480 sps=247.7 return=-0.535 len=500.0 events=0.00 pi_loss=-0.0010 v_loss=0.0002 ent=1.429 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0045 steps=23040 sps=251.3 return=-0.520 len=500.0 events=0.00 pi_loss=-0.0009 v_loss=0.0003 ent=1.419 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0050 steps=25600 sps=254.0 return=-0.685 len=500.0 events=0.00 pi_loss=-0.0022 v_loss=0.0004 ent=1.462 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+eval iter=0050 return=-0.099 length=500.0
+iter=0055 steps=28160 sps=212.6 return=-0.530 len=500.0 events=0.00 pi_loss=-0.0056 v_loss=0.0002 ent=1.420 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]

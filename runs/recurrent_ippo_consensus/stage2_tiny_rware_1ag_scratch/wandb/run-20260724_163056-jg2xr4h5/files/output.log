@@ -1,0 +1,11 @@
+env=rware-multiteam-tiny-4ag-2teams-v0 agents=1 obs_dim=183 action_dim=5 device=cuda
+C:\Users\95101\anaconda3\envs\RWARE_Project\lib\site-packages\gymnasium\utils\passive_env_checker.py:244: UserWarning: [33mWARN: The reward returned by `step()` must be a float, int, np.integer or np.floating, actual type: <class 'list'>[0m
+  logger.warn(
+iter=0005 steps=2560 sps=243.4 return=-2.555 len=500.0 events=0.00 pi_loss=-0.0031 v_loss=0.0066 ent=1.590 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0010 steps=5120 sps=249.3 return=-0.800 len=500.0 events=0.00 pi_loss=-0.0007 v_loss=0.0015 ent=1.538 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0015 steps=7680 sps=253.5 return=-0.510 len=500.0 events=0.00 pi_loss=-0.0027 v_loss=0.0016 ent=1.579 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0020 steps=10240 sps=253.9 return=-0.630 len=500.0 events=0.00 pi_loss=-0.0047 v_loss=0.0008 ent=1.549 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0025 steps=12800 sps=257.2 return=-0.670 len=500.0 events=0.00 pi_loss=-0.0014 v_loss=0.0006 ent=1.551 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+eval iter=0025 return=-0.098 length=500.0
+m[2K[1mwandb[0m: [38;5;178m⣷[0m Encoding video...
+iter=0030 steps=15360 sps=184.5 return=-0.480 len=500.0 events=0.00 pi_loss=-0.0056 v_loss=0.0003 ent=1.546 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
