@@ -35,6 +35,50 @@ python examples/train_recurrent_ippo_consensus.py \
   --total-timesteps 200000
 ```
 
+Override the number of agents directly:
+
+```sh
+python examples/train_recurrent_ippo_consensus.py \
+  --env-id rware-multiteam-tiny-4ag-2teams-v0 \
+  --agent-count 8 \
+  --team-count 2
+```
+
+Run an agent-count curriculum one stage at a time. Stage indices are 1-based, so this
+starts with 2 agents and then initializes the 4-agent stage from the previous run's
+checkpoint. By default only actor parameters are transferred; critics, optimizers, and
+the discovered graph statistics start fresh in the new stage. When the agent count is
+overridden for multi-team RWARE, the request queue is scaled to the selected agent/team
+count unless you explicitly pass `request_queue_size` or `request_queue_size_per_team`.
+
+```sh
+python examples/train_recurrent_ippo_consensus.py \
+  --curriculum-stages 2,4,8,16 \
+  --curriculum-stage 1 \
+  --team-count 2 \
+  --exp-name curriculum_stage1_2ag
+
+python examples/train_recurrent_ippo_consensus.py \
+  --curriculum-stages 2,4,8,16 \
+  --curriculum-stage 2 \
+  --team-count 2 \
+  --init-checkpoint runs/recurrent_ippo_consensus/curriculum_stage1_2ag/final.pt \
+  --exp-name curriculum_stage2_4ag
+```
+
+Use `--transfer-components actor,critic` only when you explicitly want to copy critic
+parameters too. Newly added agents copy source-stage agents round-robin.
+
+For the full 2 -> 4 -> 8 -> 16 wandb/video run, use the helper script:
+
+```powershell
+.\examples\run_curriculum_2_4_8_16.ps1 `
+  -RunPrefix curriculum_2_4_8_16_scaled `
+  -WandbGroup curriculum_2_4_8_16
+```
+
+Pass `-Python C:\path\to\python.exe` if `python` is not on your PATH.
+
 ## Wandb and eval rendering
 
 Log training, graph, probe, and eval metrics to Weights & Biases:

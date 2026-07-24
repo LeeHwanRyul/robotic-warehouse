@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 import networkx as nx
 import numpy as np
@@ -93,6 +93,14 @@ class MultiTeamWarehouse(Warehouse):
         wrong_team_penalty: float = 0.0,
         step_penalty: float = 0.0,
         failed_forward_penalty: float = 0.0,
+        requested_shelf_pickup_reward: float = 0.0,
+        requested_shelf_progress_reward: float = 0.0,
+        goal_progress_reward: float = 0.0,
+        delivered_shelf_drop_reward: float = 0.0,
+        premature_drop_penalty: float = 0.0,
+        wrong_shelf_pickup_penalty: float = 0.0,
+        unrequested_shelf_pickup_penalty: float = 0.0,
+        normalize_shaping_rewards: bool = False,
         reveal_team_info: bool = False,
         communication_range: Optional[int] = None,
         team_edge_threshold: float = 0.5,
@@ -165,6 +173,25 @@ class MultiTeamWarehouse(Warehouse):
         self.wrong_team_penalty = float(wrong_team_penalty)
         self.step_penalty = float(step_penalty)
         self.failed_forward_penalty = float(failed_forward_penalty)
+        self.requested_shelf_pickup_reward = float(requested_shelf_pickup_reward)
+        self.requested_shelf_progress_reward = float(requested_shelf_progress_reward)
+        self.goal_progress_reward = float(goal_progress_reward)
+        self.delivered_shelf_drop_reward = float(delivered_shelf_drop_reward)
+        self.premature_drop_penalty = float(premature_drop_penalty)
+        self.wrong_shelf_pickup_penalty = float(wrong_shelf_pickup_penalty)
+        self.unrequested_shelf_pickup_penalty = float(unrequested_shelf_pickup_penalty)
+        self.normalize_shaping_rewards = bool(normalize_shaping_rewards)
+        for name in [
+            "requested_shelf_pickup_reward",
+            "requested_shelf_progress_reward",
+            "goal_progress_reward",
+            "delivered_shelf_drop_reward",
+            "premature_drop_penalty",
+            "wrong_shelf_pickup_penalty",
+            "unrequested_shelf_pickup_penalty",
+        ]:
+            if getattr(self, name) < 0.0:
+                raise ValueError(f"{name} must be non-negative")
         self.reveal_team_info = reveal_team_info
 
         self.shelf_team_ids: Dict[int, int] = {}
@@ -174,6 +201,10 @@ class MultiTeamWarehouse(Warehouse):
         self.goals_by_team: List[List[Tuple[int, int]]] = [[] for _ in range(n_teams)]
         self.team_delivery_counts = np.zeros(n_teams, dtype=np.int64)
         self._last_delivery_events = []
+        self._last_reward_shaping = np.zeros(self.n_agents, dtype=np.float32)
+        self._picked_request_shelf_ids_by_agent: List[Set[int]] = [
+            set() for _ in range(self.n_agents)
+        ]
 
         # Learned / inferred dynamic communication graph.
         # This is for training-time selective sharing or debugging. It is not
@@ -443,6 +474,8 @@ class MultiTeamWarehouse(Warehouse):
             else delivered_shelf
         )
         team_queue[team_queue.index(delivered_shelf)] = replacement
+        for picked_shelf_ids in self._picked_request_shelf_ids_by_agent:
+            picked_shelf_ids.discard(delivered_shelf.id)
         self._sync_global_request_queue()
 
     def _reward_delivery(self, rewards: np.ndarray, team_id: int, carrier_id: int) -> List[int]:
@@ -469,6 +502,77 @@ class MultiTeamWarehouse(Warehouse):
             rewards[carrier_id - 1] -= self.wrong_team_penalty
 
         return rewarded_agents
+
+    def _agent_team_id(self, agent) -> int:
+        return int(self.agent_team_ids[agent.id - 1])
+
+    def _requested_shelves_for_agent(self, agent) -> List[Shelf]:
+        team_id = self._agent_team_id(agent)
+        if not (0 <= team_id < len(self.team_request_queues)):
+            return []
+        return list(self.team_request_queues[team_id])
+
+    def _is_agent_requested_shelf(self, agent, shelf: Shelf) -> bool:
+        return shelf in self._requested_shelves_for_agent(agent)
+
+    def _is_requested_shelf(self, shelf: Shelf) -> bool:
+        return any(shelf in team_queue for team_queue in self.team_request_queues)
+
+    def _distance(self, source_x: int, source_y: int, target: Tuple[int, int]) -> int:
+        target_x, target_y = target
+        return abs(int(source_x) - int(target_x)) + abs(int(source_y) - int(target_y))
+
+    def _distance_scale(self) -> float:
+        height, width = self.grid_size
+        return float(max(int(height) + int(width) - 2, 1))
+
+    def _nearest_requested_shelf_distance(self, agent) -> Optional[int]:
+        shelves = self._requested_shelves_for_agent(agent)
+        if not shelves:
+            return None
+        return min(
+            self._distance(agent.x, agent.y, (shelf.x, shelf.y))
+            for shelf in shelves
+        )
+
+    def _goals_for_shelf_team(self, team_id: int) -> List[Tuple[int, int]]:
+        if self.require_matching_team_goal and 0 <= team_id < len(self.goals_by_team):
+            return list(self.goals_by_team[team_id])
+        return [tuple(map(int, goal)) for goal in self.goals]
+
+    def _carried_requested_shelf_goal_distance(self, agent) -> Optional[int]:
+        shelf = agent.carrying_shelf
+        if shelf is None or not self._is_agent_requested_shelf(agent, shelf):
+            return None
+        team_id = int(self.shelf_team_ids.get(shelf.id, self._agent_team_id(agent)))
+        goals = self._goals_for_shelf_team(team_id)
+        if not goals:
+            return None
+        return min(self._distance(agent.x, agent.y, goal) for goal in goals)
+
+    def _progress_reward(
+        self,
+        before_distance: Optional[int],
+        after_distance: Optional[int],
+        coefficient: float,
+    ) -> float:
+        if coefficient <= 0.0 or before_distance is None or after_distance is None:
+            return 0.0
+        progress = float(before_distance - after_distance)
+        if self.normalize_shaping_rewards:
+            progress /= self._distance_scale()
+        return float(coefficient * progress)
+
+    def _pickup_shaping_reward(self, agent, shelf: Shelf) -> float:
+        if self._is_agent_requested_shelf(agent, shelf):
+            picked_shelf_ids = self._picked_request_shelf_ids_by_agent[agent.id - 1]
+            if shelf.id in picked_shelf_ids:
+                return 0.0
+            picked_shelf_ids.add(shelf.id)
+            return self.requested_shelf_pickup_reward
+        if self._is_requested_shelf(shelf):
+            return -self.wrong_shelf_pickup_penalty
+        return -self.unrequested_shelf_pickup_penalty
 
     def set_inferred_team_assignments(
         self,
@@ -569,6 +673,9 @@ class MultiTeamWarehouse(Warehouse):
         self._make_team_request_queues()
         self.team_delivery_counts[:] = 0
         self._last_delivery_events = []
+        self._last_reward_shaping[:] = 0.0
+        for picked_shelf_ids in self._picked_request_shelf_ids_by_agent:
+            picked_shelf_ids.clear()
         self.inferred_team_ids[:] = -1
         self.inferred_team_confidence[:] = 0.0
         self.update_training_comm_graph()
@@ -587,6 +694,7 @@ class MultiTeamWarehouse(Warehouse):
                     "team_members": self.get_team_members(),
                     "team_delivery_counts": self.team_delivery_counts.copy(),
                     "delivery_events": list(self._last_delivery_events),
+                    "reward_shaping": self._last_reward_shaping.copy(),
                     "team_request_ids": [
                         [shelf.id for shelf in team_queue]
                         for team_queue in self.team_request_queues
@@ -671,6 +779,22 @@ class MultiTeamWarehouse(Warehouse):
         rewards = np.zeros(self.n_agents, dtype=np.float32)
         if self.step_penalty:
             rewards += self.step_penalty
+        shaping_rewards = np.zeros(self.n_agents, dtype=np.float32)
+        before_carried_shelves = [agent.carrying_shelf for agent in self.agents]
+        before_requested_shelf_distances = [
+            (
+                None
+                if agent.carrying_shelf
+                else self._nearest_requested_shelf_distance(agent)
+            )
+            for agent in self.agents
+        ]
+        before_goal_distances = [
+            self._carried_requested_shelf_goal_distance(agent)
+            if agent.carrying_shelf
+            else None
+            for agent in self.agents
+        ]
 
         for agent in failed_agents:
             assert agent.req_action == Action.FORWARD
@@ -691,12 +815,38 @@ class MultiTeamWarehouse(Warehouse):
                 shelf_id = self.grid[_LAYER_SHELFS, agent.y, agent.x]
                 if shelf_id:
                     agent.carrying_shelf = self.shelfs[shelf_id - 1]
+                    shaping_rewards[agent.id - 1] += self._pickup_shaping_reward(
+                        agent,
+                        agent.carrying_shelf,
+                    )
             elif agent.req_action == Action.TOGGLE_LOAD and agent.carrying_shelf:
+                delivered_before_drop = bool(agent.has_delivered)
                 if not self._is_highway(agent.x, agent.y):
                     agent.carrying_shelf = None
+                    if delivered_before_drop:
+                        shaping_rewards[agent.id - 1] += self.delivered_shelf_drop_reward
+                    else:
+                        shaping_rewards[agent.id - 1] -= self.premature_drop_penalty
                 agent.has_delivered = False
 
         self._recalc_grid()
+
+        for agent_id, agent in enumerate(self.agents):
+            carried_before = before_carried_shelves[agent_id]
+            if carried_before is None and agent.carrying_shelf is None:
+                shaping_rewards[agent_id] += self._progress_reward(
+                    before_requested_shelf_distances[agent_id],
+                    self._nearest_requested_shelf_distance(agent),
+                    self.requested_shelf_progress_reward,
+                )
+            elif carried_before is not None and agent.carrying_shelf is carried_before:
+                shaping_rewards[agent_id] += self._progress_reward(
+                    before_goal_distances[agent_id],
+                    self._carried_requested_shelf_goal_distance(agent),
+                    self.goal_progress_reward,
+                )
+        rewards += shaping_rewards
+        self._last_reward_shaping = shaping_rewards.copy()
 
         shelf_delivered = False
         for goal_x, goal_y in self.goals:
@@ -715,9 +865,17 @@ class MultiTeamWarehouse(Warehouse):
             if self.require_matching_team_goal and goal_team_id != team_id:
                 continue
 
-            shelf_delivered = True
             carrier_id = self.grid[_LAYER_AGENTS, goal_y, goal_x]
+            if carrier_id > 0 and self.agents[carrier_id - 1].has_delivered:
+                continue
+
+            shelf_delivered = True
             rewarded_agents = self._reward_delivery(rewards, team_id, carrier_id)
+            if (
+                carrier_id > 0
+                and self.agent_team_ids[carrier_id - 1] == team_id
+            ):
+                self.agents[carrier_id - 1].has_delivered = True
             self.team_delivery_counts[team_id] += 1
             self._replace_team_request(team_id, shelf)
 

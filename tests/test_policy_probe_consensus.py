@@ -16,10 +16,15 @@ from examples.train_recurrent_ippo_consensus import (  # noqa: E402
     TeamGraphEstimator,
     _objective_visibility_scores,
     adjusted_rand_index,
+    apply_agent_overrides,
     apply_confidence_weighted_critic_consensus,
     build_objective_probe_bank,
     critic_parameter_groups,
     normalized_mutual_info,
+    parse_curriculum_stages,
+    parse_transfer_components,
+    resolve_agent_count,
+    transfer_checkpoint_to_agents,
 )
 from rware.multi_team_grid import MultiTeamGrid  # noqa: E402
 
@@ -128,3 +133,84 @@ def test_clustering_scores_are_perfect_for_same_partition():
 
     assert adjusted_rand_index(true_labels, pred_labels) == pytest.approx(1.0)
     assert normalized_mutual_info(true_labels, pred_labels) == pytest.approx(1.0)
+
+
+def test_curriculum_stage_selects_agent_count_and_env_override():
+    stages = parse_curriculum_stages("4->8->12")
+
+    assert stages == [4, 8, 12]
+    assert resolve_agent_count(0, stages, 2) == 8
+    assert resolve_agent_count(6, stages, 0) == 6
+
+    env_kwargs = apply_agent_overrides(
+        "rware-multiteam-tiny-4ag-2teams-v0",
+        {"sensor_range": 2},
+        agent_count=8,
+        team_count=2,
+    )
+
+    assert env_kwargs["n_agents"] == 8
+    assert env_kwargs["n_teams"] == 2
+    assert env_kwargs["sensor_range"] == 2
+    assert env_kwargs["request_queue_size_per_team"] == 4
+    assert env_kwargs["request_queue_size"] == 8
+
+    first_stage_kwargs = apply_agent_overrides(
+        "rware-multiteam-tiny-4ag-2teams-v0",
+        {"sensor_range": 2},
+        agent_count=2,
+        team_count=2,
+    )
+
+    assert first_stage_kwargs["request_queue_size_per_team"] == 1
+    assert first_stage_kwargs["request_queue_size"] == 2
+
+    explicit_queue_kwargs = apply_agent_overrides(
+        "rware-multiteam-tiny-4ag-2teams-v0",
+        {"request_queue_size_per_team": 3},
+        agent_count=2,
+        team_count=2,
+    )
+
+    assert explicit_queue_kwargs["request_queue_size_per_team"] == 3
+    assert "request_queue_size" not in explicit_queue_kwargs
+
+
+def test_curriculum_transfer_copies_actor_round_robin_and_resets_critic(tmp_path):
+    source_agents = [
+        RecurrentActorCritic(obs_dim=3, action_dim=2, mlp_hidden_dim=4, recurrent_hidden_dim=4),
+        RecurrentActorCritic(obs_dim=3, action_dim=2, mlp_hidden_dim=4, recurrent_hidden_dim=4),
+    ]
+    for value, agent in zip([0.25, 0.5], source_agents):
+        for param in agent.actor_parameters():
+            param.data.fill_(value)
+        for param in agent.critic_parameters():
+            param.data.fill_(0.75)
+
+    checkpoint_path = tmp_path / "stage1.pt"
+    torch.save({"agents": [agent.state_dict() for agent in source_agents]}, checkpoint_path)
+
+    target_agents = [
+        RecurrentActorCritic(obs_dim=3, action_dim=2, mlp_hidden_dim=4, recurrent_hidden_dim=4)
+        for _ in range(5)
+    ]
+    critic_before = [
+        [param.detach().clone() for param in agent.critic_parameters()]
+        for agent in target_agents
+    ]
+
+    report = transfer_checkpoint_to_agents(
+        str(checkpoint_path),
+        target_agents,
+        parse_transfer_components("actor"),
+        torch.device("cpu"),
+    )
+
+    assert report["mapping"] == [0, 1, 0, 1, 0]
+    assert report["copied_tensors"] > 0
+    for agent_id, agent in enumerate(target_agents):
+        expected = 0.25 if agent_id % 2 == 0 else 0.5
+        for param in agent.actor_parameters():
+            assert torch.allclose(param, torch.full_like(param, expected))
+        for before, param in zip(critic_before[agent_id], agent.critic_parameters()):
+            assert torch.allclose(param, before)

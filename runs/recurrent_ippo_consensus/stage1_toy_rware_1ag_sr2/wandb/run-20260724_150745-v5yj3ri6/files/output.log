@@ -1,0 +1,98 @@
+env=rware-multiteam-tiny-4ag-2teams-v0 agents=1 obs_dim=183 action_dim=5 device=cuda
+C:\Users\95101\anaconda3\envs\RWARE_Project\lib\site-packages\gymnasium\utils\passive_env_checker.py:244: UserWarning: [33mWARN: The reward returned by `step()` must be a float, int, np.integer or np.floating, actual type: <class 'list'>[0m
+  logger.warn(
+iter=0005 steps=2560 sps=381.5 return=1.030 len=100.0 events=0.00 pi_loss=-0.0006 v_loss=0.0954 ent=1.606 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0010 steps=5120 sps=395.7 return=0.230 len=100.0 events=0.00 pi_loss=-0.0008 v_loss=0.0161 ent=1.571 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0015 steps=7680 sps=389.7 return=0.450 len=100.0 events=0.00 pi_loss=-0.0017 v_loss=0.0691 ent=1.592 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0020 steps=10240 sps=395.6 return=1.290 len=100.0 events=0.20 pi_loss=-0.0004 v_loss=0.1234 ent=1.587 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0025 steps=12800 sps=395.9 return=0.750 len=100.0 events=0.17 pi_loss=-0.0012 v_loss=0.0543 ent=1.587 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+eval iter=0025 return=0.000 length=100.0
+m[2K[1mwandb[0m: [38;5;178m⣻[0m Encoding video...
+iter=0030 steps=15360 sps=361.3 return=1.390 len=100.0 events=0.00 pi_loss=-0.0077 v_loss=0.1340 ent=1.559 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0035 steps=17920 sps=367.7 return=1.630 len=100.0 events=0.00 pi_loss=-0.0015 v_loss=0.2701 ent=1.533 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0040 steps=20480 sps=372.5 return=2.050 len=100.0 events=0.00 pi_loss=-0.0020 v_loss=0.3864 ent=1.547 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0045 steps=23040 sps=375.1 return=0.230 len=100.0 events=0.00 pi_loss=-0.0040 v_loss=0.0909 ent=1.508 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0050 steps=25600 sps=376.2 return=1.217 len=100.0 events=0.00 pi_loss=-0.0015 v_loss=0.0319 ent=1.482 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+eval iter=0050 return=0.000 length=100.0
+iter=0055 steps=28160 sps=358.5 return=3.360 len=100.0 events=0.00 pi_loss=-0.0030 v_loss=0.6238 ent=1.560 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0060 steps=30720 sps=362.6 return=2.510 len=100.0 events=0.00 pi_loss=-0.0028 v_loss=0.3686 ent=1.556 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0065 steps=33280 sps=365.4 return=0.580 len=100.0 events=0.00 pi_loss=-0.0030 v_loss=0.0978 ent=1.511 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0070 steps=35840 sps=368.8 return=3.530 len=100.0 events=0.00 pi_loss=-0.0029 v_loss=0.6148 ent=1.492 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0075 steps=38400 sps=371.6 return=6.000 len=100.0 events=0.00 pi_loss=-0.0021 v_loss=1.8542 ent=1.452 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+eval iter=0075 return=0.126 length=100.0
+iter=0080 steps=40960 sps=360.7 return=2.940 len=100.0 events=0.00 pi_loss=-0.0030 v_loss=0.2152 ent=1.448 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0085 steps=43520 sps=363.3 return=1.640 len=100.0 events=0.20 pi_loss=-0.0007 v_loss=0.1912 ent=1.491 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0090 steps=46080 sps=365.3 return=6.690 len=100.0 events=0.20 pi_loss=-0.0080 v_loss=1.7704 ent=1.476 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0095 steps=48640 sps=367.5 return=21.030 len=100.0 events=0.40 pi_loss=-0.0046 v_loss=8.7222 ent=1.304 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0100 steps=51200 sps=369.3 return=14.250 len=100.0 events=0.17 pi_loss=-0.0025 v_loss=7.7200 ent=1.268 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+eval iter=0100 return=5.269 length=100.0
+iter=0105 steps=53760 sps=361.3 return=10.540 len=100.0 events=0.20 pi_loss=-0.0008 v_loss=6.2541 ent=1.342 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0110 steps=56320 sps=363.3 return=18.050 len=100.0 events=0.20 pi_loss=-0.0001 v_loss=10.4870 ent=1.315 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0115 steps=58880 sps=365.0 return=10.280 len=100.0 events=0.40 pi_loss=-0.0013 v_loss=7.4412 ent=1.236 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0120 steps=61440 sps=366.9 return=49.580 len=100.0 events=0.60 pi_loss=-0.0004 v_loss=26.4186 ent=0.972 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0125 steps=64000 sps=368.3 return=25.583 len=100.0 events=0.17 pi_loss=-0.0011 v_loss=21.2163 ent=1.151 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+eval iter=0125 return=5.634 length=100.0
+iter=0130 steps=66560 sps=362.3 return=23.750 len=100.0 events=0.40 pi_loss=-0.0015 v_loss=14.2873 ent=1.165 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0135 steps=69120 sps=363.6 return=8.110 len=100.0 events=0.80 pi_loss=-0.0002 v_loss=6.2732 ent=1.226 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0140 steps=71680 sps=365.2 return=26.590 len=100.0 events=0.60 pi_loss=-0.0010 v_loss=19.7962 ent=1.046 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0145 steps=74240 sps=366.4 return=26.550 len=100.0 events=0.00 pi_loss=-0.0030 v_loss=16.6647 ent=1.045 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0150 steps=76800 sps=367.4 return=45.608 len=100.0 events=0.67 pi_loss=-0.0012 v_loss=26.2907 ent=0.763 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+eval iter=0150 return=11.784 length=100.0
+iter=0155 steps=79360 sps=362.8 return=70.430 len=100.0 events=0.80 pi_loss=-0.0007 v_loss=35.7040 ent=0.624 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0160 steps=81920 sps=364.0 return=44.250 len=100.0 events=0.80 pi_loss=-0.0006 v_loss=26.6189 ent=0.904 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0165 steps=84480 sps=365.3 return=41.760 len=100.0 events=0.40 pi_loss=0.0002 v_loss=35.4335 ent=0.882 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0170 steps=87040 sps=366.3 return=54.870 len=100.0 events=0.80 pi_loss=-0.0005 v_loss=32.0197 ent=0.760 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0175 steps=89600 sps=367.3 return=36.908 len=100.0 events=0.67 pi_loss=-0.0022 v_loss=25.0246 ent=0.893 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+eval iter=0175 return=11.883 length=100.0
+iter=0180 steps=92160 sps=363.3 return=63.430 len=100.0 events=0.80 pi_loss=-0.0000 v_loss=36.2832 ent=0.652 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0185 steps=94720 sps=364.3 return=30.200 len=100.0 events=0.40 pi_loss=-0.0010 v_loss=24.9362 ent=0.955 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0190 steps=97280 sps=365.4 return=63.390 len=100.0 events=0.60 pi_loss=0.0006 v_loss=32.3710 ent=0.781 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0195 steps=99840 sps=366.4 return=34.770 len=100.0 events=0.60 pi_loss=-0.0021 v_loss=25.9047 ent=1.018 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0200 steps=102400 sps=367.5 return=57.433 len=100.0 events=0.50 pi_loss=-0.0007 v_loss=44.3419 ent=0.627 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+eval iter=0200 return=12.240 length=100.0
+iter=0205 steps=104960 sps=364.0 return=47.650 len=100.0 events=0.20 pi_loss=-0.0006 v_loss=35.4943 ent=0.697 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0210 steps=107520 sps=364.8 return=43.320 len=100.0 events=0.20 pi_loss=0.0000 v_loss=33.8718 ent=0.528 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0215 steps=110080 sps=365.6 return=58.460 len=100.0 events=0.60 pi_loss=-0.0010 v_loss=42.2443 ent=0.680 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0220 steps=112640 sps=366.5 return=63.430 len=100.0 events=0.40 pi_loss=-0.0019 v_loss=36.9301 ent=0.636 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0225 steps=115200 sps=367.3 return=68.950 len=100.0 events=1.00 pi_loss=-0.0003 v_loss=45.3690 ent=0.600 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+eval iter=0225 return=23.843 length=100.0
+iter=0230 steps=117760 sps=364.3 return=76.100 len=100.0 events=0.80 pi_loss=0.0003 v_loss=44.5430 ent=0.547 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0235 steps=120320 sps=365.0 return=47.860 len=100.0 events=0.60 pi_loss=-0.0007 v_loss=43.0807 ent=0.794 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0240 steps=122880 sps=365.9 return=32.420 len=100.0 events=0.80 pi_loss=-0.0056 v_loss=34.0211 ent=0.916 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0245 steps=125440 sps=366.7 return=79.690 len=100.0 events=0.60 pi_loss=0.0000 v_loss=45.3229 ent=0.457 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0250 steps=128000 sps=367.7 return=46.758 len=100.0 events=0.67 pi_loss=0.0005 v_loss=49.2915 ent=0.785 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+eval iter=0250 return=23.716 length=100.0
+iter=0255 steps=130560 sps=364.3 return=40.910 len=100.0 events=1.00 pi_loss=-0.0003 v_loss=29.6978 ent=0.985 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0260 steps=133120 sps=365.0 return=84.410 len=100.0 events=1.00 pi_loss=0.0001 v_loss=50.0946 ent=0.386 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0265 steps=135680 sps=365.8 return=64.300 len=100.0 events=0.60 pi_loss=-0.0010 v_loss=46.9681 ent=0.508 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0270 steps=138240 sps=366.6 return=41.540 len=100.0 events=0.60 pi_loss=-0.0009 v_loss=42.4513 ent=0.839 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0275 steps=140800 sps=367.2 return=58.717 len=100.0 events=1.00 pi_loss=-0.0001 v_loss=50.6967 ent=0.723 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+eval iter=0275 return=24.103 length=100.0
+iter=0280 steps=143360 sps=364.6 return=70.420 len=100.0 events=0.80 pi_loss=-0.0003 v_loss=46.8054 ent=0.525 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0285 steps=145920 sps=365.4 return=54.230 len=100.0 events=0.80 pi_loss=-0.0018 v_loss=47.9684 ent=0.684 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0290 steps=148480 sps=366.1 return=66.130 len=100.0 events=1.00 pi_loss=0.0002 v_loss=48.9595 ent=0.589 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0295 steps=151040 sps=366.7 return=72.190 len=100.0 events=0.80 pi_loss=0.0001 v_loss=50.8924 ent=0.515 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0300 steps=153600 sps=367.2 return=69.450 len=100.0 events=1.00 pi_loss=-0.0003 v_loss=56.5533 ent=0.529 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+eval iter=0300 return=18.304 length=100.0
+iter=0305 steps=156160 sps=364.8 return=55.310 len=100.0 events=0.80 pi_loss=-0.0007 v_loss=54.4841 ent=0.669 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0310 steps=158720 sps=365.4 return=47.490 len=100.0 events=0.80 pi_loss=-0.0012 v_loss=51.6416 ent=0.765 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0315 steps=161280 sps=366.1 return=73.360 len=100.0 events=0.80 pi_loss=-0.0003 v_loss=51.3739 ent=0.514 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0320 steps=163840 sps=366.7 return=67.580 len=100.0 events=0.40 pi_loss=-0.0029 v_loss=49.1285 ent=0.597 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0325 steps=166400 sps=367.3 return=70.625 len=100.0 events=0.83 pi_loss=-0.0002 v_loss=61.7605 ent=0.517 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+eval iter=0325 return=26.160 length=100.0
+iter=0330 steps=168960 sps=364.9 return=71.680 len=100.0 events=0.60 pi_loss=-0.0006 v_loss=56.5586 ent=0.512 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0335 steps=171520 sps=365.5 return=61.310 len=100.0 events=1.00 pi_loss=-0.0003 v_loss=49.9829 ent=0.569 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0340 steps=174080 sps=366.2 return=71.110 len=100.0 events=0.80 pi_loss=0.0001 v_loss=48.8028 ent=0.566 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0345 steps=176640 sps=366.6 return=58.150 len=100.0 events=1.00 pi_loss=-0.0003 v_loss=54.5424 ent=0.533 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0350 steps=179200 sps=367.2 return=44.742 len=100.0 events=0.67 pi_loss=-0.0001 v_loss=62.8086 ent=0.613 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+eval iter=0350 return=12.138 length=100.0
+iter=0355 steps=181760 sps=364.8 return=66.310 len=100.0 events=0.80 pi_loss=-0.0004 v_loss=49.3018 ent=0.487 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0360 steps=184320 sps=365.2 return=74.890 len=100.0 events=0.80 pi_loss=-0.0000 v_loss=54.7674 ent=0.400 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0365 steps=186880 sps=365.6 return=59.670 len=100.0 events=1.00 pi_loss=-0.0012 v_loss=49.3974 ent=0.571 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0370 steps=189440 sps=366.2 return=68.570 len=100.0 events=1.00 pi_loss=-0.0010 v_loss=47.2748 ent=0.526 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0375 steps=192000 sps=366.7 return=44.267 len=100.0 events=0.83 pi_loss=-0.0001 v_loss=56.3119 ent=0.737 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+eval iter=0375 return=48.427 length=100.0
+iter=0380 steps=194560 sps=364.7 return=70.770 len=100.0 events=0.80 pi_loss=-0.0003 v_loss=39.1876 ent=0.419 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0385 steps=197120 sps=365.1 return=70.700 len=100.0 events=1.00 pi_loss=-0.0001 v_loss=57.5903 ent=0.459 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+iter=0390 steps=199680 sps=365.6 return=73.690 len=100.0 events=1.00 pi_loss=0.0001 v_loss=48.6116 ent=0.406 sim=nan delta=nan edges=0 consensus_edges=0 clusters=[[0]]
+eval_return=23.832 eval_length=100.0
