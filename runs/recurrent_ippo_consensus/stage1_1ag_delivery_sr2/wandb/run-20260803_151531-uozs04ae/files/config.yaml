@@ -1,0 +1,232 @@
+_wandb:
+    value:
+        cli_version: 0.28.0
+        code_path: code/examples/train_recurrent_ippo_consensus.py
+        e:
+            36375qu2lnpafvtmc5fb51a06a848189:
+                args:
+                    - --env-id
+                    - rware-multiteam-tiny-4ag-2teams-v0
+                    - --agent-count
+                    - "1"
+                    - --team-count
+                    - "1"
+                    - --sensor-range
+                    - "2"
+                    - --env-kwargs-json
+                    - '{request_queue_size:1,request_queue_size_per_team:1,require_delivered_shelf_return:false,requested_shelf_pickup_reward:0.2,requested_shelf_progress_reward:0.05,goal_progress_reward:0.05,reward_only_new_best_progress:true,reveal_team_info:true}'
+                    - --total-timesteps
+                    - "5000000"
+                    - --rollout-steps
+                    - "1024"
+                    - --sequence-length
+                    - "64"
+                    - --learning-rate
+                    - "3e-4"
+                    - --entropy-coef
+                    - "0.01"
+                    - --eval-interval
+                    - "50"
+                    - --eval-episodes
+                    - "10"
+                    - --eval-horizon
+                    - "500"
+                    - --save-interval
+                    - "100"
+                    - --exp-name
+                    - stage1_1ag_delivery_sr2
+                    - --track
+                    - --wandb-project
+                    - rware-curriculum
+                    - --wandb-name
+                    - stage1_1ag_delivery_sr2
+                    - --wandb-log-eval-video
+                    - --wandb-video-interval
+                    - "5"
+                codePath: examples\train_recurrent_ippo_consensus.py
+                codePathLocal: examples\train_recurrent_ippo_consensus.py
+                cpu_count: 20
+                cpu_count_logical: 20
+                cudaVersion: "12.9"
+                disk:
+                    /:
+                        total: "1999397941248"
+                        used: "251544514560"
+                email: t98339@hanyang.ac.kr
+                executable: C:\Users\95101\anaconda3\envs\RWARE_MARL\python.exe
+                git:
+                    commit: 927073feb86e6aff9f33120e6c7d6a242f1fe04b
+                    remote: https://github.com/LeeHwanRyul/robotic-warehouse.git
+                gpu: NVIDIA GeForce RTX 5070 Ti
+                gpu_count: 1
+                gpu_nvidia:
+                    - architecture: Blackwell
+                      cudaCores: 8960
+                      memoryTotal: "17094934528"
+                      name: NVIDIA GeForce RTX 5070 Ti
+                      uuid: GPU-6bec4baa-2327-0f6e-d811-fa242ee2685b
+                host: DESKTOP-03ASKH8
+                memory:
+                    total: "33577902080"
+                os: Windows-10-10.0.26200-SP0
+                program: C:\RWARE\MARL_RWARE\third_party\robotic-warehouse\examples\train_recurrent_ippo_consensus.py
+                python: CPython 3.11.15
+                root: runs\recurrent_ippo_consensus\stage1_1ag_delivery_sr2
+                startedAt: "2026-08-03T06:15:31.010342Z"
+                writerId: 36375qu2lnpafvtmc5fb51a06a848189
+        m: []
+        python_version: 3.11.15
+        t:
+            "1":
+                - 1
+            "2":
+                - 1
+            "3":
+                - 2
+                - 13
+                - 16
+                - 61
+            "4": 3.11.15
+            "5": 0.28.0
+            "8":
+                - 3
+            "12": 0.28.0
+            "13": windows-amd64
+action_mask:
+    value: true
+agent_count:
+    value: 1
+clip_coef:
+    value: 0.2
+comm_graph_mode:
+    value: physical
+consensus_interval:
+    value: 1
+critic_consensus_tau:
+    value: 0.1
+curriculum_stage:
+    value: 0
+curriculum_stages:
+    value: ""
+device:
+    value: auto
+edge_threshold:
+    value: 0.2
+entropy_coef:
+    value: 0.01
+env_id:
+    value: rware-multiteam-tiny-4ag-2teams-v0
+env_kwargs_json:
+    value: '{request_queue_size:1,request_queue_size_per_team:1,require_delivered_shelf_return:false,requested_shelf_pickup_reward:0.2,requested_shelf_progress_reward:0.05,goal_progress_reward:0.05,reward_only_new_best_progress:true,reveal_team_info:true}'
+eval_episodes:
+    value: 10
+eval_horizon:
+    value: 500
+eval_interval:
+    value: 50
+eval_render_episodes:
+    value: 1
+eval_render_fps:
+    value: 10
+eval_render_mode:
+    value: human
+exp_name:
+    value: stage1_1ag_delivery_sr2
+gae_lambda:
+    value: 0.95
+gamma:
+    value: 0.99
+graph_dwell_updates:
+    value: 1
+graph_join_threshold:
+    value: 0
+graph_leave_threshold:
+    value: 0
+graph_mode:
+    value: policy
+init_checkpoint:
+    value: ""
+learning_rate:
+    value: 0.0003
+log_interval:
+    value: 1
+max_grad_norm:
+    value: 0.5
+min_advantage_std:
+    value: 1e-06
+min_probe_count:
+    value: 2
+minibatch_chunks:
+    value: 8
+mlp_hidden_dim:
+    value: 128
+normalize_advantages:
+    value: true
+objective_probe_fraction:
+    value: 0.5
+policy_probe_batch_size:
+    value: 64
+policy_similarity_temperature:
+    value: 0.25
+ppo_epochs:
+    value: 4
+probe_episodes:
+    value: 4
+probe_horizon:
+    value: 120
+probe_interval:
+    value: 10
+probe_source:
+    value: mixed
+recurrent_hidden_dim:
+    value: 128
+render_eval:
+    value: false
+reward_epsilon:
+    value: 1e-08
+rollout_steps:
+    value: 1024
+save_dir:
+    value: runs/recurrent_ippo_consensus
+save_interval:
+    value: 100
+seed:
+    value: 1
+sensor_range:
+    value: 2
+sequence_length:
+    value: 64
+skip_zero_reward_actor_update:
+    value: true
+team_count:
+    value: 1
+total_timesteps:
+    value: 5000000
+track:
+    value: true
+transfer_components:
+    value: actor
+uncertainty_scale:
+    value: 1
+value_clip_coef:
+    value: 0.2
+value_loss_coef:
+    value: 0.5
+value_uncertainty_decay:
+    value: 0.95
+wandb_entity:
+    value: ""
+wandb_group:
+    value: ""
+wandb_log_eval_video:
+    value: true
+wandb_mode:
+    value: online
+wandb_name:
+    value: stage1_1ag_delivery_sr2
+wandb_project:
+    value: rware-curriculum
+wandb_tags:
+    value: ""
+wandb_video_interval:
+    value: 5

@@ -215,7 +215,6 @@ def test_curriculum_transfer_copies_actor_round_robin_and_resets_critic(tmp_path
         for before, param in zip(critic_before[agent_id], agent.critic_parameters()):
             assert torch.allclose(param, before)
 
-
 def test_curriculum_transfer_actor_body_leaves_policy_head_fresh(tmp_path):
     source_agent = RecurrentActorCritic(
         obs_dim=3,

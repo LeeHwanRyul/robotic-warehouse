@@ -1,0 +1,80 @@
+{
+  "os": "Windows-10-10.0.26200-SP0",
+  "python": "CPython 3.11.15",
+  "startedAt": "2026-08-03T06:15:31.010342Z",
+  "args": [
+    "--env-id",
+    "rware-multiteam-tiny-4ag-2teams-v0",
+    "--agent-count",
+    "1",
+    "--team-count",
+    "1",
+    "--sensor-range",
+    "2",
+    "--env-kwargs-json",
+    "{request_queue_size:1,request_queue_size_per_team:1,require_delivered_shelf_return:false,requested_shelf_pickup_reward:0.2,requested_shelf_progress_reward:0.05,goal_progress_reward:0.05,reward_only_new_best_progress:true,reveal_team_info:true}",
+    "--total-timesteps",
+    "5000000",
+    "--rollout-steps",
+    "1024",
+    "--sequence-length",
+    "64",
+    "--learning-rate",
+    "3e-4",
+    "--entropy-coef",
+    "0.01",
+    "--eval-interval",
+    "50",
+    "--eval-episodes",
+    "10",
+    "--eval-horizon",
+    "500",
+    "--save-interval",
+    "100",
+    "--exp-name",
+    "stage1_1ag_delivery_sr2",
+    "--track",
+    "--wandb-project",
+    "rware-curriculum",
+    "--wandb-name",
+    "stage1_1ag_delivery_sr2",
+    "--wandb-log-eval-video",
+    "--wandb-video-interval",
+    "5"
+  ],
+  "program": "C:\\RWARE\\MARL_RWARE\\third_party\\robotic-warehouse\\examples\\train_recurrent_ippo_consensus.py",
+  "codePath": "examples\\train_recurrent_ippo_consensus.py",
+  "codePathLocal": "examples\\train_recurrent_ippo_consensus.py",
+  "git": {
+    "remote": "https://github.com/LeeHwanRyul/robotic-warehouse.git",
+    "commit": "927073feb86e6aff9f33120e6c7d6a242f1fe04b"
+  },
+  "email": "t98339@hanyang.ac.kr",
+  "root": "runs\\recurrent_ippo_consensus\\stage1_1ag_delivery_sr2",
+  "host": "DESKTOP-03ASKH8",
+  "executable": "C:\\Users\\95101\\anaconda3\\envs\\RWARE_MARL\\python.exe",
+  "cpu_count": 20,
+  "cpu_count_logical": 20,
+  "gpu": "NVIDIA GeForce RTX 5070 Ti",
+  "gpu_count": 1,
+  "disk": {
+    "/": {
+      "total": "1999397941248",
+      "used": "251544514560"
+    }
+  },
+  "memory": {
+    "total": "33577902080"
+  },
+  "gpu_nvidia": [
+    {
+      "name": "NVIDIA GeForce RTX 5070 Ti",
+      "memoryTotal": "17094934528",
+      "cudaCores": 8960,
+      "architecture": "Blackwell",
+      "uuid": "GPU-6bec4baa-2327-0f6e-d811-fa242ee2685b"
+    }
+  ],
+  "cudaVersion": "12.9",
+  "writerId": "36375qu2lnpafvtmc5fb51a06a848189"
+}

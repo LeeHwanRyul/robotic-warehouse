@@ -17,3 +17,8 @@ config: {'env_id': 'rware-multiteam-tiny-4ag-2teams-v0', 'env_kwargs_json': '{"r
 2026-07-24 16:42:43,896 INFO    MainThread:5960 [wandb_run.py:_redirect():2442] Wrapping output streams.
 2026-07-24 16:42:43,896 INFO    MainThread:5960 [wandb_run.py:_redirect():2465] Redirects installed.
 2026-07-24 16:42:43,899 INFO    MainThread:5960 [wandb_init.py:init():1012] run started, returning control to user process
+2026-07-24 17:35:51,542 INFO    MainThread:5960 [wandb_run.py:_finish():2285] finishing run t98339-hanyang-university/rware-recurrent-ippo/vitkq93l
+2026-07-24 17:35:51,543 INFO    MainThread:5960 [wandb_run.py:_atexit_cleanup():2490] got exitcode: 0
+2026-07-24 17:35:51,543 INFO    MainThread:5960 [wandb_run.py:_restore():2472] restore
+2026-07-24 17:35:51,543 INFO    MainThread:5960 [wandb_run.py:_restore():2478] restore done
+2026-07-24 17:35:52,980 INFO    MainThread:5960 [wandb_run.py:_footer_sync_info():3895] logging synced files
