@@ -1,0 +1,24 @@
+2026-08-06 15:06:00,218 INFO    MainThread:9132 [wandb_setup.py:_flush():81] Current SDK version is 0.28.0
+2026-08-06 15:06:00,218 INFO    MainThread:9132 [wandb_setup.py:_flush():81] Configure stats pid to 9132
+2026-08-06 15:06:00,218 INFO    MainThread:9132 [wandb_setup.py:_flush():81] Loading settings from environment variables
+2026-08-06 15:06:00,219 INFO    MainThread:9132 [wandb_init.py:setup_run_log_directory():725] Logging user logs to runs\recurrent_ippo_consensus\stage2_1ag_return_sr2_from_pickupfix\wandb\run-20260806_150600-eilt7ki4\logs\debug.log
+2026-08-06 15:06:00,219 INFO    MainThread:9132 [wandb_init.py:setup_run_log_directory():726] Logging internal logs to runs\recurrent_ippo_consensus\stage2_1ag_return_sr2_from_pickupfix\wandb\run-20260806_150600-eilt7ki4\logs\debug-internal.log
+2026-08-06 15:06:00,219 INFO    MainThread:9132 [wandb_init.py:init():768] calling init triggers
+2026-08-06 15:06:00,219 INFO    MainThread:9132 [wandb_init.py:init():773] wandb.init called with sweep_config: {}
+config: {'env_id': 'rware-multiteam-tiny-4ag-2teams-v0', 'env_kwargs_json': '@examples/env_kwargs_stage2_return_lowshape.json', 'sensor_range': 2, 'agent_count': 1, 'team_count': 1, 'curriculum_stages': '', 'curriculum_stage': 0, 'init_checkpoint': 'runs/recurrent_ippo_consensus/stage1_1ag_delivery_sr2_pickupfix/final.pt', 'transfer_components': 'actor', 'total_timesteps': 10000000, 'rollout_steps': 2048, 'sequence_length': 128, 'minibatch_chunks': 8, 'ppo_epochs': 4, 'learning_rate': 0.0001, 'gamma': 0.99, 'gae_lambda': 0.95, 'clip_coef': 0.2, 'value_clip_coef': 0.2, 'value_loss_coef': 0.5, 'entropy_coef': 0.01, 'action_mask': True, 'normalize_advantages': True, 'min_advantage_std': 1e-06, 'skip_zero_reward_actor_update': True, 'skip_no_positive_reward_actor_update': False, 'reward_epsilon': 1e-08, 'max_grad_norm': 0.5, 'mlp_hidden_dim': 128, 'recurrent_hidden_dim': 128, 'seed': 1, 'device': 'auto', 'graph_mode': 'policy', 'probe_interval': 10, 'policy_probe_batch_size': 64, 'probe_source': 'mixed', 'objective_probe_fraction': 0.5, 'policy_similarity_temperature': 0.25, 'comm_graph_mode': 'physical', 'probe_episodes': 4, 'probe_horizon': 120, 'edge_threshold': 0.2, 'min_probe_count': 2, 'uncertainty_scale': 1.0, 'value_uncertainty_decay': 0.95, 'graph_join_threshold': 0.0, 'graph_leave_threshold': 0.0, 'graph_dwell_updates': 1, 'critic_consensus_tau': 0.1, 'consensus_interval': 1, 'save_dir': 'runs/recurrent_ippo_consensus', 'exp_name': 'stage2_1ag_return_sr2_from_pickupfix', 'save_interval': 100, 'log_interval': 1, 'eval_episodes': 20, 'eval_horizon': 500, 'eval_interval': 50, 'render_eval': False, 'eval_render_episodes': 1, 'eval_render_mode': 'human', 'eval_render_fps': 10, 'track': True, 'wandb_project': 'rware-curriculum', 'wandb_entity': '', 'wandb_group': '', 'wandb_name': 'stage2_1ag_return_sr2_from_pickupfix', 'wandb_mode': 'online', 'wandb_tags': '', 'wandb_log_eval_video': True, 'wandb_video_interval': 5, '_wandb': {'code_path': 'code/examples/train_recurrent_ippo_consensus.py'}}
+2026-08-06 15:06:00,219 INFO    MainThread:9132 [wandb_init.py:init():816] starting backend
+2026-08-06 15:06:00,219 INFO    MainThread:9132 [wandb_init.py:init():831] sending inform_init request
+2026-08-06 15:06:00,574 INFO    MainThread:9132 [wandb_init.py:init():836] backend started and connected
+2026-08-06 15:06:00,599 INFO    MainThread:9132 [wandb_init.py:init():906] updated telemetry
+2026-08-06 15:06:00,980 INFO    MainThread:9132 [wandb_init.py:init():929] communicating run to backend with 90.0 second timeout
+2026-08-06 15:06:01,349 INFO    MainThread:9132 [wandb_init.py:init():974] starting run threads in backend
+2026-08-06 15:06:15,015 INFO    MainThread:9132 [wandb_run.py:_console_start():2523] atexit reg
+2026-08-06 15:06:15,015 INFO    MainThread:9132 [wandb_run.py:_redirect():2373] redirect: wrap_raw
+2026-08-06 15:06:15,015 INFO    MainThread:9132 [wandb_run.py:_redirect():2442] Wrapping output streams.
+2026-08-06 15:06:15,015 INFO    MainThread:9132 [wandb_run.py:_redirect():2465] Redirects installed.
+2026-08-06 15:06:15,018 INFO    MainThread:9132 [wandb_init.py:init():1012] run started, returning control to user process
+2026-08-07 03:15:58,812 INFO    MainThread:9132 [wandb_run.py:_finish():2285] finishing run t98339-hanyang-university/rware-curriculum/eilt7ki4
+2026-08-07 03:15:58,813 INFO    MainThread:9132 [wandb_run.py:_atexit_cleanup():2490] got exitcode: 0
+2026-08-07 03:15:58,813 INFO    MainThread:9132 [wandb_run.py:_restore():2472] restore
+2026-08-07 03:15:58,814 INFO    MainThread:9132 [wandb_run.py:_restore():2478] restore done
+2026-08-07 03:16:01,896 INFO    MainThread:9132 [wandb_run.py:_footer_sync_info():3895] logging synced files
