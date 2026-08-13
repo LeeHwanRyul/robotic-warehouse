@@ -23,6 +23,8 @@ from examples.train_recurrent_ippo_consensus import (  # noqa: E402
     normalized_mutual_info,
     parse_curriculum_stages,
     parse_transfer_components,
+    policy_distance_similarity_matrices,
+    recurrent_critic_probe_values,
     resolve_agent_count,
     transfer_checkpoint_to_agents,
 )
@@ -52,6 +54,117 @@ def test_policy_similarity_graph_respects_neighbor_adjacency():
     assert updates == 1
     assert weights[0, 1] > 0.0
     assert weights[1, 2] == pytest.approx(0.0)
+
+
+def test_policy_probe_sequences_produce_distance_and_similarity():
+    agents = [
+        RecurrentActorCritic(obs_dim=3, action_dim=2, mlp_hidden_dim=4, recurrent_hidden_dim=4),
+        RecurrentActorCritic(obs_dim=3, action_dim=2, mlp_hidden_dim=4, recurrent_hidden_dim=4),
+    ]
+    agents[1].load_state_dict(agents[0].state_dict())
+    probe_sequences = torch.randn(5, 3, 3)
+
+    distance, similarity = policy_distance_similarity_matrices(
+        agents,
+        probe_sequences,
+        device=torch.device("cpu"),
+        temperature=0.25,
+    )
+    assert distance[0, 1] == pytest.approx(0.0, abs=1e-7)
+    assert similarity[0, 1] == pytest.approx(1.0)
+
+    with torch.no_grad():
+        agents[1].actor_head.bias[0] += 5.0
+    distance, similarity = policy_distance_similarity_matrices(
+        agents,
+        probe_sequences,
+        device=torch.device("cpu"),
+        temperature=0.25,
+    )
+    assert distance[0, 1] > 0.0
+    assert 0.0 <= similarity[0, 1] < 1.0
+
+
+def test_pgct_distance_gate_and_receiver_allocation():
+    estimator = TeamGraphEstimator(
+        n_agents=3,
+        edge_threshold=0.2,
+        min_probe_count=1,
+        uncertainty_scale=0.0,
+        value_uncertainty_decay=0.95,
+    )
+    distance = np.asarray(
+        [
+            [0.0, 0.05, 0.4],
+            [0.05, 0.0, 0.5],
+            [0.4, 0.5, 0.0],
+        ],
+        dtype=np.float32,
+    )
+    neighbor_adjacency = np.ones((3, 3), dtype=np.float32)
+    np.fill_diagonal(neighbor_adjacency, 0.0)
+
+    updates = estimator.update_from_policy_distance(
+        distance,
+        neighbor_adjacency,
+        beta=0.5,
+    )
+    gate = estimator.pgct_gate_matrix(
+        warmup_complete=True,
+        distance_threshold=0.2,
+        distance_temperature=0.25,
+        gate_power=1.0,
+    )
+    allocation = estimator.pgct_allocation_matrix(
+        warmup_complete=True,
+        distance_threshold=0.2,
+        distance_temperature=0.25,
+        gate_power=1.0,
+        alpha_epsilon=1e-8,
+    )
+
+    assert updates == 3
+    assert gate[0, 1] > 0.0
+    assert gate[1, 0] == pytest.approx(gate[0, 1])
+    assert gate[0, 2] == pytest.approx(0.0)
+    assert allocation[0, 1] == pytest.approx(1.0)
+    assert allocation[2].sum() == pytest.approx(0.0)
+
+
+def test_pgct_peer_loss_backpropagates_only_through_receiver_critic():
+    receiver = RecurrentActorCritic(
+        obs_dim=3,
+        action_dim=2,
+        mlp_hidden_dim=4,
+        recurrent_hidden_dim=4,
+    )
+    donor = RecurrentActorCritic(
+        obs_dim=3,
+        action_dim=2,
+        mlp_hidden_dim=4,
+        recurrent_hidden_dim=4,
+    )
+    probe_sequences = torch.randn(4, 2, 3)
+
+    receiver_values = recurrent_critic_probe_values(
+        receiver,
+        probe_sequences,
+        torch.device("cpu"),
+    )
+    donor_values = recurrent_critic_probe_values(
+        donor,
+        probe_sequences,
+        torch.device("cpu"),
+    ).detach()
+    loss = (receiver_values - donor_values).pow(2).mean()
+    loss.backward()
+
+    assert all(param.grad is None for param in receiver.actor_parameters())
+    assert any(
+        param.grad is not None and torch.any(param.grad != 0.0)
+        for param in receiver.critic_parameters()
+    )
+    assert all(param.grad is None for param in donor.parameters())
 
 
 def test_objective_probe_bank_exposes_grid_targets():

@@ -340,6 +340,15 @@ class TrainConfig:
     graph_join_threshold: float
     graph_leave_threshold: float
     graph_dwell_updates: int
+    peer_transfer_mode: str
+    pgct_peer_loss_coef: float
+    pgct_probe_sequence_length: int
+    pgct_distance_ema_beta: float
+    pgct_distance_temperature: float
+    pgct_distance_threshold: float
+    pgct_gate_power: float
+    pgct_alpha_epsilon: float
+    pgct_warmup_updates: int
     critic_consensus_tau: float
     consensus_interval: int
     save_dir: str
@@ -403,6 +412,9 @@ class TeamGraphEstimator:
         self.mean = np.zeros(shape, dtype=np.float64)
         self.m2 = np.zeros(shape, dtype=np.float64)
         self.value_uncertainty = np.ones(self.n_agents, dtype=np.float64)
+        self.distance_count = np.zeros(shape, dtype=np.float64)
+        self.last_distance = np.full(shape, np.nan, dtype=np.float64)
+        self.distance_ema = np.full(shape, np.nan, dtype=np.float64)
         self.last_neighbor_adjacency = np.zeros(shape, dtype=np.float32)
         self.stable_adjacency = np.zeros(shape, dtype=np.float32)
         self.join_streak = np.zeros(shape, dtype=np.int32)
@@ -440,6 +452,40 @@ class TeamGraphEstimator:
                 if self.last_neighbor_adjacency[i, j] <= 0.0:
                     continue
                 self.update_pair_score(i, j, similarity[i, j])
+                updates += 1
+        return updates
+
+    def update_from_policy_distance(
+        self,
+        distance: np.ndarray,
+        neighbor_adjacency: np.ndarray,
+        beta: float,
+    ) -> int:
+        distance = np.asarray(distance, dtype=np.float64)
+        neighbor_adjacency = np.asarray(neighbor_adjacency, dtype=np.float32)
+        if distance.shape != (self.n_agents, self.n_agents):
+            raise ValueError("distance must have shape (n_agents, n_agents)")
+        if neighbor_adjacency.shape != (self.n_agents, self.n_agents):
+            raise ValueError("neighbor_adjacency must have shape (n_agents, n_agents)")
+
+        beta = float(np.clip(beta, 1e-8, 1.0))
+        self.last_neighbor_adjacency = (neighbor_adjacency > 0.0).astype(np.float32)
+        updates = 0
+        for i in range(self.n_agents):
+            for j in range(i + 1, self.n_agents):
+                if self.last_neighbor_adjacency[i, j] <= 0.0:
+                    continue
+                value = float(max(distance[i, j], 0.0))
+                self.last_distance[i, j] = value
+                self.last_distance[j, i] = value
+                if self.distance_count[i, j] <= 0.0 or np.isnan(self.distance_ema[i, j]):
+                    smoothed = value
+                else:
+                    smoothed = (1.0 - beta) * self.distance_ema[i, j] + beta * value
+                self.distance_ema[i, j] = smoothed
+                self.distance_ema[j, i] = smoothed
+                self.distance_count[i, j] += 1.0
+                self.distance_count[j, i] = self.distance_count[i, j]
                 updates += 1
         return updates
 
@@ -562,6 +608,64 @@ class TeamGraphEstimator:
     def consensus_weight_matrix(self) -> np.ndarray:
         return self.weight_matrix() * self.adjacency()
 
+    def pgct_affinity_matrix(self, distance_temperature: float) -> np.ndarray:
+        temperature = max(float(distance_temperature), 1e-8)
+        affinity = np.zeros((self.n_agents, self.n_agents), dtype=np.float32)
+        valid = (
+            ~np.isnan(self.distance_ema)
+            & (self.distance_count >= float(self.min_probe_count))
+        )
+        affinity[valid] = np.exp(-self.distance_ema[valid] / temperature).astype(
+            np.float32
+        )
+        np.fill_diagonal(affinity, 0.0)
+        return affinity
+
+    def pgct_gate_matrix(
+        self,
+        warmup_complete: bool,
+        distance_threshold: float,
+        distance_temperature: float,
+        gate_power: float,
+    ) -> np.ndarray:
+        gate = np.zeros((self.n_agents, self.n_agents), dtype=np.float32)
+        if not warmup_complete or distance_threshold <= 0.0:
+            return gate
+
+        threshold = float(distance_threshold)
+        temperature = max(float(distance_temperature), 1e-8)
+        power = max(float(gate_power), 1e-8)
+        tau_safe = math.exp(-threshold / temperature)
+        denom = max(1.0 - tau_safe, 1e-8)
+        valid = (
+            ~np.isnan(self.distance_ema)
+            & (self.distance_count >= float(self.min_probe_count))
+            & (self.distance_ema < threshold)
+        )
+        if np.any(valid):
+            affinity = np.exp(-self.distance_ema[valid] / temperature)
+            raw_gate = np.clip((affinity - tau_safe) / denom, 0.0, 1.0)
+            gate[valid] = np.power(raw_gate, power).astype(np.float32)
+        np.fill_diagonal(gate, 0.0)
+        return gate
+
+    def pgct_allocation_matrix(
+        self,
+        warmup_complete: bool,
+        distance_threshold: float,
+        distance_temperature: float,
+        gate_power: float,
+        alpha_epsilon: float,
+    ) -> np.ndarray:
+        gate = self.pgct_gate_matrix(
+            warmup_complete=warmup_complete,
+            distance_threshold=distance_threshold,
+            distance_temperature=distance_temperature,
+            gate_power=gate_power,
+        )
+        denom = np.sum(gate, axis=1, keepdims=True) + max(float(alpha_epsilon), 1e-8)
+        return (gate / denom).astype(np.float32)
+
     def clusters(self) -> List[List[int]]:
         return clusters_from_adjacency(self.adjacency())
 
@@ -571,6 +675,9 @@ class TeamGraphEstimator:
             "mean": self.mean.copy(),
             "m2": self.m2.copy(),
             "value_uncertainty": self.value_uncertainty.copy(),
+            "distance_count": self.distance_count.copy(),
+            "last_distance": self.last_distance.copy(),
+            "distance_ema": self.distance_ema.copy(),
             "last_neighbor_adjacency": self.last_neighbor_adjacency.copy(),
             "stable_adjacency": self.stable_adjacency.copy(),
             "join_streak": self.join_streak.copy(),
@@ -1409,8 +1516,12 @@ def sample_policy_probe_obs(
     env: gym.Env,
     rollout: Rollout,
     rng: np.random.Generator,
+    batch_size: Optional[int] = None,
 ) -> Tuple[torch.Tensor, Dict[str, float]]:
-    batch_size = max(int(cfg.policy_probe_batch_size), 1)
+    batch_size = max(
+        int(cfg.policy_probe_batch_size if batch_size is None else batch_size),
+        1,
+    )
     obs_dim = int(rollout.obs.shape[-1])
     source = cfg.probe_source
     meta = {
@@ -1458,24 +1569,68 @@ def sample_policy_probe_obs(
     raise ValueError("--probe-source must be rollout, objective-rollout, objective, or mixed")
 
 
+def _as_probe_sequences(probe_obs: torch.Tensor) -> torch.Tensor:
+    if probe_obs.ndim == 2:
+        return probe_obs.unsqueeze(1)
+    if probe_obs.ndim == 3:
+        return probe_obs
+    raise ValueError("probe observations must have shape (M, obs_dim) or (M, Lp, obs_dim)")
+
+
+def sample_policy_probe_sequences(
+    cfg: TrainConfig,
+    env: gym.Env,
+    rollout: Rollout,
+    rng: np.random.Generator,
+) -> Tuple[torch.Tensor, Dict[str, float]]:
+    sequence_length = max(int(cfg.pgct_probe_sequence_length), 1)
+    sequence_count = max(int(cfg.policy_probe_batch_size), 1)
+    flat_count = sequence_count * sequence_length
+    flat_probes, meta = sample_policy_probe_obs(
+        cfg,
+        env,
+        rollout,
+        rng,
+        batch_size=flat_count,
+    )
+    if flat_probes.shape[0] <= 0:
+        raise ValueError("Cannot build an empty policy probe sequence bank")
+    if flat_probes.shape[0] < flat_count:
+        indices = torch.arange(flat_count, dtype=torch.long) % flat_probes.shape[0]
+        flat_probes = flat_probes[indices]
+    elif flat_probes.shape[0] > flat_count:
+        flat_probes = flat_probes[:flat_count]
+    sequences = flat_probes.reshape(sequence_count, sequence_length, -1).contiguous()
+    meta.update(
+        {
+            "probe_sequence_count": float(sequence_count),
+            "probe_sequence_length": float(sequence_length),
+        }
+    )
+    return sequences, meta
+
+
 @torch.no_grad()
-def policy_similarity_matrix(
+def policy_distance_similarity_matrices(
     agents: Sequence[RecurrentActorCritic],
     probe_obs: torch.Tensor,
     device: torch.device,
     temperature: float,
-) -> np.ndarray:
-    if probe_obs.ndim != 2:
-        raise ValueError("probe_obs must have shape (M, obs_dim)")
-    probe_obs = probe_obs.to(device)
-    batch_size = int(probe_obs.shape[0])
+) -> Tuple[np.ndarray, np.ndarray]:
+    probe_sequences = _as_probe_sequences(probe_obs).to(device)
+    batch_size = int(probe_sequences.shape[0])
+    sequence_length = int(probe_sequences.shape[1])
     policy_probs = []
     for net in agents:
         actor_h, _ = net.initial_hidden(batch_size, device)
-        logits, _ = net._actor_step(probe_obs, actor_h)
-        policy_probs.append(torch.softmax(logits, dim=-1).cpu())
+        step_probs = []
+        for step_idx in range(sequence_length):
+            logits, actor_h = net._actor_step(probe_sequences[:, step_idx], actor_h)
+            step_probs.append(torch.softmax(logits, dim=-1))
+        policy_probs.append(torch.stack(step_probs, dim=1).cpu())
 
     n_agents = len(agents)
+    distance = np.zeros((n_agents, n_agents), dtype=np.float32)
     similarity = np.eye(n_agents, dtype=np.float32)
     eps = 1e-8
     temp = max(float(temperature), eps)
@@ -1487,9 +1642,28 @@ def policy_similarity_matrix(
             kl_pm = torch.sum(p * (torch.log(p) - torch.log(m)), dim=-1)
             kl_qm = torch.sum(q * (torch.log(q) - torch.log(m)), dim=-1)
             js = 0.5 * (kl_pm + kl_qm)
-            score = float(torch.exp(-js.mean() / temp).item())
+            raw_distance = float(js.mean().item())
+            score = float(math.exp(-raw_distance / temp))
+            distance[i, j] = raw_distance
+            distance[j, i] = raw_distance
             similarity[i, j] = score
             similarity[j, i] = score
+    return distance, similarity
+
+
+@torch.no_grad()
+def policy_similarity_matrix(
+    agents: Sequence[RecurrentActorCritic],
+    probe_obs: torch.Tensor,
+    device: torch.device,
+    temperature: float,
+) -> np.ndarray:
+    _, similarity = policy_distance_similarity_matrices(
+        agents,
+        probe_obs,
+        device=device,
+        temperature=temperature,
+    )
     return similarity
 
 
@@ -2069,6 +2243,37 @@ def recurrent_minibatches(
         )
 
 
+def recurrent_critic_probe_values(
+    net: RecurrentActorCritic,
+    probe_sequences: torch.Tensor,
+    device: torch.device,
+) -> torch.Tensor:
+    probe_sequences = _as_probe_sequences(probe_sequences).to(device)
+    batch_size = int(probe_sequences.shape[0])
+    sequence_length = int(probe_sequences.shape[1])
+    _, critic_h = net.initial_hidden(batch_size, device)
+    values = []
+    for step_idx in range(sequence_length):
+        value, critic_h = net._critic_step(probe_sequences[:, step_idx], critic_h)
+        values.append(value)
+    return torch.stack(values, dim=1)
+
+
+@torch.no_grad()
+def recurrent_critic_probe_targets(
+    agents: Sequence[RecurrentActorCritic],
+    probe_sequences: torch.Tensor,
+    device: torch.device,
+) -> torch.Tensor:
+    return torch.stack(
+        [
+            recurrent_critic_probe_values(agent, probe_sequences, device).detach()
+            for agent in agents
+        ],
+        dim=0,
+    )
+
+
 def update_ippo(
     agents: Sequence[RecurrentActorCritic],
     optimizers: Sequence[torch.optim.Optimizer],
@@ -2077,6 +2282,8 @@ def update_ippo(
     graph_estimator: TeamGraphEstimator,
     device: torch.device,
     rng: np.random.Generator,
+    peer_allocation: Optional[np.ndarray] = None,
+    peer_probe_sequences: Optional[torch.Tensor] = None,
 ) -> Dict[str, float]:
     advantages, returns = compute_gae(
         rollout.rewards,
@@ -2100,7 +2307,35 @@ def update_ippo(
         "positive_reward_density": [],
         "negative_reward_density": [],
         "actor_update_skipped": [],
+        "pgct_peer_loss": [],
+        "pgct_peer_weight": [],
     }
+
+    peer_allocation_array: Optional[np.ndarray] = None
+    peer_probe_tensor: Optional[torch.Tensor] = None
+    peer_target_values: Optional[torch.Tensor] = None
+    peer_donors: List[List[int]] = [[] for _ in range(n_agents)]
+    if (
+        cfg.peer_transfer_mode == "pgct"
+        and cfg.pgct_peer_loss_coef > 0.0
+        and peer_allocation is not None
+        and peer_probe_sequences is not None
+    ):
+        peer_allocation_array = np.asarray(peer_allocation, dtype=np.float32)
+        if peer_allocation_array.shape != (n_agents, n_agents):
+            raise ValueError("peer_allocation must have shape (n_agents, n_agents)")
+        np.fill_diagonal(peer_allocation_array, 0.0)
+        peer_donors = [
+            np.flatnonzero(peer_allocation_array[agent_id] > 0.0).astype(int).tolist()
+            for agent_id in range(n_agents)
+        ]
+        if any(peer_donors):
+            peer_probe_tensor = _as_probe_sequences(peer_probe_sequences).to(device)
+            peer_target_values = recurrent_critic_probe_targets(
+                agents,
+                peer_probe_tensor,
+                device,
+            )
 
     for agent_id, (net, optimizer) in enumerate(zip(agents, optimizers)):
         raw_agent_adv = advantages[:, agent_id]
@@ -2216,12 +2451,36 @@ def update_ippo(
                 ).mean()
                 entropy_loss = entropy.mean()
 
+                peer_loss = torch.zeros((), dtype=torch.float32, device=device)
+                peer_weight = 0.0
+                if (
+                    peer_allocation_array is not None
+                    and peer_probe_tensor is not None
+                    and peer_target_values is not None
+                    and peer_donors[agent_id]
+                ):
+                    receiver_values = recurrent_critic_probe_values(
+                        net,
+                        peer_probe_tensor,
+                        device,
+                    )
+                    for donor_id in peer_donors[agent_id]:
+                        weight = float(peer_allocation_array[agent_id, donor_id])
+                        if weight <= 0.0:
+                            continue
+                        target_values = peer_target_values[donor_id].to(device)
+                        peer_loss = peer_loss + weight * (
+                            receiver_values - target_values
+                        ).pow(2).mean()
+                        peer_weight += weight
+
                 actor_loss = policy_loss - cfg.entropy_coef * entropy_loss
                 if skip_actor_update:
                     actor_loss = -cfg.entropy_coef * entropy_loss
                 loss = (
                     actor_loss
                     + cfg.value_loss_coef * value_loss
+                    + cfg.pgct_peer_loss_coef * peer_loss
                 )
 
                 optimizer.zero_grad(set_to_none=True)
@@ -2250,6 +2509,8 @@ def update_ippo(
                     float(negative_reward_density.item())
                 )
                 metrics["actor_update_skipped"].append(float(skip_actor_update))
+                metrics["pgct_peer_loss"].append(float(peer_loss.detach().item()))
+                metrics["pgct_peer_weight"].append(float(peer_weight))
 
     graph_estimator.update_value_uncertainty(mean_abs_td_error)
     return {
@@ -2423,6 +2684,68 @@ def run_sparse_counterfactual_probes(
     return {"probe_delta": float(np.mean(deltas)) if deltas else float("nan")}
 
 
+def run_policy_similarity_probe_round(
+    cfg: TrainConfig,
+    env: gym.Env,
+    agents: Sequence[RecurrentActorCritic],
+    graph_estimator: TeamGraphEstimator,
+    rollout: Rollout,
+    device: torch.device,
+    rng: np.random.Generator,
+) -> Tuple[Dict[str, float], torch.Tensor]:
+    n_agents = len(agents)
+    neighbor_adj = communication_adjacency(env, n_agents, mode=cfg.comm_graph_mode)
+    probe_sequences, probe_meta = sample_policy_probe_sequences(cfg, env, rollout, rng)
+    distance, similarity = policy_distance_similarity_matrices(
+        agents,
+        probe_sequences,
+        device=device,
+        temperature=cfg.policy_similarity_temperature,
+    )
+    updates = graph_estimator.update_from_policy_similarity(similarity, neighbor_adj)
+    distance_updates = graph_estimator.update_from_policy_distance(
+        distance,
+        neighbor_adj,
+        beta=cfg.pgct_distance_ema_beta,
+    )
+    weights = graph_estimator.weight_matrix()
+    smoothed_distance = graph_estimator.distance_ema
+    affinity = graph_estimator.pgct_affinity_matrix(cfg.pgct_distance_temperature)
+
+    upper_mask = np.triu(np.ones((n_agents, n_agents), dtype=bool), k=1)
+    upper_neighbor = upper_mask & (neighbor_adj > 0.0)
+    upper_active = upper_mask & (weights >= cfg.edge_threshold)
+    neighbor_scores = similarity[upper_neighbor]
+    neighbor_distances = distance[upper_neighbor]
+    neighbor_smoothed = smoothed_distance[upper_neighbor]
+    neighbor_affinity = affinity[upper_neighbor]
+    active_weights = weights[upper_active]
+    metrics = {
+        "policy_similarity": float(np.mean(neighbor_scores))
+        if neighbor_scores.size
+        else float("nan"),
+        "policy_distance": float(np.mean(neighbor_distances))
+        if neighbor_distances.size
+        else float("nan"),
+        "smoothed_policy_distance": float(np.nanmean(neighbor_smoothed))
+        if neighbor_smoothed.size and not np.all(np.isnan(neighbor_smoothed))
+        else float("nan"),
+        "pgct_affinity": float(np.mean(neighbor_affinity))
+        if neighbor_affinity.size
+        else float("nan"),
+        "neighbor_edges": float(np.sum(upper_neighbor)),
+        "updated_edges": float(updates),
+        "distance_updated_edges": float(distance_updates),
+        "active_edges": float(np.sum(upper_active)),
+        "active_weight": float(np.mean(active_weights))
+        if active_weights.size
+        else float("nan"),
+        "probe_count": float(probe_sequences.shape[0] * probe_sequences.shape[1]),
+        **probe_meta,
+    }
+    return metrics, probe_sequences
+
+
 def run_policy_similarity_probes(
     cfg: TrainConfig,
     env: gym.Env,
@@ -2432,36 +2755,16 @@ def run_policy_similarity_probes(
     device: torch.device,
     rng: np.random.Generator,
 ) -> Dict[str, float]:
-    n_agents = len(agents)
-    neighbor_adj = communication_adjacency(env, n_agents, mode=cfg.comm_graph_mode)
-    probe_obs, probe_meta = sample_policy_probe_obs(cfg, env, rollout, rng)
-    similarity = policy_similarity_matrix(
+    metrics, _ = run_policy_similarity_probe_round(
+        cfg,
+        env,
         agents,
-        probe_obs,
-        device=device,
-        temperature=cfg.policy_similarity_temperature,
+        graph_estimator,
+        rollout,
+        device,
+        rng,
     )
-    updates = graph_estimator.update_from_policy_similarity(similarity, neighbor_adj)
-    weights = graph_estimator.weight_matrix()
-
-    upper_mask = np.triu(np.ones((n_agents, n_agents), dtype=bool), k=1)
-    upper_neighbor = upper_mask & (neighbor_adj > 0.0)
-    upper_active = upper_mask & (weights >= cfg.edge_threshold)
-    neighbor_scores = similarity[upper_neighbor]
-    active_weights = weights[upper_active]
-    return {
-        "policy_similarity": float(np.mean(neighbor_scores))
-        if neighbor_scores.size
-        else float("nan"),
-        "neighbor_edges": float(np.sum(upper_neighbor)),
-        "updated_edges": float(updates),
-        "active_edges": float(np.sum(upper_active)),
-        "active_weight": float(np.mean(active_weights))
-        if active_weights.size
-        else float("nan"),
-        "probe_count": float(probe_obs.shape[0]),
-        **probe_meta,
-    }
+    return metrics
 
 
 @torch.no_grad()
@@ -3241,7 +3544,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help=(
             "Source for common policy probes. 'rollout' keeps the original "
             "random rollout probes; 'objective' uses environment-specific "
-            "objective-revealing probes; 'mixed' combines both."
+            "task-informed label-free probes; 'mixed' combines both."
         ),
     )
     parser.add_argument(
@@ -3290,6 +3593,64 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=int,
         default=1,
         help="Consecutive adjacency updates required before an edge changes state.",
+    )
+    parser.add_argument(
+        "--peer-transfer-mode",
+        default="consensus",
+        choices=["consensus", "pgct", "none"],
+        help=(
+            "Peer transfer operator. consensus keeps the legacy critic parameter "
+            "consensus baseline; pgct uses canonical critic function-space "
+            "distillation; none disables peer transfer."
+        ),
+    )
+    parser.add_argument(
+        "--pgct-peer-loss-coef",
+        type=float,
+        default=0.05,
+        help="lambda_peer for PGCT canonical critic distillation.",
+    )
+    parser.add_argument(
+        "--pgct-probe-sequence-length",
+        type=int,
+        default=4,
+        help="Lp, the recurrent length of each canonical probe sequence.",
+    )
+    parser.add_argument(
+        "--pgct-distance-ema-beta",
+        type=float,
+        default=0.2,
+        help="EMA coefficient beta for smoothed probe distances.",
+    )
+    parser.add_argument(
+        "--pgct-distance-temperature",
+        type=float,
+        default=0.25,
+        help="tau_D used to convert smoothed distance to affinity score.",
+    )
+    parser.add_argument(
+        "--pgct-distance-threshold",
+        type=float,
+        default=0.2,
+        help="tau_Q distance threshold for opening the PGCT transfer gate.",
+    )
+    parser.add_argument(
+        "--pgct-gate-power",
+        type=float,
+        default=1.0,
+        help="kappa exponent applied to the continuous PGCT gate.",
+    )
+    parser.add_argument(
+        "--pgct-alpha-epsilon",
+        type=float,
+        default=1e-8,
+        help="Receiver-side allocation denominator epsilon.",
+    )
+    parser.add_argument(
+        "--pgct-warmup-updates",
+        type=int,
+        default=10,
+        help="Disable PGCT gates before this many learning updates.",
     )
     parser.add_argument("--critic-consensus-tau", type=float, default=0.1)
     parser.add_argument("--consensus-interval", type=int, default=1)
@@ -3390,6 +3751,22 @@ def main() -> None:
         raise ValueError("--min-advantage-std must be non-negative")
     if cfg.reward_epsilon < 0.0:
         raise ValueError("--reward-epsilon must be non-negative")
+    if cfg.pgct_peer_loss_coef < 0.0:
+        raise ValueError("--pgct-peer-loss-coef must be non-negative")
+    if cfg.pgct_probe_sequence_length < 1:
+        raise ValueError("--pgct-probe-sequence-length must be positive")
+    if not 0.0 < cfg.pgct_distance_ema_beta <= 1.0:
+        raise ValueError("--pgct-distance-ema-beta must be in (0, 1]")
+    if cfg.pgct_distance_temperature <= 0.0:
+        raise ValueError("--pgct-distance-temperature must be positive")
+    if cfg.pgct_distance_threshold < 0.0:
+        raise ValueError("--pgct-distance-threshold must be non-negative")
+    if cfg.pgct_gate_power <= 0.0:
+        raise ValueError("--pgct-gate-power must be positive")
+    if cfg.pgct_alpha_epsilon <= 0.0:
+        raise ValueError("--pgct-alpha-epsilon must be positive")
+    if cfg.pgct_warmup_updates < 0:
+        raise ValueError("--pgct-warmup-updates must be non-negative")
     if transfer_components and not cfg.init_checkpoint:
         # This keeps the config explicit without forcing users to pass
         # --transfer-components none for ordinary from-scratch runs.
@@ -3540,31 +3917,28 @@ def main() -> None:
             cfg.action_mask,
         )
 
-        update_metrics = update_ippo(
-            agents,
-            optimizers,
-            rollout,
-            cfg,
-            graph_estimator,
-            device,
-            rng,
-        )
-
         probe_metrics = {"probe_delta": float("nan")}
+        peer_probe_sequences: Optional[torch.Tensor] = None
         if (
             cfg.graph_mode == "policy"
             and cfg.probe_interval > 0
             and iteration % cfg.probe_interval == 0
         ):
-            probe_metrics = run_policy_similarity_probes(
-                cfg,
-                env,
-                agents,
-                graph_estimator,
-                rollout,
-                device,
-                rng,
-            )
+            if cfg.peer_transfer_mode == "pgct" and iteration < cfg.pgct_warmup_updates:
+                probe_metrics = {
+                    "probe_delta": float("nan"),
+                    "pgct_warmup_active": 1.0,
+                }
+            else:
+                probe_metrics, peer_probe_sequences = run_policy_similarity_probe_round(
+                    cfg,
+                    env,
+                    agents,
+                    graph_estimator,
+                    rollout,
+                    device,
+                    rng,
+                )
         elif (
             cfg.graph_mode == "influence"
             and cfg.probe_interval > 0
@@ -3583,7 +3957,55 @@ def main() -> None:
                 rng,
             )
 
-        if cfg.graph_mode == "oracle":
+        peer_allocation: Optional[np.ndarray] = None
+        if cfg.peer_transfer_mode == "pgct":
+            warmup_complete = iteration >= cfg.pgct_warmup_updates
+            if cfg.graph_mode == "oracle":
+                pgct_gate = oracle_weight_matrix(env, n_agents)
+            elif cfg.graph_mode == "none":
+                pgct_gate = np.zeros((n_agents, n_agents), dtype=np.float32)
+            else:
+                pgct_gate = graph_estimator.pgct_gate_matrix(
+                    warmup_complete=warmup_complete,
+                    distance_threshold=cfg.pgct_distance_threshold,
+                    distance_temperature=cfg.pgct_distance_temperature,
+                    gate_power=cfg.pgct_gate_power,
+                )
+            allocation_denom = (
+                np.sum(pgct_gate, axis=1, keepdims=True)
+                + max(float(cfg.pgct_alpha_epsilon), 1e-8)
+            )
+            peer_allocation = (pgct_gate / allocation_denom).astype(np.float32)
+            consensus_weights = pgct_gate
+            log_clusters = clusters_from_adjacency((pgct_gate > 0.0).astype(np.float32))
+            if np.any(peer_allocation > 0.0) and peer_probe_sequences is None:
+                peer_probe_sequences, critic_probe_meta = sample_policy_probe_sequences(
+                    cfg,
+                    env,
+                    rollout,
+                    rng,
+                )
+                probe_metrics.update(
+                    {
+                        "critic_probe_count": float(
+                            peer_probe_sequences.shape[0]
+                            * peer_probe_sequences.shape[1]
+                        ),
+                        "critic_probe_sequence_count": critic_probe_meta[
+                            "probe_sequence_count"
+                        ],
+                        "critic_probe_sequence_length": critic_probe_meta[
+                            "probe_sequence_length"
+                        ],
+                    }
+                )
+            probe_metrics.update(
+                {
+                    "pgct_gate_edges": float(np.sum(pgct_gate > 0.0) / 2.0),
+                    "pgct_allocation_mass": float(np.sum(peer_allocation)),
+                }
+            )
+        elif cfg.graph_mode == "oracle":
             consensus_weights = oracle_weight_matrix(env, n_agents)
             log_clusters = clusters_from_adjacency(
                 (consensus_weights >= cfg.edge_threshold).astype(np.float32)
@@ -3596,8 +4018,24 @@ def main() -> None:
             consensus_weights = graph_estimator.consensus_weight_matrix()
             log_clusters = graph_estimator.clusters()
 
+        update_metrics = update_ippo(
+            agents,
+            optimizers,
+            rollout,
+            cfg,
+            graph_estimator,
+            device,
+            rng,
+            peer_allocation=peer_allocation,
+            peer_probe_sequences=peer_probe_sequences,
+        )
+
         consensus_updates = 0
-        if cfg.consensus_interval > 0 and iteration % cfg.consensus_interval == 0:
+        if (
+            cfg.peer_transfer_mode == "consensus"
+            and cfg.consensus_interval > 0
+            and iteration % cfg.consensus_interval == 0
+        ):
             consensus_updates = apply_confidence_weighted_critic_consensus(
                 agents,
                 consensus_weights,

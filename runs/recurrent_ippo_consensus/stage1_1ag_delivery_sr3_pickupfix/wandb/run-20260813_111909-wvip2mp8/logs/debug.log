@@ -1,0 +1,44 @@
+2026-08-13 11:19:09,812 INFO    MainThread:7528 [wandb_setup.py:_flush():81] Current SDK version is 0.28.0
+2026-08-13 11:19:09,812 INFO    MainThread:7528 [wandb_setup.py:_flush():81] Configure stats pid to 7528
+2026-08-13 11:19:09,812 INFO    MainThread:7528 [wandb_setup.py:_flush():81] Loading settings from environment variables
+2026-08-13 11:19:09,812 INFO    MainThread:7528 [wandb_init.py:setup_run_log_directory():725] Logging user logs to runs\recurrent_ippo_consensus\stage1_1ag_delivery_sr3_pickupfix\wandb\run-20260813_111909-wvip2mp8\logs\debug.log
+2026-08-13 11:19:09,812 INFO    MainThread:7528 [wandb_init.py:setup_run_log_directory():726] Logging internal logs to runs\recurrent_ippo_consensus\stage1_1ag_delivery_sr3_pickupfix\wandb\run-20260813_111909-wvip2mp8\logs\debug-internal.log
+2026-08-13 11:19:09,813 INFO    MainThread:7528 [wandb_init.py:init():768] calling init triggers
+2026-08-13 11:19:09,813 INFO    MainThread:7528 [wandb_init.py:init():773] wandb.init called with sweep_config: {}
+config: {'env_id': 'rware-multiteam-tiny-4ag-2teams-v0', 'env_kwargs_json': '{"request_queue_size":1,"request_queue_size_per_team":1,"failed_forward_penalty":0.005,"reveal_team_info":true,"max_steps":500,"invalid_toggle_load_penalty":0.02,"goal_progress_reward":0.01,"delivery_reward":1,"reward_only_new_best_progress":true,"team_reward_mode":"individual","premature_drop_penalty":0.05,"requested_shelf_pickup_reward":0.03,"requested_shelf_progress_reward":0.005,"stationary_streak_penalty_after":8,"require_delivered_shelf_return":false}', 'sensor_range': 3, 'agent_count': 1, 'team_count': 1, 'curriculum_stages': '', 'curriculum_stage': 0, 'init_checkpoint': '', 'transfer_components': 'actor', 'total_timesteps': 5000000, 'rollout_steps': 1024, 'sequence_length': 64, 'minibatch_chunks': 8, 'ppo_epochs': 4, 'learning_rate': 0.0002, 'gamma': 0.99, 'gae_lambda': 0.95, 'clip_coef': 0.2, 'value_clip_coef': 0.2, 'value_loss_coef': 0.5, 'entropy_coef': 0.02, 'action_mask': True, 'normalize_advantages': True, 'min_advantage_std': 1e-06, 'skip_zero_reward_actor_update': True, 'skip_no_positive_reward_actor_update': False, 'reward_epsilon': 1e-08, 'max_grad_norm': 0.5, 'mlp_hidden_dim': 128, 'recurrent_hidden_dim': 128, 'seed': 1, 'device': 'auto', 'graph_mode': 'none', 'probe_interval': 0, 'policy_probe_batch_size': 64, 'probe_source': 'mixed', 'objective_probe_fraction': 0.5, 'policy_similarity_temperature': 0.25, 'comm_graph_mode': 'physical', 'probe_episodes': 4, 'probe_horizon': 120, 'edge_threshold': 0.2, 'min_probe_count': 2, 'uncertainty_scale': 1.0, 'value_uncertainty_decay': 0.95, 'graph_join_threshold': 0.0, 'graph_leave_threshold': 0.0, 'graph_dwell_updates': 1, 'critic_consensus_tau': 0.0, 'consensus_interval': 0, 'save_dir': 'runs/recurrent_ippo_consensus', 'exp_name': 'stage1_1ag_delivery_sr3_pickupfix', 'save_interval': 100, 'log_interval': 1, 'eval_episodes': 20, 'eval_horizon': 500, 'eval_interval': 50, 'render_eval': False, 'eval_render_episodes': 1, 'eval_render_mode': 'human', 'eval_render_fps': 10, 'track': True, 'wandb_project': 'rware-curriculum', 'wandb_entity': '', 'wandb_group': '', 'wandb_name': 'stage1_1ag_delivery_sr3_pickupfix', 'wandb_mode': 'online', 'wandb_tags': '', 'wandb_log_eval_video': True, 'wandb_video_interval': 5, '_wandb': {'code_path': 'code/examples/train_recurrent_ippo_consensus.py'}}
+2026-08-13 11:19:09,813 INFO    MainThread:7528 [wandb_init.py:init():816] starting backend
+2026-08-13 11:19:09,813 INFO    MainThread:7528 [wandb_init.py:init():831] sending inform_init request
+2026-08-13 11:19:10,550 INFO    MainThread:7528 [wandb_init.py:init():836] backend started and connected
+2026-08-13 11:19:10,571 INFO    MainThread:7528 [wandb_init.py:init():906] updated telemetry
+2026-08-13 11:19:10,607 INFO    MainThread:7528 [wandb_init.py:init():929] communicating run to backend with 90.0 second timeout
+2026-08-13 11:19:11,250 INFO    MainThread:7528 [wandb_init.py:init():974] starting run threads in backend
+2026-08-13 11:19:17,722 INFO    MainThread:7528 [wandb_run.py:_console_start():2523] atexit reg
+2026-08-13 11:19:17,722 INFO    MainThread:7528 [wandb_run.py:_redirect():2373] redirect: wrap_raw
+2026-08-13 11:19:17,723 INFO    MainThread:7528 [wandb_run.py:_redirect():2442] Wrapping output streams.
+2026-08-13 11:19:17,723 INFO    MainThread:7528 [wandb_run.py:_redirect():2465] Redirects installed.
+2026-08-13 11:19:17,724 INFO    MainThread:7528 [wandb_init.py:init():1012] run started, returning control to user process
+2026-08-13 11:23:19,227 INFO    wandb-AsyncioManager-main:7528 [service_client.py:_forward_responses():122] [no run ID] Reached EOF.
+2026-08-13 11:23:19,228 INFO    wandb-AsyncioManager-main:7528 [mailbox.py:close():154] [no run ID] Closing mailbox, abandoning 2 handles.
+2026-08-13 11:23:19,228 ERROR   wandb-AsyncioManager-main:7528 [asyncio_manager.py:fn_wrap_exceptions():184] Uncaught exception in run_soon callback.
+Traceback (most recent call last):
+  File "C:\Users\95101\anaconda3\envs\RWARE_MARL\Lib\site-packages\wandb\sdk\lib\asyncio_manager.py", line 182, in fn_wrap_exceptions
+    await fn()
+  File "C:\Users\95101\anaconda3\envs\RWARE_MARL\Lib\site-packages\wandb\sdk\lib\run_messages.py", line 90, in loop
+    await asyncio_compat.race(
+  File "C:\Users\95101\anaconda3\envs\RWARE_MARL\Lib\site-packages\wandb\sdk\lib\asyncio_compat.py", line 278, in race
+    async with open_task_group(race=True) as tg:
+  File "C:\Users\95101\anaconda3\envs\RWARE_MARL\Lib\contextlib.py", line 217, in __aexit__
+    await anext(self.gen)
+  File "C:\Users\95101\anaconda3\envs\RWARE_MARL\Lib\site-packages\wandb\sdk\lib\asyncio_compat.py", line 240, in open_task_group
+    await task_group._wait_all(race=race, timeout=exit_timeout)
+  File "C:\Users\95101\anaconda3\envs\RWARE_MARL\Lib\site-packages\wandb\sdk\lib\asyncio_compat.py", line 180, in _wait_all
+    raise exc
+  File "C:\Users\95101\anaconda3\envs\RWARE_MARL\Lib\site-packages\wandb\sdk\lib\run_messages.py", line 113, in _print_all
+    result = await handle.wait_async(timeout=None)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\95101\anaconda3\envs\RWARE_MARL\Lib\site-packages\wandb\sdk\mailbox\mailbox_handle.py", line 127, in wait_async
+    response = await self._handle.wait_async(timeout=timeout)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\95101\anaconda3\envs\RWARE_MARL\Lib\site-packages\wandb\sdk\mailbox\response_handle.py", line 123, in wait_async
+    raise HandleAbandonedError()
+wandb.sdk.mailbox.mailbox_handle.HandleAbandonedError
