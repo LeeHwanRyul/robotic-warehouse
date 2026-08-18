@@ -1,0 +1,737 @@
+warning: in the working copy of 'examples/curriculum2/env_kwargs.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'examples/env_kwargs_stage2_return_lowshape.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'examples/train_recurrent_ippo_consensus.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'rware/multi_team_warehouse.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'rware/warehouse.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tests/test_multi_team_envs.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tests/test_policy_probe_consensus.py', LF will be replaced by CRLF the next time Git touches it
+diff --git a/examples/curriculum2/env_kwargs.json b/examples/curriculum2/env_kwargs.json
+index b0af23e..c013674 100644
+--- a/examples/curriculum2/env_kwargs.json
++++ b/examples/curriculum2/env_kwargs.json
+@@ -1,6 +1,6 @@
+ {
+-  "request_queue_size": 1,
+-  "request_queue_size_per_team": 1,
++  "request_queue_size": 4,
++  "request_queue_size_per_team": 2,
+   "require_delivered_shelf_return": true,
+   "delivery_reward": 1.0,
+   "shelf_return_reward": 1.0,
+@@ -9,6 +9,8 @@
+   "goal_progress_reward": 0.005,
+   "return_progress_reward": 0.02,
+   "reward_only_new_best_progress": false,
++  "wrong_shelf_pickup_penalty": 0.05,
++  "unrequested_shelf_pickup_penalty": 0.02,
+   "wrong_shelf_return_penalty": 0.005,
+   "premature_drop_penalty": 0.02,
+   "failed_forward_penalty": 0.005,
+diff --git a/examples/env_kwargs_stage2_return_lowshape.json b/examples/env_kwargs_stage2_return_lowshape.json
+index b0af23e..c013674 100644
+--- a/examples/env_kwargs_stage2_return_lowshape.json
++++ b/examples/env_kwargs_stage2_return_lowshape.json
+@@ -1,6 +1,6 @@
+ {
+-  "request_queue_size": 1,
+-  "request_queue_size_per_team": 1,
++  "request_queue_size": 4,
++  "request_queue_size_per_team": 2,
+   "require_delivered_shelf_return": true,
+   "delivery_reward": 1.0,
+   "shelf_return_reward": 1.0,
+@@ -9,6 +9,8 @@
+   "goal_progress_reward": 0.005,
+   "return_progress_reward": 0.02,
+   "reward_only_new_best_progress": false,
++  "wrong_shelf_pickup_penalty": 0.05,
++  "unrequested_shelf_pickup_penalty": 0.02,
+   "wrong_shelf_return_penalty": 0.005,
+   "premature_drop_penalty": 0.02,
+   "failed_forward_penalty": 0.005,
+diff --git a/examples/train_recurrent_ippo_consensus.py b/examples/train_recurrent_ippo_consensus.py
+index 9a9adce..821face 100644
+--- a/examples/train_recurrent_ippo_consensus.py
++++ b/examples/train_recurrent_ippo_consensus.py
+@@ -46,6 +46,9 @@ if str(PROJECT_ROOT) not in sys.path:
+     sys.path.insert(0, str(PROJECT_ROOT))
+ 
+ import rware  # noqa: F401 - registers Gymnasium environments
++from rware.utils.probe_maps import (
++    build_rware_objective_probe_bank as _build_rware_probe_map_bank,
++)
+ from rware.warehouse import Action, Direction, _LAYER_SHELFS
+ 
+ 
+@@ -297,6 +300,7 @@ class TrainConfig:
+     sensor_range: int
+     agent_count: int
+     team_count: int
++    auto_scale_request_queue: bool
+     curriculum_stages: str
+     curriculum_stage: int
+     init_checkpoint: str
+@@ -761,6 +765,7 @@ def apply_agent_overrides(
+     env_kwargs: Dict[str, Any],
+     agent_count: Optional[int],
+     team_count: int,
++    auto_scale_request_queue: bool = True,
+ ) -> Dict[str, Any]:
+     updated = dict(env_kwargs)
+     if team_count < 0:
+@@ -780,15 +785,13 @@ def apply_agent_overrides(
+ 
+     updated["n_agents"] = int(agent_count)
+     effective_team_count = infer_team_count(env_id, updated)
+-    if (
+-        env_id.startswith("rware-multiteam-")
+-        and effective_team_count is not None
+-        and "request_queue_size" not in updated
+-        and "request_queue_size_per_team" not in updated
+-    ):
+-        per_team_requests = max(1, int(agent_count) // int(effective_team_count))
+-        updated["request_queue_size_per_team"] = per_team_requests
+-        updated["request_queue_size"] = per_team_requests * int(effective_team_count)
++    if env_id.startswith("rware-multiteam-") and effective_team_count is not None:
++        _apply_multiteam_request_queue_override(
++            updated,
++            agent_count=int(agent_count),
++            team_count=int(effective_team_count),
++            auto_scale=auto_scale_request_queue,
++        )
+     return updated
+ 
+ 
+@@ -801,6 +804,99 @@ def infer_team_count(env_id: str, env_kwargs: Dict[str, Any]) -> Optional[int]:
+     return None
+ 
+ 
++def _balanced_team_agent_counts(agent_count: int, team_count: int) -> List[int]:
++    counts = [0 for _ in range(team_count)]
++    for agent_idx in range(agent_count):
++        counts[agent_idx % team_count] += 1
++    return counts
++
++
++def _team_agent_counts_from_kwargs(
++    env_kwargs: Dict[str, Any],
++    agent_count: int,
++    team_count: int,
++) -> List[int]:
++    assignments = env_kwargs.get("team_assignments")
++    if assignments is None:
++        return _balanced_team_agent_counts(agent_count, team_count)
++    counts = [0 for _ in range(team_count)]
++    for team_id in assignments:
++        team_index = int(team_id)
++        if team_index < 0 or team_index >= team_count:
++            raise ValueError("team_assignments contains an out-of-range team id")
++        counts[team_index] += 1
++    return counts
++
++
++def _request_queue_sizes_per_team(value: Any, team_count: int) -> List[int]:
++    if isinstance(value, int):
++        return [int(value) for _ in range(team_count)]
++    values = [int(item) for item in value]
++    if len(values) != team_count:
++        raise ValueError("request_queue_size_per_team must have one value per team")
++    return values
++
++
++def _compact_team_request_sizes(values: Sequence[int]) -> Any:
++    normalized = [int(value) for value in values]
++    if normalized and all(value == normalized[0] for value in normalized):
++        return normalized[0]
++    return normalized
++
++
++def _apply_multiteam_request_queue_override(
++    env_kwargs: Dict[str, Any],
++    agent_count: int,
++    team_count: int,
++    auto_scale: bool,
++) -> None:
++    if team_count <= 0:
++        raise ValueError("team_count must be positive for multiteam RWARE")
++
++    target_per_team = [
++        max(1, count)
++        for count in _team_agent_counts_from_kwargs(env_kwargs, agent_count, team_count)
++    ]
++    target_total = int(sum(target_per_team))
++    has_total = "request_queue_size" in env_kwargs
++    has_per_team = "request_queue_size_per_team" in env_kwargs
++
++    if not has_total and not has_per_team:
++        env_kwargs["request_queue_size_per_team"] = _compact_team_request_sizes(
++            target_per_team
++        )
++        env_kwargs["request_queue_size"] = target_total
++        return
++
++    if not auto_scale:
++        return
++
++    if has_per_team:
++        current_per_team = _request_queue_sizes_per_team(
++            env_kwargs["request_queue_size_per_team"],
++            team_count,
++        )
++        scaled_per_team = [
++            max(current, target)
++            for current, target in zip(current_per_team, target_per_team)
++        ]
++        env_kwargs["request_queue_size_per_team"] = _compact_team_request_sizes(
++            scaled_per_team
++        )
++        env_kwargs["request_queue_size"] = max(
++            int(env_kwargs.get("request_queue_size", 0)),
++            int(sum(scaled_per_team)),
++        )
++        return
++
++    current_total = int(env_kwargs["request_queue_size"])
++    if current_total < target_total:
++        env_kwargs["request_queue_size_per_team"] = _compact_team_request_sizes(
++            target_per_team
++        )
++        env_kwargs["request_queue_size"] = target_total
++
++
+ TRANSFER_COMPONENT_PREFIXES: Dict[str, Tuple[str, ...]] = {
+     "actor": ("actor_encoder.", "actor_rnn.", "actor_head."),
+     "actor_body": ("actor_encoder.", "actor_rnn."),
+@@ -1355,80 +1451,7 @@ def _build_rware_objective_probe_bank(
+     batch_size: int,
+     rng: np.random.Generator,
+ ) -> Optional[torch.Tensor]:
+-    unwrapped = env.unwrapped
+-    required = [
+-        "_obs_bits_for_self",
+-        "_obs_bits_per_agent",
+-        "_obs_bits_per_shelf",
+-        "msg_bits",
+-        "sensor_range",
+-        "grid_size",
+-    ]
+-    if not all(hasattr(unwrapped, name) for name in required):
+-        return None
+-
+-    self_bits = int(unwrapped._obs_bits_for_self)
+-    per_agent = int(unwrapped._obs_bits_per_agent)
+-    per_shelf = int(unwrapped._obs_bits_per_shelf)
+-    sensor_range = int(unwrapped.sensor_range)
+-    cell_stride = per_agent + per_shelf
+-    expected_dim = self_bits + (1 + 2 * sensor_range) ** 2 * cell_stride
+-    if expected_dim != obs_dim:
+-        return None
+-
+-    probes: List[np.ndarray] = []
+-    categories = ["pickup", "approach", "conflict", "neutral"]
+-    height, width = tuple(map(int, unwrapped.grid_size))
+-    normalised = bool(getattr(unwrapped, "normalised_coordinates", False))
+-
+-    for probe_id in range(max(int(batch_size), 1)):
+-        obs = np.zeros(obs_dim, dtype=np.float32)
+-        if normalised:
+-            obs[0] = 0.5
+-            obs[1] = 0.5
+-        else:
+-            obs[0] = max(0, width // 2)
+-            obs[1] = max(0, height // 2)
+-        obs[2] = 1.0 if categories[probe_id % len(categories)] == "conflict" else 0.0
+-
+-        direction_id = probe_id % 4
+-        obs[3 + direction_id] = 1.0
+-        obs[7] = 1.0
+-
+-        # Match Warehouse._get_default_obs: empty cells still carry the default
+-        # one-hot direction for the absent-agent placeholder.
+-        for loc in range((1 + 2 * sensor_range) ** 2):
+-            base = self_bits + loc * cell_stride
+-            obs[base + 1] = 1.0
+-
+-        def set_shelf(dy: int, dx: int, requested: bool) -> None:
+-            loc = _sensor_location_index(sensor_range, dy, dx)
+-            if loc is None:
+-                return
+-            base = self_bits + loc * cell_stride + per_agent
+-            obs[base] = 1.0
+-            obs[base + 1] = 1.0 if requested else 0.0
+-
+-        category = categories[probe_id % len(categories)]
+-        offsets = _sample_cardinal_offsets(sensor_range, rng)
+-
+-        if category == "pickup":
+-            set_shelf(0, 0, requested=True)
+-        elif category == "approach":
+-            dy, dx = offsets[0]
+-            set_shelf(dy, dx, requested=True)
+-        elif category == "conflict":
+-            if offsets:
+-                set_shelf(offsets[0][0], offsets[0][1], requested=True)
+-            if len(offsets) > 1:
+-                set_shelf(offsets[1][0], offsets[1][1], requested=False)
+-        else:
+-            if offsets:
+-                set_shelf(offsets[0][0], offsets[0][1], requested=False)
+-
+-        probes.append(obs)
+-
+-    return torch.as_tensor(np.stack(probes, axis=0), dtype=torch.float32)
++    return _build_rware_probe_map_bank(env, obs_dim, batch_size, rng)
+ 
+ 
+ def _objective_visibility_scores(env: gym.Env, obs_pool: torch.Tensor) -> np.ndarray:
+@@ -3437,6 +3460,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
+         default=0,
+         help="Override env n_teams. 0 keeps the environment default.",
+     )
++    parser.add_argument(
++        "--no-auto-scale-request-queue",
++        dest="auto_scale_request_queue",
++        action="store_false",
++        help=(
++            "Keep explicit multiteam request_queue_size settings even when "
++            "they are smaller than the selected agent/team count."
++        ),
++    )
+     parser.add_argument(
+         "--curriculum-stages",
+         default="",
+@@ -3710,6 +3742,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
+     )
+     parser.set_defaults(
+         action_mask=True,
++        auto_scale_request_queue=True,
+         normalize_advantages=True,
+         skip_zero_reward_actor_update=True,
+         skip_no_positive_reward_actor_update=False,
+@@ -3783,6 +3816,7 @@ def main() -> None:
+         env_kwargs,
+         selected_agent_count,
+         cfg.team_count,
++        cfg.auto_scale_request_queue,
+     )
+ 
+     env = make_env(cfg.env_id, env_kwargs)
+@@ -3873,7 +3907,10 @@ def main() -> None:
+         f"num_observations={len(obs)} "
+         f"action_space={env.action_space} "
+         f"observation_space={env.observation_space} "
+-        f"request_queue_size={getattr(env.unwrapped, 'request_queue_size', 'unknown')}"
++        f"request_queue_size={getattr(env.unwrapped, 'request_queue_size', 'unknown')} "
++        f"request_queue_size_per_team="
++        f"{getattr(env.unwrapped, 'request_queue_size_per_team', 'unknown')} "
++        f"active_request_count={len(getattr(env.unwrapped, 'request_queue', []))}"
+     )
+     if curriculum_stages:
+         print(
+diff --git a/output/probes/00_probe_bank_overview.png b/output/probes/00_probe_bank_overview.png
+deleted file mode 100644
+index 998cfeb..0000000
+Binary files a/output/probes/00_probe_bank_overview.png and /dev/null differ
+diff --git a/output/probes/01_same_exam_sheet.png b/output/probes/01_same_exam_sheet.png
+deleted file mode 100644
+index 10625ca..0000000
+Binary files a/output/probes/01_same_exam_sheet.png and /dev/null differ
+diff --git a/output/probes/02_probe_target_preference.png b/output/probes/02_probe_target_preference.png
+deleted file mode 100644
+index 44819a5..0000000
+Binary files a/output/probes/02_probe_target_preference.png and /dev/null differ
+diff --git a/output/probes/03_probe_pickup_drop.png b/output/probes/03_probe_pickup_drop.png
+deleted file mode 100644
+index 100da02..0000000
+Binary files a/output/probes/03_probe_pickup_drop.png and /dev/null differ
+diff --git a/output/probes/04_probe_recurrent_memory.png b/output/probes/04_probe_recurrent_memory.png
+deleted file mode 100644
+index 0e95947..0000000
+Binary files a/output/probes/04_probe_recurrent_memory.png and /dev/null differ
+diff --git a/output/probes/05_probe_blocked_route.png b/output/probes/05_probe_blocked_route.png
+deleted file mode 100644
+index be33859..0000000
+Binary files a/output/probes/05_probe_blocked_route.png and /dev/null differ
+diff --git a/output/probes/06_probe_finite_margin.png b/output/probes/06_probe_finite_margin.png
+deleted file mode 100644
+index aab1829..0000000
+Binary files a/output/probes/06_probe_finite_margin.png and /dev/null differ
+diff --git a/output/probes/07_probe_transfer_utility.png b/output/probes/07_probe_transfer_utility.png
+deleted file mode 100644
+index 5a98fc7..0000000
+Binary files a/output/probes/07_probe_transfer_utility.png and /dev/null differ
+diff --git a/output/probes/08_probe_failure_case.png b/output/probes/08_probe_failure_case.png
+deleted file mode 100644
+index c6bd4e9..0000000
+Binary files a/output/probes/08_probe_failure_case.png and /dev/null differ
+diff --git a/output/probes/09_probe_set_checklist.png b/output/probes/09_probe_set_checklist.png
+deleted file mode 100644
+index e4b5e50..0000000
+Binary files a/output/probes/09_probe_set_checklist.png and /dev/null differ
+diff --git a/output/probes/probe_contact_sheet.png b/output/probes/probe_contact_sheet.png
+deleted file mode 100644
+index 1b8c4da..0000000
+Binary files a/output/probes/probe_contact_sheet.png and /dev/null differ
+diff --git a/rware/multi_team_warehouse.py b/rware/multi_team_warehouse.py
+index 8cc8e13..b22f2c2 100644
+--- a/rware/multi_team_warehouse.py
++++ b/rware/multi_team_warehouse.py
+@@ -616,6 +616,9 @@ class MultiTeamWarehouse(Warehouse):
+     def _is_requested_shelf(self, shelf: Shelf) -> bool:
+         return any(shelf in team_queue for team_queue in self.team_request_queues)
+ 
++    def _requested_shelves_for_observation(self, agent):
++        return self._requested_shelves_for_agent(agent)
++
+     def _distance(self, source_x: int, source_y: int, target: Tuple[int, int]) -> int:
+         target_x, target_y = target
+         return abs(int(source_x) - int(target_x)) + abs(int(source_y) - int(target_y))
+diff --git a/rware/warehouse.py b/rware/warehouse.py
+index 370d23b..bd28aea 100644
+--- a/rware/warehouse.py
++++ b/rware/warehouse.py
+@@ -524,9 +524,17 @@ class Warehouse(gym.Env):
+     def _is_highway(self, x: int, y: int) -> bool:
+         return self.highways[y, x]
+ 
++    def _requested_shelves_for_observation(self, agent):
++        return self.request_queue
++
+     def _make_img_obs(self, agent):
+         # write image observations
+-        if agent.id == 1:
++        observation_request_queue = self._requested_shelves_for_observation(agent)
++        request_layer_is_agent_specific = (
++            ImageLayer.REQUESTS in self.image_observation_layers
++            and observation_request_queue is not self.request_queue
++        )
++        if agent.id == 1 or request_layer_is_agent_specific or self.global_layers is None:
+             layers = []
+             # first agent's observation --> update global observation layers
+             for layer_type in self.image_observation_layers:
+@@ -537,7 +545,7 @@ class Warehouse(gym.Env):
+                     # print("SHELVES LAYER")
+                 elif layer_type == ImageLayer.REQUESTS:
+                     layer = np.zeros(self.grid_size, dtype=np.float32)
+-                    for requested_shelf in self.request_queue:
++                    for requested_shelf in observation_request_queue:
+                         layer[requested_shelf.y, requested_shelf.x] = 1.0
+                     # print("REQUESTS LAYER")
+                 elif layer_type == ImageLayer.AGENTS:
+@@ -572,14 +580,20 @@ class Warehouse(gym.Env):
+                 # pad with 0s for out-of-map cells
+                 layer = np.pad(layer, self.sensor_range, mode="constant")
+                 layers.append(layer)
+-            self.global_layers = np.stack(layers)
++            if request_layer_is_agent_specific:
++                global_layers = np.stack(layers)
++            else:
++                self.global_layers = np.stack(layers)
++                global_layers = self.global_layers
++        else:
++            global_layers = self.global_layers
+ 
+         # global information was generated --> get information for agent
+         start_x = agent.y
+         end_x = agent.y + 2 * self.sensor_range + 1
+         start_y = agent.x
+         end_y = agent.x + 2 * self.sensor_range + 1
+-        obs = self.global_layers[:, start_x:end_x, start_y:end_y]
++        obs = global_layers[:, start_x:end_x, start_y:end_y]
+ 
+         if self.image_observation_directional:
+             # rotate image to be in direction of agent
+@@ -596,6 +610,7 @@ class Warehouse(gym.Env):
+         return obs
+ 
+     def _get_default_obs(self, agent):
++        observation_request_queue = self._requested_shelves_for_observation(agent)
+         min_x = agent.x - self.sensor_range
+         max_x = agent.x + self.sensor_range + 1
+ 
+@@ -669,7 +684,10 @@ class Warehouse(gym.Env):
+                     obs.write([0.0, 0.0])  # no shelf or requested shelf
+                 else:
+                     obs.write(
+-                        [1.0, int(self.shelfs[id_shelf - 1] in self.request_queue)]
++                        [
++                            1.0,
++                            int(self.shelfs[id_shelf - 1] in observation_request_queue),
++                        ]
+                     )  # shelf presence and request status
+             return obs.vector
+ 
+@@ -714,7 +732,7 @@ class Warehouse(gym.Env):
+             else:
+                 obs["sensors"][i]["has_shelf"] = [1]
+                 obs["sensors"][i]["shelf_requested"] = [
+-                    int(self.shelfs[id_ - 1] in self.request_queue)
++                    int(self.shelfs[id_ - 1] in observation_request_queue)
+                 ]
+ 
+         return obs
+diff --git a/tests/test_multi_team_envs.py b/tests/test_multi_team_envs.py
+index a9ec6f5..ffed294 100644
+--- a/tests/test_multi_team_envs.py
++++ b/tests/test_multi_team_envs.py
+@@ -12,7 +12,7 @@ sys.path.insert(0, PROJECT_DIR)
+ 
+ from rware.multi_team_grid import GridAction, MultiTeamGrid
+ from rware.multi_team_warehouse import MultiTeamWarehouse, TeamRewardMode
+-from rware.warehouse import Action, Direction, RewardType
++from rware.warehouse import Action, Direction, ObservationType, RewardType
+ 
+ 
+ def test_multiteam_rware_hides_team_info_by_default():
+@@ -42,6 +42,82 @@ def test_multiteam_rware_hides_team_info_by_default():
+         assert all(env.shelf_team_ids[shelf.id] == team_id for shelf in team_queue)
+ 
+ 
++def test_multiteam_rware_observes_only_own_team_requested_shelves():
++    env = MultiTeamWarehouse(
++        shelf_columns=3,
++        column_height=1,
++        shelf_rows=1,
++        n_agents=2,
++        msg_bits=0,
++        sensor_range=2,
++        request_queue_size=2,
++        request_queue_size_per_team=1,
++        max_inactivity_steps=None,
++        max_steps=20,
++        reward_type=RewardType.INDIVIDUAL,
++        layout=".....\n.x.xg\n.....",
++        observation_type=ObservationType.DICT,
++        n_teams=2,
++        team_assignments=[0, 1],
++        team_reward_mode=TeamRewardMode.INDIVIDUAL,
++    )
++    env.reset(seed=3)
++
++    team0_shelf, team1_shelf = env.shelfs[:2]
++    env.shelf_team_ids = {team0_shelf.id: 0, team1_shelf.id: 1}
++    env.shelfs_by_team = [[team0_shelf], [team1_shelf]]
++    env.team_request_queues = [[team0_shelf], [team1_shelf]]
++    env._sync_global_request_queue()
++
++    env.agents[0].x = 2
++    env.agents[0].y = 0
++    env.agents[0].dir = Direction.DOWN
++    env.agents[1].x = 2
++    env.agents[1].y = 2
++    env.agents[1].dir = Direction.UP
++    env._recalc_grid()
++
++    def sensor_index(agent, shelf):
++        side = 2 * env.sensor_range + 1
++        dx = int(shelf.x) - int(agent.x)
++        dy = int(shelf.y) - int(agent.y)
++        return (dy + env.sensor_range) * side + (dx + env.sensor_range)
++
++    obs0 = env._make_obs(env.agents[0])
++    obs1 = env._make_obs(env.agents[1])
++    team0_idx_for_agent0 = sensor_index(env.agents[0], team0_shelf)
++    team1_idx_for_agent0 = sensor_index(env.agents[0], team1_shelf)
++    team0_idx_for_agent1 = sensor_index(env.agents[1], team0_shelf)
++    team1_idx_for_agent1 = sensor_index(env.agents[1], team1_shelf)
++
++    assert obs0["sensors"][team0_idx_for_agent0]["shelf_requested"] == [1]
++    assert obs0["sensors"][team1_idx_for_agent0]["shelf_requested"] == [0]
++    assert obs1["sensors"][team0_idx_for_agent1]["shelf_requested"] == [0]
++    assert obs1["sensors"][team1_idx_for_agent1]["shelf_requested"] == [1]
++
++    slow_obs_space = env.observation_space[0]
++    flat_obs0 = gym.spaces.flatten(slow_obs_space, obs0)
++    flat_obs1 = gym.spaces.flatten(slow_obs_space, obs1)
++    env._use_fast_obs()
++    fast_obs0 = env._make_obs(env.agents[0])
++    fast_obs1 = env._make_obs(env.agents[1])
++
++    assert np.array_equal(fast_obs0, flat_obs0)
++    assert np.array_equal(fast_obs1, flat_obs1)
++
++    bits_per_sensor_cell = 7
++    self_feature_count = 8
++    requested_offset = 6
++
++    def flat_requested_index(sensor_idx):
++        return self_feature_count + sensor_idx * bits_per_sensor_cell + requested_offset
++
++    assert fast_obs0[flat_requested_index(team0_idx_for_agent0)] == 1.0
++    assert fast_obs0[flat_requested_index(team1_idx_for_agent0)] == 0.0
++    assert fast_obs1[flat_requested_index(team0_idx_for_agent1)] == 0.0
++    assert fast_obs1[flat_requested_index(team1_idx_for_agent1)] == 1.0
++
++
+ def test_multiteam_rware_rewards_only_latent_shelf_team():
+     env = MultiTeamWarehouse(
+         shelf_columns=3,
+diff --git a/tests/test_policy_probe_consensus.py b/tests/test_policy_probe_consensus.py
+index 5475dd4..16b7f4f 100644
+--- a/tests/test_policy_probe_consensus.py
++++ b/tests/test_policy_probe_consensus.py
+@@ -1,8 +1,11 @@
++import json
+ import os
+ import sys
++from pathlib import Path
+ 
+ import numpy as np
+ import pytest
++import gymnasium as gym
+ 
+ 
+ TEST_DIR = os.path.dirname(os.path.abspath(__file__))
+@@ -29,6 +32,7 @@ from examples.train_recurrent_ippo_consensus import (  # noqa: E402
+     transfer_checkpoint_to_agents,
+ )
+ from rware.multi_team_grid import MultiTeamGrid  # noqa: E402
++from rware.utils.probe_maps import RwareObjectiveProbeMapBuilder  # noqa: E402
+ 
+ 
+ def test_policy_similarity_graph_respects_neighbor_adjacency():
+@@ -191,6 +195,114 @@ def test_objective_probe_bank_exposes_grid_targets():
+     assert np.count_nonzero(scores > 0.0) >= 6
+ 
+ 
++def test_rware_objective_probe_bank_exposes_team_goal_and_return_scenarios():
++    env = gym.make(
++        "rware-multiteam-tiny-4ag-2teams-v0",
++        sensor_range=3,
++        request_queue_size=2,
++        request_queue_size_per_team=1,
++        require_delivered_shelf_return=True,
++        reveal_team_info=True,
++    )
++    env.reset(seed=11)
++    obs_dim = env.observation_space[0].shape[0]
++    builder = RwareObjectiveProbeMapBuilder(
++        env,
++        obs_dim=obs_dim,
++        rng=np.random.default_rng(0),
++    )
++    unwrapped = builder.probe_unwrapped
++
++    probes = builder.build(batch_size=48)
++    scores = _objective_visibility_scores(env, probes)
++    probe_np = probes.numpy()
++    carrying = probe_np[:, 2] > 0.5
++    positions = [
++        (int(round(float(probe[0]))), int(round(float(probe[1]))))
++        for probe in probe_np
++    ]
++    self_bits = int(unwrapped._obs_bits_for_self)
++    per_agent = int(unwrapped._obs_bits_per_agent)
++    per_shelf = int(unwrapped._obs_bits_per_shelf)
++    cell_stride = per_agent + per_shelf
++    sensor_locations = (1 + 2 * int(unwrapped.sensor_range)) ** 2
++
++    requested_shelf_counts = []
++    for probe in probe_np:
++        requested_count = 0
++        for loc in range(sensor_locations):
++            base = self_bits + loc * cell_stride + per_agent
++            if probe[base] > 0.5 and probe[base + 1] > 0.5:
++                requested_count += 1
++        requested_shelf_counts.append(requested_count)
++
++    for team_id, team_goals in enumerate(unwrapped.goals_by_team):
++        assert any(
++            carrying[idx]
++            and any(
++                abs(x - int(goal[0])) + abs(y - int(goal[1])) <= 1
++                for goal in team_goals
++            )
++            for idx, (x, y) in enumerate(positions)
++        ), f"missing carrying probe around team {team_id} goal"
++
++        team_homes = {
++            tuple(map(int, unwrapped._shelf_home_positions[shelf.id]))
++            for shelf in unwrapped.shelfs_by_team[team_id]
++        }
++        assert any(
++            carrying[idx] and (x, y) in team_homes
++            for idx, (x, y) in enumerate(positions)
++        ), f"missing return-at-home probe for team {team_id}"
++
++    dual_requested_probe_count = sum(
++        count >= 2 for count in requested_shelf_counts
++    )
++
++    assert probes.shape == (48, obs_dim)
++    assert np.count_nonzero(scores > 0.0) >= 36
++    assert max(requested_shelf_counts) >= 2
++    assert dual_requested_probe_count >= 24
++    env.close()
++
++
++def test_rware_probe_map_builder_saves_visual_manifest(tmp_path):
++    pytest.importorskip("PIL")
++    env = gym.make(
++        "rware-multiteam-tiny-4ag-2teams-v0",
++        sensor_range=3,
++        request_queue_size=2,
++        request_queue_size_per_team=1,
++        require_delivered_shelf_return=True,
++        reveal_team_info=True,
++    )
++    try:
++        env.reset(seed=11)
++        obs_dim = env.observation_space[0].shape[0]
++        builder = RwareObjectiveProbeMapBuilder(
++            env,
++            obs_dim=obs_dim,
++            rng=np.random.default_rng(0),
++        )
++        summary = builder.save_probe_map_images(
++            tmp_path,
++            batch_size=32,
++            save_individual=False,
++            save_contact_sheet=True,
++        )
++
++        manifest_path = Path(summary["manifest"])
++        contact_sheet_path = Path(summary["contact_sheet"])
++        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
++
++        assert len(builder.scenario_cycle) == 48
++        assert len(manifest) == 32
++        assert contact_sheet_path.exists()
++        assert any(row["requested_shelf_count"] >= 2 for row in manifest)
++    finally:
++        env.close()
++
++
+ def test_graph_hysteresis_requires_dwell_before_edge_change():
+     estimator = TeamGraphEstimator(
+         n_agents=2,
+@@ -286,7 +398,28 @@ def test_curriculum_stage_selects_agent_count_and_env_override():
+     )
+ 
+     assert explicit_queue_kwargs["request_queue_size_per_team"] == 3
+-    assert "request_queue_size" not in explicit_queue_kwargs
++    assert explicit_queue_kwargs["request_queue_size"] == 6
++
++    low_queue_kwargs = apply_agent_overrides(
++        "rware-multiteam-tiny-4ag-2teams-v0",
++        {"request_queue_size": 1, "request_queue_size_per_team": 1},
++        agent_count=4,
++        team_count=2,
++    )
++
++    assert low_queue_kwargs["request_queue_size_per_team"] == 2
++    assert low_queue_kwargs["request_queue_size"] == 4
++
++    preserved_low_queue_kwargs = apply_agent_overrides(
++        "rware-multiteam-tiny-4ag-2teams-v0",
++        {"request_queue_size": 1, "request_queue_size_per_team": 1},
++        agent_count=4,
++        team_count=2,
++        auto_scale_request_queue=False,
++    )
++
++    assert preserved_low_queue_kwargs["request_queue_size_per_team"] == 1
++    assert preserved_low_queue_kwargs["request_queue_size"] == 1
+ 
+ 
+ def test_curriculum_transfer_copies_actor_round_robin_and_resets_critic(tmp_path):

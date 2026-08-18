@@ -1,8 +1,11 @@
+import json
 import os
 import sys
+from pathlib import Path
 
 import numpy as np
 import pytest
+import gymnasium as gym
 
 
 TEST_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -29,6 +32,7 @@ from examples.train_recurrent_ippo_consensus import (  # noqa: E402
     transfer_checkpoint_to_agents,
 )
 from rware.multi_team_grid import MultiTeamGrid  # noqa: E402
+from rware.utils.probe_maps import RwareObjectiveProbeMapBuilder  # noqa: E402
 
 
 def test_policy_similarity_graph_respects_neighbor_adjacency():
@@ -191,6 +195,114 @@ def test_objective_probe_bank_exposes_grid_targets():
     assert np.count_nonzero(scores > 0.0) >= 6
 
 
+def test_rware_objective_probe_bank_exposes_team_goal_and_return_scenarios():
+    env = gym.make(
+        "rware-multiteam-tiny-4ag-2teams-v0",
+        sensor_range=3,
+        request_queue_size=2,
+        request_queue_size_per_team=1,
+        require_delivered_shelf_return=True,
+        reveal_team_info=True,
+    )
+    env.reset(seed=11)
+    obs_dim = env.observation_space[0].shape[0]
+    builder = RwareObjectiveProbeMapBuilder(
+        env,
+        obs_dim=obs_dim,
+        rng=np.random.default_rng(0),
+    )
+    unwrapped = builder.probe_unwrapped
+
+    probes = builder.build(batch_size=48)
+    scores = _objective_visibility_scores(env, probes)
+    probe_np = probes.numpy()
+    carrying = probe_np[:, 2] > 0.5
+    positions = [
+        (int(round(float(probe[0]))), int(round(float(probe[1]))))
+        for probe in probe_np
+    ]
+    self_bits = int(unwrapped._obs_bits_for_self)
+    per_agent = int(unwrapped._obs_bits_per_agent)
+    per_shelf = int(unwrapped._obs_bits_per_shelf)
+    cell_stride = per_agent + per_shelf
+    sensor_locations = (1 + 2 * int(unwrapped.sensor_range)) ** 2
+
+    requested_shelf_counts = []
+    for probe in probe_np:
+        requested_count = 0
+        for loc in range(sensor_locations):
+            base = self_bits + loc * cell_stride + per_agent
+            if probe[base] > 0.5 and probe[base + 1] > 0.5:
+                requested_count += 1
+        requested_shelf_counts.append(requested_count)
+
+    for team_id, team_goals in enumerate(unwrapped.goals_by_team):
+        assert any(
+            carrying[idx]
+            and any(
+                abs(x - int(goal[0])) + abs(y - int(goal[1])) <= 1
+                for goal in team_goals
+            )
+            for idx, (x, y) in enumerate(positions)
+        ), f"missing carrying probe around team {team_id} goal"
+
+        team_homes = {
+            tuple(map(int, unwrapped._shelf_home_positions[shelf.id]))
+            for shelf in unwrapped.shelfs_by_team[team_id]
+        }
+        assert any(
+            carrying[idx] and (x, y) in team_homes
+            for idx, (x, y) in enumerate(positions)
+        ), f"missing return-at-home probe for team {team_id}"
+
+    dual_requested_probe_count = sum(
+        count >= 2 for count in requested_shelf_counts
+    )
+
+    assert probes.shape == (48, obs_dim)
+    assert np.count_nonzero(scores > 0.0) >= 36
+    assert max(requested_shelf_counts) >= 2
+    assert dual_requested_probe_count >= 24
+    env.close()
+
+
+def test_rware_probe_map_builder_saves_visual_manifest(tmp_path):
+    pytest.importorskip("PIL")
+    env = gym.make(
+        "rware-multiteam-tiny-4ag-2teams-v0",
+        sensor_range=3,
+        request_queue_size=2,
+        request_queue_size_per_team=1,
+        require_delivered_shelf_return=True,
+        reveal_team_info=True,
+    )
+    try:
+        env.reset(seed=11)
+        obs_dim = env.observation_space[0].shape[0]
+        builder = RwareObjectiveProbeMapBuilder(
+            env,
+            obs_dim=obs_dim,
+            rng=np.random.default_rng(0),
+        )
+        summary = builder.save_probe_map_images(
+            tmp_path,
+            batch_size=32,
+            save_individual=False,
+            save_contact_sheet=True,
+        )
+
+        manifest_path = Path(summary["manifest"])
+        contact_sheet_path = Path(summary["contact_sheet"])
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+        assert len(builder.scenario_cycle) == 48
+        assert len(manifest) == 32
+        assert contact_sheet_path.exists()
+        assert any(row["requested_shelf_count"] >= 2 for row in manifest)
+    finally:
+        env.close()
+
+
 def test_graph_hysteresis_requires_dwell_before_edge_change():
     estimator = TeamGraphEstimator(
         n_agents=2,
@@ -286,7 +398,28 @@ def test_curriculum_stage_selects_agent_count_and_env_override():
     )
 
     assert explicit_queue_kwargs["request_queue_size_per_team"] == 3
-    assert "request_queue_size" not in explicit_queue_kwargs
+    assert explicit_queue_kwargs["request_queue_size"] == 6
+
+    low_queue_kwargs = apply_agent_overrides(
+        "rware-multiteam-tiny-4ag-2teams-v0",
+        {"request_queue_size": 1, "request_queue_size_per_team": 1},
+        agent_count=4,
+        team_count=2,
+    )
+
+    assert low_queue_kwargs["request_queue_size_per_team"] == 2
+    assert low_queue_kwargs["request_queue_size"] == 4
+
+    preserved_low_queue_kwargs = apply_agent_overrides(
+        "rware-multiteam-tiny-4ag-2teams-v0",
+        {"request_queue_size": 1, "request_queue_size_per_team": 1},
+        agent_count=4,
+        team_count=2,
+        auto_scale_request_queue=False,
+    )
+
+    assert preserved_low_queue_kwargs["request_queue_size_per_team"] == 1
+    assert preserved_low_queue_kwargs["request_queue_size"] == 1
 
 
 def test_curriculum_transfer_copies_actor_round_robin_and_resets_critic(tmp_path):

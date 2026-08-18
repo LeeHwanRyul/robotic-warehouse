@@ -1,0 +1,1433 @@
+PDF=C:\Users\95101\Downloads\ex5.pdf
+PAGES=39
+
+===== PAGE 1 =====
+PGCT AAMAS Zero-Gap Mathematical Explanation
+Guide
+ex4.pdf에 등장하는 수학을 하나도 건너뛰지 않고 설명한 버전
+목표: ex4.pdf의 이론 범위를 넓히지 않고, 그 안에 이미 등장하는 모든 수학 기호와 식을 기초
+수학부터 하나도 건너뛰지 않고 설명한다.
+Contents
+1 이 문서의 범위 6
+2 수학 기호 사전 6
+2.1 첨자와 위첨자 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 6
+2.2 =, ̸=, ≈ . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 6
+2.3 <,≤,>,≥ . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 7
+2.4 ⇒, ̸⇒, ⇔ . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 7
+(cid:80)
+2.5 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 7
+2.6 max,min. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 8
+2.7 절댓값 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 8
+2.8 Indicator function . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 8
+2.9 Expectation E. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 8
+2.10 Probability P(·)와 조건부 기호 | . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 8
+2.11 log . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 9
+2.12 exp(x) . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 9
+2.13 ↑,↓ . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 9
+2.14 Hat, bar, star, tilde . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 10
+3 RL에서 필요한 최소 개념 10
+3.1 Agent, actor, policy. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 10
+3.2 Critic . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 10
+3.3 Return J . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 11
+3.4 Checkpoint . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 11
+4 PGCT 문제를 0부터 11
+1
+
+===== PAGE 2 =====
+5 Objective equivalence 12
+6 Behavioral affinity 12
+7 Transfer utility 식 완전 해체 13
+7.1 U . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 13
+7.2 i ← j . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 13
+7.3 n . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 13
+7.4 H . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 13
+7.5 T . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 13
+7.6 Θ . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 13
+n
+7.7 + . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 13
+7.8 Transfer branch . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 13
+7.9 Independent branch . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 14
+7.10 왜 빼는가 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 14
+7.11 왜 expectation인가 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 14
+8 같은 objective가 positive transfer를 보장하지 않는 이유 14
+9 Recurrent hidden state를 0부터 15
+10 Canonical recurrent probing 15
+10.1 Probe bank Q . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 15
+10.2 한 probe sequence . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 15
+10.3 왜 hQ = 0인가 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 16
+0
+10.4 Probe recurrent update . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 16
+10.5 Action distribution . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 16
+11 Side-effect-free의 정확한 의미 17
+12 Probability distribution을 0부터 17
+13 KL divergence를 0부터 17
+13.1 p(a), q(a) . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 17
+13.2 Ratio. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 18
+13.3 Log. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 18
+13.4 왜 p(a)를 곱하는가 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 18
+13.5 왜 비대칭인가 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 18
+2
+
+===== PAGE 3 =====
+14 JS divergence를 0부터 18
+15 DQ 식 완전 해체 19
+ij,n
+15.1 바깥 합. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 19
+15.2 ω . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 19
+m
+15.3 안쪽 합. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 19
+15.4 ν . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 20
+m,ℓ
+15.5 한 JS 항 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 20
+15.6 전체 의미 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 20
+16 Objective identifiability 20
+17 δ 을 0부터 20
+in
+18 δ 을 0부터 21
+out
+19 Separation margin ∆ 21
+Q
+19.1 ∆ > 0 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 21
+Q
+19.2 ∆ = 0 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 21
+Q
+19.3 ∆ < 0 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 21
+Q
+20 ϵ과 error bound 22
+21 왜 2ϵ < ∆ 인가: 한 줄도 생략하지 않은 유도 22
+Q
+22 Midpoint threshold 23
+23 EMA를 0부터 23
+24 Affinity score의 exponential transformation 24
+24.1 왜 probability가 아닌가. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 24
+25 Threshold gate 25
+26 Warm-up 25
+27 Canonical critic value vQ 25
+i
+28 Critic peer loss 완전 해체 26
+28.1 L . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 26
+(cid:80)
+28.2 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 26
+j
+28.3 α . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 26
+i←j
+3
+
+===== PAGE 4 =====
+(cid:80)
+28.4 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 26
+m,ℓ
+28.5 ω ν . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 26
+m m,ℓ
+28.6 vQ−vQ . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 26
+i j
+28.7 왜 제곱하는가 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 26
+29 Gradient와 gradient descent를 0부터 27
+30 Stop-gradient를 0부터 27
+31 Local critic loss와 peer loss 28
+32 왜 actor를 직접 공유하지 않는가 28
+33 핵심 미검증 연결 29
+34 Matched branch experiment 29
+34.1 Transfer branch . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 29
+34.2 Independent branch . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 29
+34.3 왜 matched인가 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 29
+34.4 Estimated utility . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 29
+35 Scatter plot 30
+36 Correlation이 무엇인가 30
+37 Spearman rank correlation을 0부터 30
+37.1 왜 Spearman인가 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 31
+38 Oracle Objective Share 31
+39 Wrong Share 32
+40 Case B 32
+41 ∆ ≤ 0와 automatic abstention 33
+Q
+42 성능 기호 33
+43 실험 순서가 왜 이 순서인가 33
+44 현재 의도적으로 제외한 수학 34
+45 기호 전체 사전 34
+4
+
+===== PAGE 5 =====
+46 수식 전체 읽기 연습 36
+46.1 Objective relation. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 36
+46.2 Behavioral distance . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 36
+46.3 Separation margin . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 36
+46.4 Robust pair separation . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 36
+46.5 Affinity . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 36
+46.6 Peer critic loss . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 36
+46.7 Transfer utility . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 37
+46.8 Main empirical bridge . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 37
+47 교수님께 2분 설명 37
+48 최종 체크리스트 37
+49 한 페이지 요약 39
+5
+
+===== PAGE 6 =====
+1 이 문서의 범위
+이 문서는 AAMAS 실험 중심 PGCT 버전만을 설명한다. 따라서 현재 메인 claim에서 제거한 graph
+Laplacian, Kronecker product, strong convexity, nonlinear recurrent PPO convergence 등은 다시
+추가하지 않는다.
+이번 문서의 목표는 다음 chain을 완전히 이해하는 것이다.
+Q → DQ → affinity gate → critic transfer → U (1)
+ij i←j
+남기는 최소 이론은
+∆ > 0, 2ϵ < ∆ (2)
+Q Q
+이고, 가장 중요한 실험은
+DQ −→ ? U (3)
+ij i←j
+이다.
+2 수학 기호 사전
+2.1 첨자와 위첨자
+예를 들어
+DQ
+ij,n
+에서
+• D: distance/dissimilarity라는 quantity 이름,
+• i,j: 비교하는 두 agent,
+• n: learning/update iteration,
+• Q: canonical probe bank를 사용했다는 표시
+이다.
+즉 DQ 는 “iteration n에서 probe bank Q를 사용해 측정한 agent i,j의 behavioral distance”다.
+ij,n
+2.2 =, ̸=, ≈
+x = y
+는 정확히 같다는 뜻이다.
+x ̸= y
+6
+
+===== PAGE 7 =====
+는 같지 않다는 뜻이다.
+x ≈ y
+는 정확히 같지는 않지만 매우 비슷하다는 뜻이다.
+예를 들어
+DQ ≈ 0
+ij
+은 distance가 정확히 0이라고 주장하는 것이 아니라 매우 작다는 뜻이다.
+2.3 <,≤,>,≥
+x < y
+는 x가 y보다 작다.
+x ≤ y
+는 x가 y보다 작거나 같다.
+마찬가지로 >, ≥는 크다, 크거나 같다를 뜻한다.
+2.4 ⇒, ̸⇒, ⇔
+A ⇒ B
+는 “A이면 B이다”.
+A ̸⇒ B
+는 “A라고 해서 B가 반드시 따라오는 것은 아니다”.
+A ⇔ B
+는 A와 B가 서로 동치라는 뜻이다.
+PGCT에서 매우 중요한 예는
+z = z ̸⇒ U > 0
+i j i←j
+이다.
+같은 objective라고 해서 positive transfer가 보장되지 않는다.
+(cid:80)
+2.5
+M
+(cid:88)
+x = x +x +···+x .
+m 1 2 M
+m=1
+즉 여러 항을 더하는 기호다.
+7
+
+===== PAGE 8 =====
+2.6 max,min
+max{1,4,2} = 4, min{1,4,2} = 1.
+max는 가장 큰 값, min은 가장 작은 값을 고른다.
+2.7 절댓값
+|3| = 3, |−3| = 3.
+절댓값은 0에서의 거리다.
+따라서
+|D(cid:98) −D| ≤ ϵ
+은 두 값의 차이가 최대 ϵ이라는 뜻이다.
+2.8 Indicator function
+(cid:40)
+1, 조건이 참,
+1[조건] =
+0, 조건이 거짓.
+따라서
+Cobj = 1[z = z ]
+ij i j
+는 두 objective label이 같으면 1, 다르면 0이다.
+2.9 Expectation E
+E[X]
+는 random variable X의 평균적인 값이다.
+예를 들어 X가 1,2,3을 각각 확률 1/3으로 갖는다면
+1 1 1
+E[X] = (1)+ (2)+ (3) = 2.
+3 3 3
+RL에서는 evaluation seed, initial state, environment randomness, action sampling 등에 따라 return
+이 달라질 수 있으므로 expectation을 사용한다.
+2.10 Probability P(·)와 조건부 기호 |
+P(A)
+는 사건 A가 일어날 확률이다.
+P(A | B)
+8
+
+===== PAGE 9 =====
+는 B라는 정보가 주어졌을 때 A가 일어날 확률이다.
+policy notation
+π(a | h)
+도 같은 “given” 의미를 사용한다. 즉 hidden state h가 주어졌을 때 action a를 선택할 확률이다.
+2.11 log
+logx
+는 logarithm이다.
+PGCT에서는 KL divergence 안에서 사용한다.
+중요한 사실은
+log1 = 0
+이다. 그래서 두 probability가 같은 경우 ratio가 1이 되고 해당 차이 항은 0이 된다.
+2.12 exp(x)
+exp(x) = ex, e ≈ 2.71828.
+PGCT에서
+w = e−D/τD
+처럼 사용한다.
+D = 0이면
+w = e0 = 1.
+D가 커질수록 exponent가 더 음수가 되어 w가 작아진다.
+2.13 ↑,↓
+x ↑
+는 증가,
+x ↓
+는 감소를 뜻한다.
+따라서
+DQ ↓⇒ U ↑
+는 distance가 작아질수록 utility가 커지는 경향을 기대한다는 뜻이다.
+9
+
+===== PAGE 10 =====
+2.14 Hat, bar, star, tilde
+U(cid:98)
+의 hat은 data로 추정한 estimate를 뜻한다.
+D
+의 bar는 smoothed/averaged quantity를 뜻한다.
+DQ,⋆
+의 star는 analysis에서 사용하는 ideal/reference quantity를 뜻한다.
+x
+(cid:101)
+의 tilde는 online rollout input과 구분되는 canonical/external probe input이라는 표기다.
+3 RL에서 필요한 최소 개념
+3.1 Agent, actor, policy
+agent는 environment를 관측하고 action을 선택하는 학습 주체다.
+actor는 action distribution을 출력하는 neural network다.
+π (a | h)
+θi
+에서
+• π: policy,
+• θ : agent i actor parameter,
+i
+• a: action,
+• h: recurrent hidden state
+이다.
+3.2 Critic
+critic은 현재 state/history가 얼마나 좋은지를 value로 평가한다.
+간단히
+V (·)
+ϕi
+로 쓸 수 있고 ϕ 는 critic parameter다.
+i
+10
+
+===== PAGE 11 =====
+3.3 Return J
+horizon H에서 return은 미래 reward의 누적 성능이라고 이해하면 된다.
+대표적으로
+J (H) = r +γr +γ2r +···+γH−1r .
+i 0 1 2 H−1
+여기서
+• H: 평가 horizon,
+• r : reward,
+t
+• γ: discount factor
+다.
+PGCT utility 식에서 J (H) 는 업데이트 이후 agent i의 evaluation performance를 뜻한다.
+i
+3.4 Checkpoint
+checkpoint는 특정 학습 시점의 model parameter를 저장한 상태다.
+PGCT utility 실험에서는 같은 checkpoint를 두 branch로 복제하여 공정하게 비교한다.
+4 PGCT 문제를 0부터
+각 agent i에는 hidden objective label
+z
+i
+가 있다고 생각한다.
+예를 들어
+z = 1, z = 2
+i j
+라면 서로 다른 objective type이다.
+algorithm은 z 를 직접 볼 수 없다.
+i
+잘못된 peer의 정보를 무작정 공유하면 학습이 나빠질 수 있는데 이를 negative transfer라고 한다.
+반대로 아무 sharing도 하지 않으면 유용한 peer 정보를 놓친다.
+따라서 핵심 질문은
+누구와 정보를 공유할 것인가?
+이다.
+11
+
+===== PAGE 12 =====
+5 Objective equivalence
+Cobj = 1[z = z ].
+ij i j
+예를 들어
+z = 2, z = 2
+i j
+이면
+Cobj = 1.
+ij
+반대로
+z = 2, z = 3
+i j
+이면
+Cobj = 0.
+ij
+이 relation은 symmetric하다.
+Cobj = Cobj.
+ij ji
+주의
+이 값은 ground-truth evaluation용 개념이다. 실제 PGCT algorithm은 true z 나 Cobj를 입력
+i ij
+으로 사용하지 않는다.
+6 Behavioral affinity
+algorithm은 objective label을 모르므로 canonical probe에서 두 actor가 얼마나 비슷하게 반응하는지
+측정한다.
+이때 behavioral difference를
+DQ
+ij
+로 나타낸다.
+DQ가 작음 ⇐⇒ 같은 probe에서 행동 분포가 비슷함.
+ij
+주의
+DQ는 true objective distance가 아니다. 정확한 표현은 probe-conditioned policy dissimi-
+ij
+larity다.
+12
+
+===== PAGE 13 =====
+7 Transfer utility 식 완전 해체
+(cid:104) (cid:16) (cid:17) (cid:16) (cid:17)(cid:105)
+U (H,T) = E J (H) Θi←j,T −J (H) Θi,0 .
+i←j,n i n,+ i n,+
+7.1 U
+utility. transfer가 얼마나 유용했는지 나타낸다.
+7.2 i ← j
+정보가 j에서 i로 간다. 즉 j는 donor, i는 receiver다.
+7.3 n
+몇 번째 learning iteration에서 측정했는지 나타낸다.
+utility는 학습 전체에 걸쳐 고정된 pair property가 아니다.
+7.4 H
+update 이후 성능을 얼마나 긴 horizon에서 평가하는지 나타낸다.
+7.5 T
+transfer operator다. 즉 어떤 정보를 어떤 방식으로 전달하는가를 나타낸다.
+PGCT에서는 critic-level function-space transfer를 생각한다.
+7.6 Θ
+n
+그 시점의 learning state를 묶어서 표현한 추상 기호다. 필요한 actor/critic parameter와 optimizer
+state 등을 포함할 수 있다.
+7.7 +
+Θ
+n,+
+의 +는 현재 update를 수행한 이후의 상태라는 의미다.
+7.8 Transfer branch
+Θi←j,T
+n,+
+는 donor j의 정보를 transfer operator T로 사용해서 agent i를 update한 뒤의 상태다.
+13
+
+===== PAGE 14 =====
+7.9 Independent branch
+Θi,0
+n,+
+는 peer information을 쓰지 않고 matched independent update를 한 뒤의 상태다.
+7.10 왜 빼는가
+J −J
+transfer independent
+를 계산하면 peer transfer를 넣었을 때 independent update보다 얼마나 좋아졌는지 알 수 있다.
+숫자 예제
+J = 12, J = 10
+transfer independent
+이면
+U = 2 > 0
+이므로 transfer가 도움이 되었다.
+반대로
+8−10 = −2 < 0
+이면 negative transfer다.
+7.11 왜 expectation인가
+evaluation randomness 때문에 한 번의 결과만으로는 불안정할 수 있다.
+그래서 여러 seed/episode의 평균적인 차이를 생각한다.
+실제 실험에서는 expectation을 sample average로 근사하고
+U(cid:98)
+처럼 hat을 붙여 estimated utility라고 표현할 수 있다.
+8 같은 objective가 positive transfer를 보장하지 않는 이유
+z = z ̸⇒ U > 0.
+i j i←j
+같은 objective라도
+• critic accuracy,
+• learning stage,
+• 경험한 state distribution,
+• function approximation error,
+14
+
+===== PAGE 15 =====
+• optimizer state/noise
+가 다를 수 있다.
+따라서 objective equivalence와 transfer compatibility는 다른 개념이다.
+9 Recurrent hidden state를 0부터
+recurrent network는 과거 정보를 hidden state에 저장한다.
+h = f (h ,x ).
+t θ t−1 t
+• t: sequence time step,
+• x : 현재 recurrent input,
+t
+• h : 직전까지의 history를 요약한 hidden state,
+t−1
+• f : GRU/LSTM/RNN cell과 같은 recurrent update function
+θ
+이다.
+두 agent가 서로 다른 과거를 경험하면
+hi ̸= hj
+t t
+일 수 있다.
+그 상태에서 actor output이 다르면 그 차이가 policy parameter 때문인지 history 때문인지 구분하기
+어렵다.
+10 Canonical recurrent probing
+10.1 Probe bank Q
+Q = {ξ ,ξ ,...,ξ }.
+1 2 M
+Q는 여러 canonical recurrent input sequence의 모음이다.
+M은 probe trajectory 개수다.
+10.2 한 probe sequence
+ξ = (x ,x ,...,x ).
+m (cid:101)m,1 (cid:101)m,2 (cid:101)m,Lp
+• m: 몇 번째 probe sequence,
+• ℓ: sequence 안의 몇 번째 step,
+• L : probe length,
+p
+• x : externally specified canonical input
+(cid:101)m,ℓ
+이다.
+15
+
+===== PAGE 16 =====
+10.3 왜 hQ = 0인가
+0
+hQ = 0
+0
+으로 모든 agent의 recurrent starting condition을 통일한다.
+hidden dimension이 128이면
+hQ = (0,0,...,0) ∈ R128
+0
+인 zero vector라고 생각할 수 있다.
+10.4 Probe recurrent update
+(cid:16) (cid:17)
+hQ = f hQ ,x .
+i,m,ℓ,n θi,n i,m,ℓ−1,n (cid:101)m,ℓ
+읽으면:
+“iteration n의 agent i actor를 사용해서, probe m의 ℓ번째 input을 넣고, 직전 probe hidden state에서
+다음 probe hidden state를 계산한다.”
+10.5 Action distribution
+(cid:16) (cid:17)
+p (a) = π a | hQ .
+i,m,ℓ,n θi,n i,m,ℓ,n
+이는 action a를 선택할 probability다.
+action space가
+A = {a ,a ,a }
+1 2 3
+이고 output이
+p = (0.7,0.2,0.1)
+이면 세 action을 각각 0.7, 0.2, 0.1 확률로 선택한다.
+모든 probability는
+p(a) ≥ 0
+이고
+(cid:88)
+p(a) = 1.
+a∈A
+16
+
+===== PAGE 17 =====
+11 Side-effect-free의 정확한 의미
+probe는 diagnosis다.
+따라서 probe 때문에 actual training trajectory가 바뀌면 안 된다.
+• environment state를 진행시키지 않는다.
+• online recurrent hidden state를 바꾸지 않는다.
+• rollout buffer에 transition을 추가하지 않는다.
+• affinity estimation용 forward pass에서 actor parameter를 update하지 않는다.
+즉
+h ̸= h
+probe online
+이고, probe가 끝나면 probe hidden state는 버린다.
+12 Probability distribution을 0부터
+p = (0.8,0.1,0.1)
+은 세 action의 probability가 각각 0.8, 0.1, 0.1이라는 뜻이다.
+합은
+0.8+0.1+0.1 = 1.
+argmax action만 비교하면 정보가 사라질 수 있다.
+예를 들어
+p = (0.51,0.49), q = (0.99,0.01)
+은 둘 다 첫 번째 action이 argmax지만 두 policy의 confidence 구조는 매우 다르다.
+그래서 PGCT는 전체 probability distribution을 비교한다.
+13 KL divergence를 0부터
+(cid:88) p(a)
+D (p∥q) = p(a)log .
+KL
+q(a)
+a
+13.1 p(a), q(a)
+같은 action a에 대해 각 distribution이 주는 probability다.
+17
+
+===== PAGE 18 =====
+13.2 Ratio
+p(a)
+q(a)
+는 두 distribution이 해당 action에 주는 probability mass를 비교한다.
+13.3 Log
+두 값이 같으면 ratio가 1이고
+log1 = 0.
+따라서 같은 probability는 차이에 기여하지 않는다.
+13.4 왜 p(a)를 곱하는가
+KL은 p를 기준으로 평균내므로 p에서 중요한 action의 차이를 더 많이 반영한다.
+13.5 왜 비대칭인가
+일반적으로
+D (p∥q) ̸= D (q∥p).
+KL KL
+첫 번째는 p를 기준으로 q를 보고, 두 번째는 q를 기준으로 p를 보기 때문이다.
+14 JS divergence를 0부터
+먼저 midpoint distribution
+1
+m = (p+q)
+2
+를 만든다.
+숫자 예제
+p = (0.8,0.1,0.1), q = (0.6,0.3,0.1)
+이면
+m = (0.7,0.2,0.1).
+JS divergence는
+1 1
+D (p,q) = D (p∥m)+ D (q∥m).
+JS KL KL
+2 2
+즉 p → m 차이와 q → m 차이를 반반 평균낸다.
+18
+
+===== PAGE 19 =====
+중요한 성질은
+D (p,q) = D (q,p)
+JS JS
+라는 대칭성이다.
+또
+p = q
+이면
+D (p,q) = 0.
+JS
+따라서 symmetric pairwise actor comparison에 적합하다.
+15 D Q 식 완전 해체
+ij,n
+M Lp
+DQ = (cid:88) ω (cid:88) ν D (p ,p ).
+ij,n m m,ℓ JS i,m,ℓ,n j,m,ℓ,n
+m=1 ℓ=1
+15.1 바깥 합
+M
+(cid:88)
+m=1
+은 모든 probe trajectory를 합친다.
+15.2 ω
+m
+probe trajectory m에 주는 weight다.
+uniform이라면 예를 들어
+1
+M = 4, ω = .
+m
+4
+15.3 안쪽 합
+Lp
+(cid:88)
+ℓ=1
+은 한 probe 안의 recurrent step들을 합친다.
+19
+
+===== PAGE 20 =====
+15.4 ν
+m,ℓ
+probe m의 step ℓ에 주는 weight다.
+uniform이라면
+1
+ν =
+m,ℓ
+L
+p
+처럼 둘 수 있다.
+15.5 한 JS 항
+D (p ,p )
+JS i,m,ℓ,n j,m,ℓ,n
+는 같은 probe m, 같은 step ℓ, 같은 learning iteration n에서 두 actor action distribution의 차이다.
+15.6 전체 의미
+DQ = 여러 canonical 상황에서 본 두 actor의 평균적인 behavioral difference
+ij,n
+라고 이해하면 된다.
+16 Objective identifiability
+여기서 identifiability는 “현재 probe bank의 behavioral distance를 이용해 same-objective와 different-
+objective pair를 분리할 수 있는가” 라는 좁은 의미다.
+reward function 자체를 완전히 복원한다는 의미는 아니다.
+17 δ 을 0부터
+in
+δ = maxDQ,⋆.
+in ij
+zi=zj
+same-objective pair만 모은 뒤 그중 distance가 가장 큰 값을 고른다.
+왜 max인가?
+threshold 아래에 same-objective pair를 모두 넣고 싶다면 가장 멀리 떨어진 same-objective pair까지
+고려해야 하기 때문이다.
+숫자 예제
+same-objective distances가
+0.05, 0.08, 0.12, 0.20
+이면
+δ = 0.20.
+in
+20
+
+===== PAGE 21 =====
+18 δ 을 0부터
+out
+δ = min DQ,⋆.
+out ij
+zi̸=zj
+different-objective pair만 모은 뒤 그중 distance가 가장 작은 값을 고른다.
+왜 min인가?
+different-objective pair 중 가장 same-objective처럼 보이는, 즉 가장 헷갈리는 pair를 기준으로 해야
+하기 때문이다.
+숫자 예제
+different-objective distances가
+0.55, 0.62, 0.71, 0.83
+이면
+δ = 0.55.
+out
+19 Separation margin ∆
+Q
+∆ = δ −δ .
+Q out in
+예를 들어
+δ = 0.20, δ = 0.55
+in out
+이면
+∆ = 0.35.
+Q
+19.1 ∆ > 0
+Q
+same-objective의 가장 큰 distance보다 different-objective의 가장 작은 distance가 더 크다.
+즉 둘 사이에 빈 gap이 있다.
+19.2 ∆ = 0
+Q
+두 boundary가 맞닿는다.
+19.3 ∆ < 0
+Q
+두 영역이 겹친다.
+어떤 same-objective pair가 어떤 different-objective pair보다 더 멀게 보일 수 있다.
+따라서 behavioral distance만으로 perfect classification을 일반적으로 보장할 수 없다.
+21
+
+===== PAGE 22 =====
+20 ϵ과 error bound
+실제 smoothed distance가 reference distance에서 최대 ϵ만큼 벗어난다고 하자.
+(cid:12) (cid:12)
+(cid:12)D Q −DQ,⋆(cid:12) ≤ ϵ.
+(cid:12) ij,n ij (cid:12)
+절댓값 부등식을 풀면
+−ϵ ≤ D Q −DQ,⋆ ≤ ϵ.
+ij,n ij
+양쪽에 DQ,⋆를 더하면
+ij
+DQ,⋆−ϵ ≤ D Q ≤ DQ,⋆+ϵ.
+ij ij,n ij
+즉 measured distance가 ideal/reference distance에서 좌우로 최대 ϵ만큼 움직일 수 있다는 뜻이다.
+21 왜 2ϵ < ∆ 인가: 한 줄도 생략하지 않은 유도
+Q
+same-objective의 reference maximum은
+δ .
+in
+error가 가장 나쁘게 +ϵ 방향으로 작용하면
+δ +ϵ.
+in
+different-objective의 reference minimum은
+δ .
+out
+error가 가장 나쁘게 −ϵ 방향으로 작용하면
+δ −ϵ.
+out
+두 영역이 겹치지 않으려면
+δ +ϵ < δ −ϵ.
+in out
+양쪽에 ϵ을 더하면
+δ +2ϵ < δ .
+in out
+양쪽에서 δ 을 빼면
+in
+2ϵ < δ −δ .
+out in
+22
+
+===== PAGE 23 =====
+정의상
+∆ = δ −δ .
+Q out in
+따라서
+2ϵ < ∆ .
+Q
+반드시 이해
+이 결과는 learning convergence theorem이 아니다.
+두 class 사이에 separation gap이 있고, 양쪽의 worst-case estimation error를 합쳐도 gap보다
+작으면 threshold classification이 뒤집히지 않는다는 단순한 margin robustness 결과다.
+22 Midpoint threshold
+두 boundary의 중간을
+δ +δ
+in out
+τ =
+Q
+2
+로 둔다.
+예를 들어
+δ = 0.20, δ = 0.55
+in out
+이면
+0.20+0.55
+τ = = 0.375.
+Q
+2
+주의
+실제 training에서는 true objective label을 모르므로 oracle δ , δ 을 직접 알 수 없다. 따라서
+in out
+theoretical midpoint threshold와 practical threshold selection은 구분해야 한다.
+23 EMA를 0부터
+D = (1−β)D +βD .
+new old current
+D의 bar는 smoothed value라는 뜻이다.
+0 < β ≤ 1.
+β가 작으면 과거 값을 많이 유지한다.
+예를 들어
+23
+
+===== PAGE 24 =====
+β = 0.1
+이면
+D = 0.9D +0.1D .
+new old current
+β가 크면 현재 observation을 빠르게 따라간다.
+숫자 예제
+D = 0.4, D = 0.6, β = 0.2
+old current
+이면
+D = 0.8(0.4)+0.2(0.6) = 0.44.
+new
+EMA는 theorem이 아니라 noise를 줄이기 위한 method design이다.
+24 Affinity score의 exponential transformation
+(cid:32) Q(cid:33)
+D
+ij
+w = exp − .
+ij
+τ
+D
+τ > 0는 distance scale을 조절하는 parameter다.
+D
+D = 0
+이면
+w = e0 = 1.
+distance가 커지면 exponent가 더 음수가 되어 w가 작아진다.
+따라서
+Q
+D ↓⇒ w ↑ .
+ij ij
+24.1 왜 probability가 아닌가
+w ̸= P(z = z | data).
+ij i j
+현재 w는 calibrated Bayesian model의 posterior가 아니라 distance를 exponential function으로
+변환한 score다.
+24
+
+===== PAGE 25 =====
+25 Threshold gate
+가장 단순하게는
+Q
+g = 1[D < τ ]
+ij ij Q
+처럼 생각할 수 있다.
+Q
+D < τ
+ij Q
+이면 gate가 열리고,
+Q
+D ≥ τ
+ij Q
+이면 닫힌다.
+gate는 low-affinity peer를 거르는 장치이지 epistemic uncertainty 자체를 추정하는 detector가 아니다.
+26 Warm-up
+초기 random policy들은 objective가 달라도 비슷한 action distribution을 낼 수 있다.
+따라서
+DQ ≈ 0
+ij
+가 쉽게 나올 수 있다.
+그래서
+g = 0, n < N
+ij,n warm
+으로 초기에는 transfer를 막는다.
+주의
+N 이후 identifiability가 반드시 생긴다는 theorem은 없다. warm-up은 practical design
+warm
+choice다.
+Q
+27 Canonical critic value v
+i
+vQ
+i,m,ℓ,n
+는 canonical probe m, step ℓ, iteration n에서 agent i critic이 출력한 value다.
+즉
+“critic i가 이 canonical history를 얼마나 가치 있다고 평가하는가”
+를 나타낸다.
+25
+
+===== PAGE 26 =====
+28 Critic peer loss 완전 해체
+Lpeer = (cid:88) α (cid:88) ω ν (cid:104) vQ−sg(vQ) (cid:105)2 .
+i i←j m m,ℓ i j
+j m,ℓ
+28.1 L
+loss다. optimization은 보통 loss를 작게 만드는 방향으로 parameter를 update한다.
+(cid:80)
+28.2
+j
+accepted donor들을 모두 합친다.
+28.3 α
+i←j
+donor j가 receiver i에게 주는 영향의 크기다.
+i ← j
+의 방향을 기억한다.
+(cid:80)
+28.4
+m,ℓ
+여러 canonical probe와 recurrent step에서 discrepancy를 합친다.
+28.5 ω ν
+m m,ℓ
+각 probe와 step의 weight다.
+28.6 vQ −vQ
+i j
+같은 canonical condition에서 두 critic value output의 차이다.
+28.7 왜 제곱하는가
+(v −v )2
+i j
+로 만들면 차이의 부호와 관계없이 magnitude를 positive loss로 만든다.
+(3−5)2 = (−2)2 = 4
+이고
+(5−3)2 = 22 = 4.
+즉 방향이 아니라 얼마나 다른지를 본다.
+26
+
+===== PAGE 27 =====
+29 Gradient와 gradient descent를 0부터
+critic parameter를
+ϕ
+라고 하고 loss를
+L(ϕ)
+라고 하자.
+gradient
+∇ L
+ϕ
+은 parameter를 조금 움직였을 때 loss가 어느 방향으로 얼마나 변하는지를 나타낸다.
+gradient descent는 개념적으로
+ϕ = ϕ −η∇ L
+new old ϕ
+처럼 loss가 감소하는 방향으로 parameter를 업데이트한다.
+η > 0는 learning rate다.
+backpropagation은 neural network에서 이 gradient를 계산하는 절차다.
+30 Stop-gradient를 0부터
+sg(vQ)
+j
+는 forward value는 그대로 사용하지만 backward gradient는 donor 쪽으로 전달하지 않는 연산이다.
+숫자로는
+sg(3.2) = 3.2
+처럼 그대로 사용한다.
+하지만 donor parameter에 대해서는
+∇ sg(vQ) = 0
+ϕj j
+으로 취급한다.
+즉 receiver i의 loss 때문에 donor j의 critic parameter가 직접 업데이트되지 않는다.
+27
+
+===== PAGE 28 =====
+0부터 설명
+teacher–student 비유:
+donor j가 “이 상황의 value는 3.2 정도”라고 답을 준다.
+receiver i는 그 답에 가까워지도록 자기 critic을 수정한다.
+하지만 student의 loss 때문에 teacher의 답안 자체를 수정하지는 않는다.
+31 Local critic loss와 peer loss
+Lcritic = c LV +λ Lpeer.
+i V i peer i
+• LV: 자기 local rollout으로 계산한 ordinary value loss,
+i
+• c : local value loss coefficient,
+V
+• Lpeer: peer distillation loss,
+i
+• λ : peer loss 강도
+peer
+다.
+λ = 0
+peer
+이면 peer transfer를 사용하지 않는다.
+32 왜 actor를 직접 공유하지 않는가
+actor는 실제 행동을 직접 결정한다.
+잘못된 edge에서 actor까지 averaging하면 behavior policy가 직접 오염될 수 있다.
+PGCT는 peer information을 critic-learning channel에만 직접 넣는다.
+그러나
+critic-only transfer ̸= actor에 zero effect
+이다.
+critic은 advantage estimate 등을 통해 actor learning에 간접적으로 영향을 줄 수 있다.
+정확한 의미는
+peer information이 직접 주입되는 channel이 critic뿐이다.
+이다.
+28
+
+===== PAGE 29 =====
+33 핵심 미검증 연결
+DQ small ̸⇒ U > 0.
+ij i←j
+actor-side behavior가 비슷하다고 critic transfer usefulness가 자동으로 따라오는 것은 아니다.
+그래서
+DQ −→ ? U
+ij i←j
+의 물음표가 중요하다.
+이는 theorem이 아니라 핵심 empirical question이다.
+34 Matched branch experiment
+같은 checkpoint를 두 branch로 복제한다.
+34.1 Transfer branch
+같은 local batch를 사용하면서 donor j의 critic information까지 사용한다.
+Θi←j,T.
+n,+
+34.2 Independent branch
+같은 시작 checkpoint, 같은 local batch, 같은 optimizer configuration을 사용하지만 peer information
+은 쓰지 않는다.
+Θi,0 .
+n,+
+34.3 왜 matched인가
+두branch의data나seed가크게다르면성능차이가transfer때문인지randomness때문인지구분하기
+어렵다.
+따라서 가능한 한 peer information 사용 여부만 다르게 만든다.
+34.4 Estimated utility
+U(cid:98) = J(cid:98)transfer −J(cid:98)independent .
+hat은 finite evaluation data에서 계산한 estimate라는 뜻이다.
+29
+
+===== PAGE 30 =====
+35 Scatter plot
+각 pair/checkpoint마다
+x = D
+i
+Q
+j
+, y = U(cid:98)i←j
+를 하나의 점으로 찍는다.
+예를 들어
+(DQ,U(cid:98)) = (0.1,2.0)
+이면 x축 0.1, y축 2.0에 점을 찍는다.
+우리가 기대하는 경향은
+DQ ↓⇒ U ↑ .
+즉 distance가 작은 peer일수록 utility가 큰 경향이다.
+36 Correlation이 무엇인가
+correlation은 두 변수의 관계 방향과 강도를 요약하는 statistic이다.
+PGCT에서는 distance가 커질수록 utility가 감소하는 방향을 기대하므로 negative association이
+바람직하다.
+37 Spearman rank correlation을 0부터
+Spearman correlation은 raw value 자체보다 순위(rank)를 비교한다.
+distance가
+DQ = (0.1,0.4,0.8)
+이면 작은 순서 rank는
+R = (1,2,3).
+D
+utility가
+U = (5.0,2.0,−1.0)
+이면 오름차순 rank는
+R = (3,2,1)
+U
+처럼 반대 방향이 된다.
+30
+
+===== PAGE 31 =====
+Spearman coefficient는
+ρ
+Spearman
+로 쓰고 범위는
+−1 ≤ ρ ≤ 1.
+Spearman
+• ρ ≈ 1: 강한 같은 방향 monotonic relation,
+• ρ ≈ 0: 뚜렷한 monotonic relation이 약함,
+• ρ ≈ −1: 강한 반대 방향 monotonic relation
+이다.
+PGCT가 기대하는 부호는
+ρ < 0.
+Spearman
+37.1 왜 Spearman인가
+우리는 반드시
+U = a+bD
+같은 정확한 직선 관계를 기대하는 것이 아니다.
+단지
+DQ가 작을수록 대체로 U가 크다
+라는 monotonic tendency를 보고 싶다.
+Spearman은 rank-based이므로 이런 목적에 자연스럽다.
+주의
+ρ < 0 하나만으로 PGCT 성공을 주장하면 안 된다. 여러 seed/checkpoint의 일관성, confidence
+interval, negative-transfer rate, 실제 learning performance를 함께 봐야 한다.
+38 Oracle Objective Share
+Oracle baseline은 proposed algorithm이 아니다.
+evaluation에서 true objective label을 알고 같은 objective끼리만 sharing한다고 가정한다.
+검사 질문은
+“objective relation을 완벽히 알았다면 sharing이 유용한가?”
+31
+
+===== PAGE 32 =====
+이다.
+만약
+J ≤ J
+Oracle Independent
+이면 환경에서 sharing의 잠재 이득 자체가 약할 수 있다.
+주의
+Oracle Objective Share는 mathematical upper bound가 아니다. “oracle”은 objective label을
+안다는 의미이지 모든 가능한 transfer policy 중 최적이라는 의미가 아니다.
+39 Wrong Share
+Wrong Share는 의도적으로 different-objective peer와 sharing한다.
+검사 질문은
+“heterogeneity를 무시한 sharing이 실제로 해로운가?”
+이다.
+만약
+J ≈ J
+Wrong Oracle
+이면 objective mismatch가 별로 문제가 되지 않는 environment일 수 있다.
+40 Case B
+가장 위험한 failure case는
+DQ ≈ 0
+ij
+이면서
+U < 0
+i←j
+인 경우다.
+behavioral probe에서는 거의 동일하게 보이지만 critic transfer는 해롭다.
+즉
+behavioral similarity ̸= transfer compatibility.
+current affinity gate는 이런 pair를 자동으로 막지 못할 수 있다.
+32
+
+===== PAGE 33 =====
+41 ∆ ≤ 0와 automatic abstention
+Q
+∆ ≤ 0
+Q
+는 same/different objective distance 영역이 깔끔하게 분리되지 않는다는 뜻이다.
+하지만 current gate가 ∆ 의 sign을 실시간으로 알고 자동으로 모든 transfer를 막는 것은 아니다.
+Q
+따라서
+∆ ≤ 0 ̸⇒ g = 0.
+Q ij
+주의
+다음 표현은 피한다.
+• safe transfer,
+• guaranteed negative-transfer prevention,
+• non-identifiability automatically triggers abstention.
+더 정확한 표현은 conservative affinity-thresholded transfer다.
+42 성능 기호
+J
+Independent
+는 independent learning baseline,
+J
+Oracle
+은 objective-oracle sharing,
+J
+Wrong
+은 wrong sharing,
+J
+PGCT
+는 PGCT의 evaluation performance다.
+논문에서는 J가 정확히 어떤 metric인지 evaluation return인지 success rate인지 명시해야 한다.
+43 실험 순서가 왜 이 순서인가
+첫 번째:
+J > J ?
+Oracle Independent
+33
+
+===== PAGE 34 =====
+sharing할 잠재 가치가 있는가?
+두 번째:
+J < J ?
+Wrong Oracle
+wrong sharing이 실제 문제인가?
+세 번째:
+DQ −→ ? U
+behavioral proxy가 실제 utility와 연결되는가?
+네 번째:
+J > J
+PGCT Independent
+및 unrestricted sharing과 비교해 실제 학습 성능이 좋아지는가?
+44 현재 의도적으로 제외한 수학
+이번 AAMAS 버전에서는 다음은 공부 범위에서 뺀다.
+• Hoeffding inequality와 union-bound sample-complexity analysis,
+• local-to-global connected-component recovery,
+• graph Laplacian perturbation,
+• Kronecker product,
+• strong convexity sensitivity proof,
+• nonlinear recurrent PPO convergence,
+• time-varying directed consensus convergence.
+이들은 “몰라서 누락”한 것이 아니라 현재 paper story에서 직접 필요하지 않아 의도적으로 제외한
+것이다.
+45 기호 전체 사전
+기호 의미
+i,j agent index. 보통 j가 donor, i가 receiver.
+n learning/update iteration index.
+t environment 또는 sequence time index.
+z agent i의 hidden objective label.
+i
+Cobj same-objective 여부 ground-truth indicator.
+ij
+1[·] 조건이 참이면 1, 거짓이면 0.
+34
+
+===== PAGE 35 =====
+기호 의미
+Q canonical probe bank.
+M probe trajectory 개수.
+ξ m번째 canonical recurrent input sequence.
+m
+L probe sequence 길이.
+p
+x probe m의 ℓ번째 externally specified input.
+(cid:101)m,ℓ
+h recurrent hidden state.
+t
+hQ canonical probe common initial hidden state.
+0
+θ actor parameter.
+i
+ϕ critic parameter.
+i
+π policy/actor.
+θi
+p canonical condition에서 actor가 출력한 action distribution.
+i,m,ℓ,n
+D Kullback–Leibler divergence.
+KL
+D Jensen–Shannon divergence.
+JS
+DQ raw probe-conditioned policy dissimilarity.
+ij,n
+Q
+D EMA-smoothed distance.
+ij,n
+ω probe trajectory weight.
+m
+ν recurrent probe-step weight.
+m,ℓ
+δ same-objective reference pairs 중 최대 distance.
+in
+δ different-objective reference pairs 중 최소 distance.
+out
+∆ separation margin = δ −δ .
+Q out in
+ϵ measured distance의 최대 reference error.
+τ distance-space threshold.
+Q
+β EMA coefficient.
+τ distance-to-affinity scale parameter.
+D
+w affinity score. Probability가 아님.
+ij
+g transfer gate.
+ij
+N independent warm-up duration.
+warm
+α donor j에서 receiver i로의 transfer allocation weight.
+i←j
+vQ canonical probe condition의 critic value output.
+i
+sg stop-gradient operator.
+LV local critic/value loss.
+i
+Lpeer peer critic distillation loss.
+i
+Lcritic local loss와 peer loss를 합친 critic objective.
+i
+λ peer loss coefficient.
+peer
+c local value loss coefficient.
+V
+T transfer operator.
+H evaluation horizon.
+Θ iteration n의 learning state를 묶어 표현한 기호.
+n
+(H)
+J horizon H의 evaluation return/performance.
+i
+(H,T)
+U directed transfer utility.
+i←j,n
+U(cid:98) finite evaluation으로 추정한 transfer utility.
+ρ rank-based monotonic correlation.
+Spearman
+∇ L parameter ϕ에 대한 loss gradient.
+ϕ
+η learning rate.
+35
+
+===== PAGE 36 =====
+46 수식 전체 읽기 연습
+46.1 Objective relation
+Cobj = 1[z = z ].
+ij i j
+읽기:
+“agent i,j의 objective label이 같으면 1, 다르면 0.”
+46.2 Behavioral distance
+M Lp
+DQ = (cid:88) ω (cid:88) ν D (p ,p ).
+ij,n m m,ℓ JS i,m,ℓ,n j,m,ℓ,n
+m=1 ℓ=1
+읽기:
+“같은 canonical probe bank에서 두 actor가 보인 action-distribution 차이를 모든 probe와 recurrent
+step에서 가중 평균한 값.”
+46.3 Separation margin
+∆ = δ −δ .
+Q out in
+읽기:
+“가장 헷갈리는 different-objective pair와 가장 다르게 보이는 same-objective pair 사이의 gap.”
+46.4 Robust pair separation
+2ϵ < ∆ .
+Q
+읽기:
+“양쪽 class에서 생길 수 있는 worst-case measurement error를 합쳐도 separation gap보다 작다.”
+46.5 Affinity
+Q
+w ij = e−D ij /τD.
+읽기:
+“smoothed distance가 작을수록 큰 affinity score가 되도록 exponential transformation한다.”
+46.6 Peer critic loss
+Lpeer = (cid:88) α (cid:88) ω ν [vQ−sg(vQ)]2.
+i i←j m m,ℓ i j
+j m,ℓ
+읽기:
+“accepted donor들의 canonical critic output을 receiver critic이 weighted squared-error로 따라가게
+한다.”
+36
+
+===== PAGE 37 =====
+46.7 Transfer utility
+U = E[J −J ].
+i←j transfer independent
+읽기:
+“같은 시작점에서 peer transfer를 사용했을 때와 쓰지 않았을 때의 평균적인 성능 차이.”
+46.8 Main empirical bridge
+DQ −→ ? U .
+ij i←j
+읽기:
+“behavioral similarity가 실제 transfer usefulness를 예측하는가? 이 화살표는 theorem이 아니라 실험
+질문이다.”
+47 교수님께 2분 설명
+교수님/심사에서 이렇게 설명
+“서로 다른 hidden objective를 가진 agent들이 무작정 정보를 공유하면 negative transfer가
+생길 수 있습니다. 하지만 objective label은 사용할 수 없기 때문에 모든 이웃 recurrent policy
+를 동일한 canonical history와 동일한 hidden-state initialization에서 평가합니다. 각 시점의
+action distribution을 Jensen–Shannon divergence로 비교해 DQ를 만들고, distance가 작은
+ij
+peer만critic-transfer후보로사용합니다.간단한separationmargin∆ 를정의하면estimation
+Q
+error가 2ϵ < ∆ 를 만족할 때 pairwise separation이 유지됩니다. 다만 actor behavior가 비슷
+Q
+하다고 critic transfer가 반드시 유용한 것은 아니므로, 동일 checkpoint의 transfer branch와
+independent branch를 비교해 U 를 직접 측정하고, DQ가 실제 transfer utility를 예측하는
+i←j
+지를 핵심 실험으로 검증합니다.”
+48 최종 체크리스트
+다음 질문에 스스로 답할 수 있으면 ex4의 수학을 충분히 이해한 것이다.
+1. 1[·]는 무엇인가?
+2. E[·]는 무엇인가?
+3. i ← j의 방향은 무엇인가?
+4. H,T,n은 utility에서 무엇인가?
+5. recurrent hidden state는 왜 history에 의존하는가?
+6. 왜 hQ = 0으로 맞추는가?
+0
+7. probability distribution의 합은 왜 1인가?
+8. KL 식에서 p(a)/q(a), log, p(a)는 각각 어떤 역할인가?
+9. KL은 왜 비대칭인가?
+37
+
+===== PAGE 38 =====
+10. JS는 왜 대칭인가?
+11. DQ의 m,ℓ,ω,ν는 무엇인가?
+ij
+12. 왜 DQ를 objective distance라고 부르면 안 되는가?
+ij
+13. 왜 δ 은 max인가?
+in
+14. 왜 δ 은 min인가?
+out
+15. ∆ > 0의 의미는 무엇인가?
+Q
+16. 절댓값 error bound를 어떻게 풀어쓰는가?
+17. 왜 2ϵ < ∆ 인가?
+Q
+18. midpoint threshold는 어떻게 계산하는가?
+19. EMA에서 β가 크고 작을 때 무엇이 달라지는가?
+20. e−D/τD는 왜 distance가 커질수록 작아지는가?
+21. 왜 w 는 posterior probability가 아닌가?
+ij
+22. gate와 uncertainty detector는 어떻게 다른가?
+23. vQ는 무엇인가?
+i
+24. squared error는 왜 사용하는가?
+25. gradient는 무엇인가?
+26. stop-gradient는 forward와 backward에서 무엇을 하는가?
+27. critic-only transfer가 actor에 zero effect라는 뜻이 아닌 이유는?
+28. DQ → ? U의 물음표는 왜 필요한가?
+29. matched branch는 왜 같은 checkpoint/batch/seed를 써야 하는가?
+30. U(cid:98)의 hat은 무엇인가?
+31. scatter plot의 x축과 y축은 무엇인가?
+32. Spearman correlation은 무엇이고 왜 음수를 기대하는가?
+33. Oracle Share는 무엇을 검사하는가?
+34. Wrong Share는 무엇을 검사하는가?
+35. DQ ≈ 0, U < 0가 왜 위험한가?
+36. ∆ ≤ 0가 automatic abstention을 뜻하지 않는 이유는?
+Q
+38
+
+===== PAGE 39 =====
+49 한 페이지 요약
+Hidden objective: z
+i
+Objective relation: Cobj = 1[z = z ]
+ij i j
+Canonical condition: Q, hQ = 0
+0
+Actor output: p (a)
+i,m,ℓ,n
+Distribution difference: D (p ,p )
+JS i j
+Aggregate distance: DQ
+ij,n
+Same-objective worst case: δ
+in
+Different-objective worst case: δ
+out
+Separation margin: ∆ = δ −δ
+Q out in
+Minimal theorem: 2ϵ < ∆
+Q
+Smoothing: D = (1−β)D +βD
+new old current
+Q
+Affinity: w ij = e−D ij /τD
+Peer critic loss: Lpeer = (cid:88) α (cid:88) ω ν [vQ−sg(vQ)]2
+i i←j m m,ℓ i j
+j m,ℓ
+Transfer utility: U = E[J −J ]
+i←j transfer independent
+Main empirical question: DQ −→ ? U
+ij i←j
+Desired association: ρ < 0
+Spearman
+Critical failure case: DQ ≈ 0, U < 0.
+ij i←j
+목표는 어려운 수학을 추가하는 것이 아니라, 남겨둔 모든 수학을 알고 쓰는 것이다.
+39

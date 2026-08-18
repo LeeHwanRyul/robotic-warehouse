@@ -616,6 +616,9 @@ class MultiTeamWarehouse(Warehouse):
     def _is_requested_shelf(self, shelf: Shelf) -> bool:
         return any(shelf in team_queue for team_queue in self.team_request_queues)
 
+    def _requested_shelves_for_observation(self, agent):
+        return self._requested_shelves_for_agent(agent)
+
     def _distance(self, source_x: int, source_y: int, target: Tuple[int, int]) -> int:
         target_x, target_y = target
         return abs(int(source_x) - int(target_x)) + abs(int(source_y) - int(target_y))

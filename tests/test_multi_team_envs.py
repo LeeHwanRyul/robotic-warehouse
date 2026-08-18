@@ -12,7 +12,7 @@ sys.path.insert(0, PROJECT_DIR)
 
 from rware.multi_team_grid import GridAction, MultiTeamGrid
 from rware.multi_team_warehouse import MultiTeamWarehouse, TeamRewardMode
-from rware.warehouse import Action, Direction, RewardType
+from rware.warehouse import Action, Direction, ObservationType, RewardType
 
 
 def test_multiteam_rware_hides_team_info_by_default():
@@ -40,6 +40,82 @@ def test_multiteam_rware_hides_team_info_by_default():
     for team_id, team_queue in enumerate(env.team_request_queues):
         assert len(team_queue) == 2
         assert all(env.shelf_team_ids[shelf.id] == team_id for shelf in team_queue)
+
+
+def test_multiteam_rware_observes_only_own_team_requested_shelves():
+    env = MultiTeamWarehouse(
+        shelf_columns=3,
+        column_height=1,
+        shelf_rows=1,
+        n_agents=2,
+        msg_bits=0,
+        sensor_range=2,
+        request_queue_size=2,
+        request_queue_size_per_team=1,
+        max_inactivity_steps=None,
+        max_steps=20,
+        reward_type=RewardType.INDIVIDUAL,
+        layout=".....\n.x.xg\n.....",
+        observation_type=ObservationType.DICT,
+        n_teams=2,
+        team_assignments=[0, 1],
+        team_reward_mode=TeamRewardMode.INDIVIDUAL,
+    )
+    env.reset(seed=3)
+
+    team0_shelf, team1_shelf = env.shelfs[:2]
+    env.shelf_team_ids = {team0_shelf.id: 0, team1_shelf.id: 1}
+    env.shelfs_by_team = [[team0_shelf], [team1_shelf]]
+    env.team_request_queues = [[team0_shelf], [team1_shelf]]
+    env._sync_global_request_queue()
+
+    env.agents[0].x = 2
+    env.agents[0].y = 0
+    env.agents[0].dir = Direction.DOWN
+    env.agents[1].x = 2
+    env.agents[1].y = 2
+    env.agents[1].dir = Direction.UP
+    env._recalc_grid()
+
+    def sensor_index(agent, shelf):
+        side = 2 * env.sensor_range + 1
+        dx = int(shelf.x) - int(agent.x)
+        dy = int(shelf.y) - int(agent.y)
+        return (dy + env.sensor_range) * side + (dx + env.sensor_range)
+
+    obs0 = env._make_obs(env.agents[0])
+    obs1 = env._make_obs(env.agents[1])
+    team0_idx_for_agent0 = sensor_index(env.agents[0], team0_shelf)
+    team1_idx_for_agent0 = sensor_index(env.agents[0], team1_shelf)
+    team0_idx_for_agent1 = sensor_index(env.agents[1], team0_shelf)
+    team1_idx_for_agent1 = sensor_index(env.agents[1], team1_shelf)
+
+    assert obs0["sensors"][team0_idx_for_agent0]["shelf_requested"] == [1]
+    assert obs0["sensors"][team1_idx_for_agent0]["shelf_requested"] == [0]
+    assert obs1["sensors"][team0_idx_for_agent1]["shelf_requested"] == [0]
+    assert obs1["sensors"][team1_idx_for_agent1]["shelf_requested"] == [1]
+
+    slow_obs_space = env.observation_space[0]
+    flat_obs0 = gym.spaces.flatten(slow_obs_space, obs0)
+    flat_obs1 = gym.spaces.flatten(slow_obs_space, obs1)
+    env._use_fast_obs()
+    fast_obs0 = env._make_obs(env.agents[0])
+    fast_obs1 = env._make_obs(env.agents[1])
+
+    assert np.array_equal(fast_obs0, flat_obs0)
+    assert np.array_equal(fast_obs1, flat_obs1)
+
+    bits_per_sensor_cell = 7
+    self_feature_count = 8
+    requested_offset = 6
+
+    def flat_requested_index(sensor_idx):
+        return self_feature_count + sensor_idx * bits_per_sensor_cell + requested_offset
+
+    assert fast_obs0[flat_requested_index(team0_idx_for_agent0)] == 1.0
+    assert fast_obs0[flat_requested_index(team1_idx_for_agent0)] == 0.0
+    assert fast_obs1[flat_requested_index(team0_idx_for_agent1)] == 0.0
+    assert fast_obs1[flat_requested_index(team1_idx_for_agent1)] == 1.0
 
 
 def test_multiteam_rware_rewards_only_latent_shelf_team():
