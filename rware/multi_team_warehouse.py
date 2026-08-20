@@ -93,10 +93,25 @@ class MultiTeamWarehouse(Warehouse):
         wrong_team_penalty: float = 0.0,
         step_penalty: float = 0.0,
         failed_forward_penalty: float = 0.0,
+        forward_movement_reward: float = 0.0,
+        stationary_action_penalty: float = 0.0,
+        turn_action_penalty: float = 0.0,
+        noop_action_penalty: float = 0.0,
+        invalid_toggle_load_penalty: float = 0.0,
+        repeated_stationary_action_penalty: float = 0.0,
+        stationary_streak_penalty_after: int = 2,
+        movement_reward_requires_progress: bool = False,
+        new_cell_reward: float = 0.0,
+        revisit_cell_penalty: float = 0.0,
         requested_shelf_pickup_reward: float = 0.0,
         requested_shelf_progress_reward: float = 0.0,
         goal_progress_reward: float = 0.0,
+        return_progress_reward: float = 0.0,
+        reward_only_new_best_progress: bool = True,
         delivered_shelf_drop_reward: float = 0.0,
+        require_delivered_shelf_return: bool = False,
+        shelf_return_reward: float = 0.0,
+        wrong_shelf_return_penalty: float = 0.0,
         premature_drop_penalty: float = 0.0,
         wrong_shelf_pickup_penalty: float = 0.0,
         unrequested_shelf_pickup_penalty: float = 0.0,
@@ -173,10 +188,25 @@ class MultiTeamWarehouse(Warehouse):
         self.wrong_team_penalty = float(wrong_team_penalty)
         self.step_penalty = float(step_penalty)
         self.failed_forward_penalty = float(failed_forward_penalty)
+        self.forward_movement_reward = float(forward_movement_reward)
+        self.stationary_action_penalty = float(stationary_action_penalty)
+        self.turn_action_penalty = float(turn_action_penalty)
+        self.noop_action_penalty = float(noop_action_penalty)
+        self.invalid_toggle_load_penalty = float(invalid_toggle_load_penalty)
+        self.repeated_stationary_action_penalty = float(repeated_stationary_action_penalty)
+        self.stationary_streak_penalty_after = int(stationary_streak_penalty_after)
+        self.movement_reward_requires_progress = bool(movement_reward_requires_progress)
+        self.new_cell_reward = float(new_cell_reward)
+        self.revisit_cell_penalty = float(revisit_cell_penalty)
         self.requested_shelf_pickup_reward = float(requested_shelf_pickup_reward)
         self.requested_shelf_progress_reward = float(requested_shelf_progress_reward)
         self.goal_progress_reward = float(goal_progress_reward)
+        self.return_progress_reward = float(return_progress_reward)
+        self.reward_only_new_best_progress = bool(reward_only_new_best_progress)
         self.delivered_shelf_drop_reward = float(delivered_shelf_drop_reward)
+        self.require_delivered_shelf_return = bool(require_delivered_shelf_return)
+        self.shelf_return_reward = float(shelf_return_reward)
+        self.wrong_shelf_return_penalty = float(wrong_shelf_return_penalty)
         self.premature_drop_penalty = float(premature_drop_penalty)
         self.wrong_shelf_pickup_penalty = float(wrong_shelf_pickup_penalty)
         self.unrequested_shelf_pickup_penalty = float(unrequested_shelf_pickup_penalty)
@@ -185,13 +215,26 @@ class MultiTeamWarehouse(Warehouse):
             "requested_shelf_pickup_reward",
             "requested_shelf_progress_reward",
             "goal_progress_reward",
+            "return_progress_reward",
             "delivered_shelf_drop_reward",
+            "shelf_return_reward",
+            "wrong_shelf_return_penalty",
             "premature_drop_penalty",
+            "forward_movement_reward",
+            "stationary_action_penalty",
+            "turn_action_penalty",
+            "noop_action_penalty",
+            "invalid_toggle_load_penalty",
+            "repeated_stationary_action_penalty",
+            "new_cell_reward",
+            "revisit_cell_penalty",
             "wrong_shelf_pickup_penalty",
             "unrequested_shelf_pickup_penalty",
         ]:
             if getattr(self, name) < 0.0:
                 raise ValueError(f"{name} must be non-negative")
+        if self.stationary_streak_penalty_after < 0:
+            raise ValueError("stationary_streak_penalty_after must be non-negative")
         self.reveal_team_info = reveal_team_info
 
         self.shelf_team_ids: Dict[int, int] = {}
@@ -200,10 +243,37 @@ class MultiTeamWarehouse(Warehouse):
         self.goal_team_ids: Dict[Tuple[int, int], int] = {}
         self.goals_by_team: List[List[Tuple[int, int]]] = [[] for _ in range(n_teams)]
         self.team_delivery_counts = np.zeros(n_teams, dtype=np.int64)
+        self.team_return_counts = np.zeros(n_teams, dtype=np.int64)
         self._last_delivery_events = []
+        self._last_return_events = []
+        self._last_wrong_return_events = []
+        self._last_pickup_events = []
+        self._last_invalid_toggle_events = []
         self._last_reward_shaping = np.zeros(self.n_agents, dtype=np.float32)
         self._picked_request_shelf_ids_by_agent: List[Set[int]] = [
             set() for _ in range(self.n_agents)
+        ]
+        self._shelf_home_positions: Dict[int, Tuple[int, int]] = {}
+        self._shelves_awaiting_return: Set[int] = set()
+        self._shelf_return_team_ids: Dict[int, int] = {}
+        self._visited_cells_by_agent: List[Set[Tuple[int, int]]] = [
+            set() for _ in range(self.n_agents)
+        ]
+        self._stationary_action_streak = np.zeros(self.n_agents, dtype=np.int32)
+        self._best_requested_shelf_distances: List[Optional[int]] = [
+            None for _ in range(self.n_agents)
+        ]
+        self._best_goal_distances: List[Optional[int]] = [
+            None for _ in range(self.n_agents)
+        ]
+        self._best_return_distances: List[Optional[int]] = [
+            None for _ in range(self.n_agents)
+        ]
+        self._best_delivery_distances_by_agent: List[Dict[int, int]] = [
+            {} for _ in range(self.n_agents)
+        ]
+        self._best_return_distances_by_agent: List[Dict[int, int]] = [
+            {} for _ in range(self.n_agents)
         ]
 
         # Learned / inferred dynamic communication graph.
@@ -459,6 +529,16 @@ class MultiTeamWarehouse(Warehouse):
             shelf for team_queue in self.team_request_queues for shelf in team_queue
         ]
 
+    def _remember_shelf_home_positions(self) -> None:
+        self._shelf_home_positions = {
+            shelf.id: (int(shelf.x), int(shelf.y))
+            for shelf in self.shelfs
+        }
+
+    def _is_shelf_at_home(self, shelf: Shelf) -> bool:
+        home = self._shelf_home_positions.get(shelf.id)
+        return home == (int(shelf.x), int(shelf.y))
+
     def _replace_team_request(self, team_id: int, delivered_shelf: Shelf):
         team_queue = self.team_request_queues[team_id]
         if delivered_shelf not in team_queue:
@@ -477,6 +557,7 @@ class MultiTeamWarehouse(Warehouse):
         for picked_shelf_ids in self._picked_request_shelf_ids_by_agent:
             picked_shelf_ids.discard(delivered_shelf.id)
         self._sync_global_request_queue()
+        self._reset_progress_baselines()
 
     def _reward_delivery(self, rewards: np.ndarray, team_id: int, carrier_id: int) -> List[int]:
         rewarded_agents: List[int] = []
@@ -503,6 +584,23 @@ class MultiTeamWarehouse(Warehouse):
 
         return rewarded_agents
 
+    def _reward_shelf_return(self, rewards: np.ndarray, team_id: int, carrier_id: int) -> List[int]:
+        rewarded_agents: List[int] = []
+        if self.team_reward_mode == TeamRewardMode.ALL:
+            rewards += self.shelf_return_reward
+            rewarded_agents = list(range(self.n_agents))
+        elif self.team_reward_mode == TeamRewardMode.INDIVIDUAL:
+            if carrier_id > 0 and self.agent_team_ids[carrier_id - 1] == team_id:
+                rewards[carrier_id - 1] += self.shelf_return_reward
+                rewarded_agents = [carrier_id - 1]
+        elif self.team_reward_mode == TeamRewardMode.TEAM:
+            team_members = np.flatnonzero(self.agent_team_ids == team_id)
+            rewards[team_members] += self.shelf_return_reward
+            rewarded_agents = team_members.astype(np.int32).tolist()
+        else:
+            raise ValueError(f"Unsupported team reward mode: {self.team_reward_mode}")
+        return rewarded_agents
+
     def _agent_team_id(self, agent) -> int:
         return int(self.agent_team_ids[agent.id - 1])
 
@@ -517,6 +615,9 @@ class MultiTeamWarehouse(Warehouse):
 
     def _is_requested_shelf(self, shelf: Shelf) -> bool:
         return any(shelf in team_queue for team_queue in self.team_request_queues)
+
+    def _requested_shelves_for_observation(self, agent):
+        return self._requested_shelves_for_agent(agent)
 
     def _distance(self, source_x: int, source_y: int, target: Tuple[int, int]) -> int:
         target_x, target_y = target
@@ -540,7 +641,7 @@ class MultiTeamWarehouse(Warehouse):
             return list(self.goals_by_team[team_id])
         return [tuple(map(int, goal)) for goal in self.goals]
 
-    def _carried_requested_shelf_goal_distance(self, agent) -> Optional[int]:
+    def _carried_requested_shelf_delivery_goal_distance(self, agent) -> Optional[int]:
         shelf = agent.carrying_shelf
         if shelf is None or not self._is_agent_requested_shelf(agent, shelf):
             return None
@@ -549,6 +650,56 @@ class MultiTeamWarehouse(Warehouse):
         if not goals:
             return None
         return min(self._distance(agent.x, agent.y, goal) for goal in goals)
+
+    def _carried_requested_shelf_return_distance(self, agent) -> Optional[int]:
+        shelf = agent.carrying_shelf
+        if shelf is None or not self._is_agent_requested_shelf(agent, shelf):
+            return None
+        if shelf.id not in self._shelves_awaiting_return:
+            return None
+        home = self._shelf_home_positions.get(shelf.id)
+        if home is None:
+            return None
+        return self._distance(agent.x, agent.y, home)
+
+    def _carried_requested_shelf_goal_distance(self, agent) -> Optional[int]:
+        if (
+            agent.carrying_shelf is not None
+            and agent.carrying_shelf.id in self._shelves_awaiting_return
+        ):
+            return self._carried_requested_shelf_return_distance(agent)
+        return self._carried_requested_shelf_delivery_goal_distance(agent)
+
+    def _reset_progress_baselines(self) -> None:
+        for agent_id, agent in enumerate(self.agents):
+            self._best_delivery_distances_by_agent[agent_id].clear()
+            self._best_return_distances_by_agent[agent_id].clear()
+            self._best_requested_shelf_distances[agent_id] = (
+                self._nearest_requested_shelf_distance(agent)
+                if agent.carrying_shelf is None
+                else None
+            )
+            if agent.carrying_shelf is None:
+                self._best_goal_distances[agent_id] = None
+                self._best_return_distances[agent_id] = None
+            elif agent.carrying_shelf.id in self._shelves_awaiting_return:
+                self._best_goal_distances[agent_id] = None
+                self._best_return_distances[agent_id] = (
+                    self._carried_requested_shelf_return_distance(agent)
+                )
+                if self._best_return_distances[agent_id] is not None:
+                    self._best_return_distances_by_agent[agent_id][
+                        int(agent.carrying_shelf.id)
+                    ] = int(self._best_return_distances[agent_id])
+            else:
+                self._best_goal_distances[agent_id] = (
+                    self._carried_requested_shelf_delivery_goal_distance(agent)
+                )
+                self._best_return_distances[agent_id] = None
+                if self._best_goal_distances[agent_id] is not None:
+                    self._best_delivery_distances_by_agent[agent_id][
+                        int(agent.carrying_shelf.id)
+                    ] = int(self._best_goal_distances[agent_id])
 
     def _progress_reward(
         self,
@@ -559,6 +710,59 @@ class MultiTeamWarehouse(Warehouse):
         if coefficient <= 0.0 or before_distance is None or after_distance is None:
             return 0.0
         progress = float(before_distance - after_distance)
+        if self.normalize_shaping_rewards:
+            progress /= self._distance_scale()
+        return float(coefficient * progress)
+
+    def _new_best_progress_reward(
+        self,
+        best_distances: List[Optional[int]],
+        agent_id: int,
+        after_distance: Optional[int],
+        coefficient: float,
+    ) -> float:
+        if coefficient <= 0.0 or after_distance is None:
+            return 0.0
+
+        best_distance = best_distances[agent_id]
+        if best_distance is None:
+            best_distances[agent_id] = int(after_distance)
+            return 0.0
+        if after_distance >= best_distance:
+            return 0.0
+
+        progress = float(best_distance - after_distance)
+        best_distances[agent_id] = int(after_distance)
+        if self.normalize_shaping_rewards:
+            progress /= self._distance_scale()
+        return float(coefficient * progress)
+
+    def _new_best_shelf_progress_reward(
+        self,
+        best_distances_by_agent: List[Dict[int, int]],
+        scalar_best_distances: List[Optional[int]],
+        agent_id: int,
+        shelf_id: int,
+        after_distance: Optional[int],
+        coefficient: float,
+    ) -> float:
+        if coefficient <= 0.0 or after_distance is None:
+            return 0.0
+
+        shelf_id = int(shelf_id)
+        best_distances = best_distances_by_agent[agent_id]
+        best_distance = best_distances.get(shelf_id)
+        if best_distance is None:
+            best_distances[shelf_id] = int(after_distance)
+            scalar_best_distances[agent_id] = int(after_distance)
+            return 0.0
+        if after_distance >= best_distance:
+            scalar_best_distances[agent_id] = int(best_distance)
+            return 0.0
+
+        progress = float(best_distance - after_distance)
+        best_distances[shelf_id] = int(after_distance)
+        scalar_best_distances[agent_id] = int(after_distance)
         if self.normalize_shaping_rewards:
             progress /= self._distance_scale()
         return float(coefficient * progress)
@@ -671,11 +875,25 @@ class MultiTeamWarehouse(Warehouse):
         self._assign_shelf_teams()
         self._assign_team_goals()
         self._make_team_request_queues()
+        self._remember_shelf_home_positions()
         self.team_delivery_counts[:] = 0
+        self.team_return_counts[:] = 0
         self._last_delivery_events = []
+        self._last_return_events = []
+        self._last_wrong_return_events = []
+        self._last_pickup_events = []
+        self._last_invalid_toggle_events = []
         self._last_reward_shaping[:] = 0.0
+        self._shelves_awaiting_return.clear()
+        self._shelf_return_team_ids.clear()
         for picked_shelf_ids in self._picked_request_shelf_ids_by_agent:
             picked_shelf_ids.clear()
+        for agent_id, agent in enumerate(self.agents):
+            visited_cells = self._visited_cells_by_agent[agent_id]
+            visited_cells.clear()
+            visited_cells.add((int(agent.x), int(agent.y)))
+        self._stationary_action_streak[:] = 0
+        self._reset_progress_baselines()
         self.inferred_team_ids[:] = -1
         self.inferred_team_confidence[:] = 0.0
         self.update_training_comm_graph()
@@ -686,6 +904,10 @@ class MultiTeamWarehouse(Warehouse):
     def _get_info(self):
         info = {
             "deliveries": len(self._last_delivery_events),
+            "returns": len(self._last_return_events),
+            "wrong_returns": len(self._last_wrong_return_events),
+            "pickups": len(self._last_pickup_events),
+            "invalid_toggles": len(self._last_invalid_toggle_events),
         }
         if self.reveal_team_info:
             info.update(
@@ -693,7 +915,14 @@ class MultiTeamWarehouse(Warehouse):
                     "agent_team_ids": self.agent_team_ids.copy(),
                     "team_members": self.get_team_members(),
                     "team_delivery_counts": self.team_delivery_counts.copy(),
+                    "team_return_counts": self.team_return_counts.copy(),
                     "delivery_events": list(self._last_delivery_events),
+                    "return_events": list(self._last_return_events),
+                    "wrong_return_events": list(self._last_wrong_return_events),
+                    "pickup_events": list(self._last_pickup_events),
+                    "invalid_toggle_events": list(self._last_invalid_toggle_events),
+                    "shelves_awaiting_return": sorted(self._shelves_awaiting_return),
+                    "shelf_home_positions": dict(self._shelf_home_positions),
                     "reward_shaping": self._last_reward_shaping.copy(),
                     "team_request_ids": [
                         [shelf.id for shelf in team_queue]
@@ -720,6 +949,10 @@ class MultiTeamWarehouse(Warehouse):
     ) -> Tuple[List[np.ndarray], List[float], bool, bool, Dict]:
         assert len(actions) == len(self.agents)
         self._last_delivery_events = []
+        self._last_return_events = []
+        self._last_wrong_return_events = []
+        self._last_pickup_events = []
+        self._last_invalid_toggle_events = []
 
         for agent, action in zip(self.agents, actions):
             if self.msg_bits > 0:
@@ -780,6 +1013,9 @@ class MultiTeamWarehouse(Warehouse):
         if self.step_penalty:
             rewards += self.step_penalty
         shaping_rewards = np.zeros(self.n_agents, dtype=np.float32)
+        progress_shaping_rewards = np.zeros(self.n_agents, dtype=np.float32)
+        requested_actions = [agent.req_action for agent in self.agents]
+        before_positions = [(agent.x, agent.y) for agent in self.agents]
         before_carried_shelves = [agent.carrying_shelf for agent in self.agents]
         before_requested_shelf_distances = [
             (
@@ -790,7 +1026,13 @@ class MultiTeamWarehouse(Warehouse):
             for agent in self.agents
         ]
         before_goal_distances = [
-            self._carried_requested_shelf_goal_distance(agent)
+            self._carried_requested_shelf_delivery_goal_distance(agent)
+            if agent.carrying_shelf
+            else None
+            for agent in self.agents
+        ]
+        before_return_distances = [
+            self._carried_requested_shelf_return_distance(agent)
             if agent.carrying_shelf
             else None
             for agent in self.agents
@@ -815,36 +1057,227 @@ class MultiTeamWarehouse(Warehouse):
                 shelf_id = self.grid[_LAYER_SHELFS, agent.y, agent.x]
                 if shelf_id:
                     agent.carrying_shelf = self.shelfs[shelf_id - 1]
+                    if agent.carrying_shelf.id in self._shelves_awaiting_return:
+                        agent.has_delivered = True
                     shaping_rewards[agent.id - 1] += self._pickup_shaping_reward(
                         agent,
                         agent.carrying_shelf,
                     )
+                    self._last_pickup_events.append(
+                        {
+                            "shelf_id": int(agent.carrying_shelf.id),
+                            "agent_id": int(agent.id),
+                            "position": (int(agent.x), int(agent.y)),
+                            "requested": bool(
+                                self._is_agent_requested_shelf(
+                                    agent,
+                                    agent.carrying_shelf,
+                                )
+                            ),
+                            "return_phase": bool(
+                                agent.carrying_shelf.id in self._shelves_awaiting_return
+                            ),
+                        }
+                    )
+                else:
+                    self._last_invalid_toggle_events.append(
+                        {
+                            "agent_id": int(agent.id),
+                            "position": (int(agent.x), int(agent.y)),
+                            "reason": "empty_cell",
+                        }
+                    )
             elif agent.req_action == Action.TOGGLE_LOAD and agent.carrying_shelf:
                 delivered_before_drop = bool(agent.has_delivered)
+                dropped_shelf = agent.carrying_shelf
                 if not self._is_highway(agent.x, agent.y):
                     agent.carrying_shelf = None
-                    if delivered_before_drop:
+                    if (
+                        self.require_delivered_shelf_return
+                        and delivered_before_drop
+                        and dropped_shelf.id in self._shelves_awaiting_return
+                    ):
+                        team_id = int(
+                            self._shelf_return_team_ids.get(
+                                dropped_shelf.id,
+                                self.shelf_team_ids.get(dropped_shelf.id, self._agent_team_id(agent)),
+                            )
+                        )
+                        if self._is_shelf_at_home(dropped_shelf):
+                            rewarded_agents = self._reward_shelf_return(
+                                rewards,
+                                team_id,
+                                agent.id,
+                            )
+                            self._shelves_awaiting_return.discard(dropped_shelf.id)
+                            self._shelf_return_team_ids.pop(dropped_shelf.id, None)
+                            self.team_return_counts[team_id] += 1
+                            self._replace_team_request(team_id, dropped_shelf)
+                            self._last_return_events.append(
+                                {
+                                    "shelf_id": dropped_shelf.id,
+                                    "team_id": team_id,
+                                    "home": self._shelf_home_positions.get(dropped_shelf.id),
+                                    "carrier_id": int(agent.id),
+                                    "rewarded_agents": rewarded_agents,
+                                }
+                            )
+                        else:
+                            shaping_rewards[agent.id - 1] -= self.wrong_shelf_return_penalty
+                            self._last_wrong_return_events.append(
+                                {
+                                    "shelf_id": int(dropped_shelf.id),
+                                    "agent_id": int(agent.id),
+                                    "position": (int(agent.x), int(agent.y)),
+                                    "home": self._shelf_home_positions.get(dropped_shelf.id),
+                                }
+                            )
+                    elif delivered_before_drop:
                         shaping_rewards[agent.id - 1] += self.delivered_shelf_drop_reward
                     else:
                         shaping_rewards[agent.id - 1] -= self.premature_drop_penalty
-                agent.has_delivered = False
+                    agent.has_delivered = False
+                else:
+                    self._last_invalid_toggle_events.append(
+                        {
+                            "agent_id": int(agent.id),
+                            "position": (int(agent.x), int(agent.y)),
+                            "reason": "highway_drop",
+                        }
+                    )
 
         self._recalc_grid()
 
         for agent_id, agent in enumerate(self.agents):
             carried_before = before_carried_shelves[agent_id]
             if carried_before is None and agent.carrying_shelf is None:
-                shaping_rewards[agent_id] += self._progress_reward(
-                    before_requested_shelf_distances[agent_id],
-                    self._nearest_requested_shelf_distance(agent),
-                    self.requested_shelf_progress_reward,
-                )
+                after_distance = self._nearest_requested_shelf_distance(agent)
+                if self.reward_only_new_best_progress:
+                    progress_reward = self._new_best_progress_reward(
+                        self._best_requested_shelf_distances,
+                        agent_id,
+                        after_distance,
+                        self.requested_shelf_progress_reward,
+                    )
+                else:
+                    progress_reward = self._progress_reward(
+                        before_requested_shelf_distances[agent_id],
+                        after_distance,
+                        self.requested_shelf_progress_reward,
+                    )
+                shaping_rewards[agent_id] += progress_reward
+                progress_shaping_rewards[agent_id] += progress_reward
             elif carried_before is not None and agent.carrying_shelf is carried_before:
-                shaping_rewards[agent_id] += self._progress_reward(
-                    before_goal_distances[agent_id],
-                    self._carried_requested_shelf_goal_distance(agent),
-                    self.goal_progress_reward,
-                )
+                shelf_id = int(carried_before.id)
+                returning_shelf = carried_before.id in self._shelves_awaiting_return
+                if returning_shelf:
+                    after_distance = self._carried_requested_shelf_return_distance(agent)
+                    best_distances_by_agent = self._best_return_distances_by_agent
+                    scalar_best_distances = self._best_return_distances
+                    before_distance = before_return_distances[agent_id]
+                    progress_coefficient = self.return_progress_reward
+                else:
+                    after_distance = self._carried_requested_shelf_delivery_goal_distance(agent)
+                    best_distances_by_agent = self._best_delivery_distances_by_agent
+                    scalar_best_distances = self._best_goal_distances
+                    before_distance = before_goal_distances[agent_id]
+                    progress_coefficient = self.goal_progress_reward
+
+                if self.reward_only_new_best_progress:
+                    progress_reward = self._new_best_shelf_progress_reward(
+                        best_distances_by_agent,
+                        scalar_best_distances,
+                        agent_id,
+                        shelf_id,
+                        after_distance,
+                        progress_coefficient,
+                    )
+                else:
+                    progress_reward = self._progress_reward(
+                        before_distance,
+                        after_distance,
+                        progress_coefficient,
+                    )
+                shaping_rewards[agent_id] += progress_reward
+                progress_shaping_rewards[agent_id] += progress_reward
+
+            moved = before_positions[agent_id] != (agent.x, agent.y)
+            carrying_changed = carried_before is not agent.carrying_shelf
+            if moved:
+                self._stationary_action_streak[agent_id] = 0
+                movement_reward = self.forward_movement_reward
+                if (
+                    self.movement_reward_requires_progress
+                    and progress_shaping_rewards[agent_id] <= 0.0
+                ):
+                    movement_reward = 0.0
+                shaping_rewards[agent_id] += movement_reward
+
+                current_cell = (int(agent.x), int(agent.y))
+                visited_cells = self._visited_cells_by_agent[agent_id]
+                if current_cell in visited_cells:
+                    shaping_rewards[agent_id] -= self.revisit_cell_penalty
+                else:
+                    shaping_rewards[agent_id] += self.new_cell_reward
+                    visited_cells.add(current_cell)
+            elif carrying_changed:
+                self._stationary_action_streak[agent_id] = 0
+                if agent.carrying_shelf is None:
+                    self._best_requested_shelf_distances[agent_id] = (
+                        self._nearest_requested_shelf_distance(agent)
+                    )
+                    self._best_goal_distances[agent_id] = None
+                    self._best_return_distances[agent_id] = None
+                else:
+                    self._best_requested_shelf_distances[agent_id] = None
+                    if agent.carrying_shelf.id in self._shelves_awaiting_return:
+                        self._best_goal_distances[agent_id] = None
+                        shelf_id = int(agent.carrying_shelf.id)
+                        if shelf_id not in self._best_return_distances_by_agent[agent_id]:
+                            distance = self._carried_requested_shelf_return_distance(agent)
+                            if distance is not None:
+                                self._best_return_distances_by_agent[agent_id][
+                                    shelf_id
+                                ] = int(distance)
+                        self._best_return_distances[agent_id] = (
+                            self._best_return_distances_by_agent[agent_id].get(shelf_id)
+                        )
+                    else:
+                        shelf_id = int(agent.carrying_shelf.id)
+                        if shelf_id not in self._best_delivery_distances_by_agent[agent_id]:
+                            distance = (
+                                self._carried_requested_shelf_delivery_goal_distance(agent)
+                            )
+                            if distance is not None:
+                                self._best_delivery_distances_by_agent[agent_id][
+                                    shelf_id
+                                ] = int(distance)
+                        self._best_goal_distances[agent_id] = (
+                            self._best_delivery_distances_by_agent[agent_id].get(shelf_id)
+                        )
+                        self._best_return_distances[agent_id] = None
+            else:
+                action = requested_actions[agent_id]
+                action_penalty = 0.0
+                if action in [Action.LEFT, Action.RIGHT]:
+                    action_penalty += self.turn_action_penalty
+                elif action == Action.NOOP:
+                    action_penalty += self.noop_action_penalty
+                elif action == Action.TOGGLE_LOAD:
+                    action_penalty += self.invalid_toggle_load_penalty
+                elif action != Action.FORWARD:
+                    action_penalty += self.stationary_action_penalty
+
+                if action != Action.FORWARD:
+                    action_penalty += self.stationary_action_penalty
+
+                self._stationary_action_streak[agent_id] += 1
+                if (
+                    self._stationary_action_streak[agent_id]
+                    > self.stationary_streak_penalty_after
+                ):
+                    action_penalty += self.repeated_stationary_action_penalty
+                shaping_rewards[agent_id] -= action_penalty
         rewards += shaping_rewards
         self._last_reward_shaping = shaping_rewards.copy()
 
@@ -856,6 +1289,8 @@ class MultiTeamWarehouse(Warehouse):
             shelf = self.shelfs[shelf_id - 1]
 
             if shelf not in self.request_queue:
+                continue
+            if shelf.id in self._shelves_awaiting_return:
                 continue
 
             team_id = self.shelf_team_ids[shelf.id]
@@ -877,7 +1312,23 @@ class MultiTeamWarehouse(Warehouse):
             ):
                 self.agents[carrier_id - 1].has_delivered = True
             self.team_delivery_counts[team_id] += 1
-            self._replace_team_request(team_id, shelf)
+            if self.require_delivered_shelf_return:
+                self._shelves_awaiting_return.add(shelf.id)
+                self._shelf_return_team_ids[shelf.id] = int(team_id)
+                if carrier_id > 0:
+                    carrier_idx = int(carrier_id) - 1
+                    self._best_goal_distances[carrier_idx] = None
+                    self._best_return_distances[carrier_idx] = (
+                        self._carried_requested_shelf_return_distance(
+                            self.agents[carrier_idx]
+                        )
+                    )
+                    if self._best_return_distances[carrier_idx] is not None:
+                        self._best_return_distances_by_agent[carrier_idx][
+                            int(shelf.id)
+                        ] = int(self._best_return_distances[carrier_idx])
+            else:
+                self._replace_team_request(team_id, shelf)
 
             event = {
                 "shelf_id": shelf.id,
@@ -886,12 +1337,15 @@ class MultiTeamWarehouse(Warehouse):
                 "goal_team_id": int(goal_team_id) if goal_team_id is not None else None,
                 "carrier_id": int(carrier_id),
                 "rewarded_agents": rewarded_agents,
+                "requires_return": bool(self.require_delivered_shelf_return),
+                "home": self._shelf_home_positions.get(shelf.id),
             }
             if carrier_id > 0:
                 event["carrier_team_id"] = int(self.agent_team_ids[carrier_id - 1])
             self._last_delivery_events.append(event)
 
-        if shelf_delivered:
+        shelf_returned = bool(self._last_return_events)
+        if shelf_delivered or shelf_returned:
             self._cur_inactive_steps = 0
         else:
             self._cur_inactive_steps += 1

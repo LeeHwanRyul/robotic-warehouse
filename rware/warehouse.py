@@ -524,9 +524,17 @@ class Warehouse(gym.Env):
     def _is_highway(self, x: int, y: int) -> bool:
         return self.highways[y, x]
 
+    def _requested_shelves_for_observation(self, agent):
+        return self.request_queue
+
     def _make_img_obs(self, agent):
         # write image observations
-        if agent.id == 1:
+        observation_request_queue = self._requested_shelves_for_observation(agent)
+        request_layer_is_agent_specific = (
+            ImageLayer.REQUESTS in self.image_observation_layers
+            and observation_request_queue is not self.request_queue
+        )
+        if agent.id == 1 or request_layer_is_agent_specific or self.global_layers is None:
             layers = []
             # first agent's observation --> update global observation layers
             for layer_type in self.image_observation_layers:
@@ -537,7 +545,7 @@ class Warehouse(gym.Env):
                     # print("SHELVES LAYER")
                 elif layer_type == ImageLayer.REQUESTS:
                     layer = np.zeros(self.grid_size, dtype=np.float32)
-                    for requested_shelf in self.request_queue:
+                    for requested_shelf in observation_request_queue:
                         layer[requested_shelf.y, requested_shelf.x] = 1.0
                     # print("REQUESTS LAYER")
                 elif layer_type == ImageLayer.AGENTS:
@@ -572,14 +580,20 @@ class Warehouse(gym.Env):
                 # pad with 0s for out-of-map cells
                 layer = np.pad(layer, self.sensor_range, mode="constant")
                 layers.append(layer)
-            self.global_layers = np.stack(layers)
+            if request_layer_is_agent_specific:
+                global_layers = np.stack(layers)
+            else:
+                self.global_layers = np.stack(layers)
+                global_layers = self.global_layers
+        else:
+            global_layers = self.global_layers
 
         # global information was generated --> get information for agent
         start_x = agent.y
         end_x = agent.y + 2 * self.sensor_range + 1
         start_y = agent.x
         end_y = agent.x + 2 * self.sensor_range + 1
-        obs = self.global_layers[:, start_x:end_x, start_y:end_y]
+        obs = global_layers[:, start_x:end_x, start_y:end_y]
 
         if self.image_observation_directional:
             # rotate image to be in direction of agent
@@ -596,6 +610,7 @@ class Warehouse(gym.Env):
         return obs
 
     def _get_default_obs(self, agent):
+        observation_request_queue = self._requested_shelves_for_observation(agent)
         min_x = agent.x - self.sensor_range
         max_x = agent.x + self.sensor_range + 1
 
@@ -669,7 +684,10 @@ class Warehouse(gym.Env):
                     obs.write([0.0, 0.0])  # no shelf or requested shelf
                 else:
                     obs.write(
-                        [1.0, int(self.shelfs[id_shelf - 1] in self.request_queue)]
+                        [
+                            1.0,
+                            int(self.shelfs[id_shelf - 1] in observation_request_queue),
+                        ]
                     )  # shelf presence and request status
             return obs.vector
 
@@ -714,7 +732,7 @@ class Warehouse(gym.Env):
             else:
                 obs["sensors"][i]["has_shelf"] = [1]
                 obs["sensors"][i]["shelf_requested"] = [
-                    int(self.shelfs[id_ - 1] in self.request_queue)
+                    int(self.shelfs[id_ - 1] in observation_request_queue)
                 ]
 
         return obs
