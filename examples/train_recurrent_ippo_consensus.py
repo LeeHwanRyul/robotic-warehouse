@@ -1,27 +1,3 @@
-"""Recurrent IPPO with policy-probe team discovery and critic consensus.
-
-This script is meant for the RWARE multi-team environments in this repository.
-It implements:
-
-- fully decentralized recurrent actors and critics,
-- IPPO-style clipped policy/value updates,
-- sparse common-probe policy comparison over communication neighbors,
-- uncertainty-aware confidence weights from policy similarity and critic errors,
-- confidence-weighted intra-team critic consensus.
-- agent-count curriculum runs via --agent-count or --curriculum-stage, with
-  actor/critic checkpoint transfer between stages.
-
-Example:
-    python examples/train_recurrent_ippo_consensus.py \
-        --env-id rware-multiteam-tiny-4ag-2teams-v0 \
-        --total-timesteps 200000
-
-    python examples/train_recurrent_ippo_consensus.py \
-        --curriculum-stages 4,8,12,20 \
-        --curriculum-stage 2 \
-        --init-checkpoint runs/recurrent_ippo_consensus/stage1/final.pt
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -47,7 +23,12 @@ if str(PROJECT_ROOT) not in sys.path:
 
 import rware  # noqa: F401 - registers Gymnasium environments
 from rware.utils.probe_maps import (
+    build_rware_agent_conditioned_probe_bank as _build_rware_agent_probe_map_bank,
     build_rware_objective_probe_bank as _build_rware_probe_map_bank,
+)
+from rware.utils.semantic_observation import (
+    RwareSemanticObservationWrapper,
+    get_semantic_observation_spec,
 )
 from rware.warehouse import Action, Direction, _LAYER_SHELFS
 
@@ -66,6 +47,66 @@ def mlp(input_dim: int, hidden_dim: int, output_dim: int) -> nn.Sequential:
     )
 
 
+class SemanticCNNEncoder(nn.Module):
+    """Small CNN encoder for ego || CxSxS semantic RWARE observations."""
+
+    def __init__(
+        self,
+        obs_dim: int,
+        spatial_channels: int,
+        spatial_size: int,
+        ego_dim: int,
+        hidden_dim: int,
+        output_dim: int,
+    ) -> None:
+        super().__init__()
+        self.obs_dim = int(obs_dim)
+        self.spatial_channels = int(spatial_channels)
+        self.spatial_size = int(spatial_size)
+        self.ego_dim = int(ego_dim)
+        spatial_dim = self.spatial_channels * self.spatial_size * self.spatial_size
+        if self.ego_dim + spatial_dim != self.obs_dim:
+            raise ValueError(
+                "semantic CNN layout does not match obs_dim: "
+                f"ego={self.ego_dim}, spatial={spatial_dim}, obs_dim={self.obs_dim}"
+            )
+
+        self.spatial_cnn = nn.Sequential(
+            nn.Conv2d(self.spatial_channels, 32, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(32, 32, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Flatten(),
+        )
+        self.spatial_fc = nn.Sequential(
+            nn.Linear(32 * self.spatial_size * self.spatial_size, hidden_dim),
+            nn.Tanh(),
+        )
+        ego_hidden = max(hidden_dim // 2, 16)
+        self.ego_encoder = nn.Sequential(
+            nn.Linear(self.ego_dim, ego_hidden),
+            nn.Tanh(),
+        )
+        self.output = nn.Sequential(
+            nn.Linear(hidden_dim + ego_hidden, output_dim),
+            nn.Tanh(),
+        )
+
+    def forward(self, obs: torch.Tensor) -> torch.Tensor:
+        if obs.ndim == 1:
+            obs = obs.unsqueeze(0)
+        ego = obs[..., : self.ego_dim]
+        spatial = obs[..., self.ego_dim :].reshape(
+            -1,
+            self.spatial_channels,
+            self.spatial_size,
+            self.spatial_size,
+        )
+        spatial_features = self.spatial_fc(self.spatial_cnn(spatial))
+        ego_features = self.ego_encoder(ego)
+        return self.output(torch.cat([spatial_features, ego_features], dim=-1))
+
+
 class RecurrentActorCritic(nn.Module):
     """One local recurrent actor-critic used by one agent.
 
@@ -79,22 +120,51 @@ class RecurrentActorCritic(nn.Module):
         action_dim: int,
         mlp_hidden_dim: int = 128,
         recurrent_hidden_dim: int = 128,
+        encoder_type: str = "mlp",
+        spatial_channels: int = 0,
+        spatial_size: int = 0,
+        ego_dim: int = 0,
     ):
         super().__init__()
         self.obs_dim = int(obs_dim)
         self.action_dim = int(action_dim)
         self.recurrent_hidden_dim = int(recurrent_hidden_dim)
+        self.encoder_type = str(encoder_type)
 
-        self.actor_encoder = mlp(obs_dim, mlp_hidden_dim, recurrent_hidden_dim)
+        if self.encoder_type == "mlp":
+            self.actor_encoder = mlp(obs_dim, mlp_hidden_dim, recurrent_hidden_dim)
+            self.critic_encoder = mlp(obs_dim, mlp_hidden_dim, recurrent_hidden_dim)
+        elif self.encoder_type == "cnn":
+            self.actor_encoder = SemanticCNNEncoder(
+                obs_dim=obs_dim,
+                spatial_channels=spatial_channels,
+                spatial_size=spatial_size,
+                ego_dim=ego_dim,
+                hidden_dim=mlp_hidden_dim,
+                output_dim=recurrent_hidden_dim,
+            )
+            self.critic_encoder = SemanticCNNEncoder(
+                obs_dim=obs_dim,
+                spatial_channels=spatial_channels,
+                spatial_size=spatial_size,
+                ego_dim=ego_dim,
+                hidden_dim=mlp_hidden_dim,
+                output_dim=recurrent_hidden_dim,
+            )
+        else:
+            raise ValueError("--obs-encoder must be 'mlp' or 'cnn'")
+
         self.actor_rnn = nn.GRUCell(recurrent_hidden_dim, recurrent_hidden_dim)
         self.actor_head = nn.Linear(recurrent_hidden_dim, action_dim)
 
-        self.critic_encoder = mlp(obs_dim, mlp_hidden_dim, recurrent_hidden_dim)
         self.critic_rnn = nn.GRUCell(recurrent_hidden_dim, recurrent_hidden_dim)
         self.critic_head = nn.Linear(recurrent_hidden_dim, 1)
 
         for module in self.modules():
             if isinstance(module, nn.Linear):
+                nn.init.orthogonal_(module.weight, gain=math.sqrt(2))
+                nn.init.constant_(module.bias, 0.0)
+            elif isinstance(module, nn.Conv2d):
                 nn.init.orthogonal_(module.weight, gain=math.sqrt(2))
                 nn.init.constant_(module.bias, 0.0)
         nn.init.orthogonal_(self.actor_head.weight, gain=0.01)
@@ -328,11 +398,14 @@ class TrainConfig:
     recurrent_hidden_dim: int
     seed: int
     device: str
+    observation_format: str
+    obs_encoder: str
     graph_mode: str
     probe_interval: int
     policy_probe_batch_size: int
     probe_source: str
     objective_probe_fraction: float
+    policy_probe_team_conditioning: str
     policy_similarity_temperature: float
     comm_graph_mode: str
     probe_episodes: int
@@ -1049,8 +1122,17 @@ def make_render_env_kwargs(env_kwargs: Dict, render_mode: str) -> Dict:
     return render_kwargs
 
 
-def make_env(env_id: str, env_kwargs: Dict) -> gym.Env:
-    return gym.make(env_id, **env_kwargs)
+def make_env(
+    env_id: str,
+    env_kwargs: Dict,
+    observation_format: str = "flat",
+) -> gym.Env:
+    env = gym.make(env_id, **env_kwargs)
+    if observation_format == "semantic":
+        return RwareSemanticObservationWrapper(env)
+    if observation_format != "flat":
+        raise ValueError("--observation-format must be 'flat' or 'semantic'")
+    return env
 
 
 def tuple_spaces(space: gym.Space) -> List[gym.Space]:
@@ -1454,9 +1536,70 @@ def _build_rware_objective_probe_bank(
     return _build_rware_probe_map_bank(env, obs_dim, batch_size, rng)
 
 
+def _agent_team_ids_from_env(env: gym.Env, n_agents: int) -> Optional[np.ndarray]:
+    unwrapped = env.unwrapped
+    if hasattr(unwrapped, "agent_team_ids"):
+        team_ids = np.asarray(getattr(unwrapped, "agent_team_ids"), dtype=np.int32)
+        if team_ids.shape[0] >= n_agents:
+            return team_ids[:n_agents].copy()
+
+    if hasattr(unwrapped, "get_team_members"):
+        team_ids = np.full((n_agents,), -1, dtype=np.int32)
+        for team_id, members in enumerate(unwrapped.get_team_members()):
+            for agent_id in members:
+                if 0 <= int(agent_id) < n_agents:
+                    team_ids[int(agent_id)] = int(team_id)
+        if np.all(team_ids >= 0):
+            return team_ids
+
+    return None
+
+
+def _repeat_shared_probes_for_agents(
+    probes: torch.Tensor,
+    n_agents: int,
+) -> torch.Tensor:
+    if probes.ndim != 2:
+        raise ValueError("shared probe observations must have shape (M, obs_dim)")
+    return probes.unsqueeze(0).repeat(int(n_agents), 1, 1)
+
+
+def _build_agent_conditioned_objective_probe_bank(
+    env: gym.Env,
+    obs_dim: int,
+    batch_size: int,
+    rng: np.random.Generator,
+    agent_team_ids: np.ndarray,
+) -> Optional[torch.Tensor]:
+    probes = _build_rware_agent_probe_map_bank(
+        env,
+        obs_dim,
+        batch_size,
+        rng,
+        agent_team_ids,
+    )
+    if probes is not None:
+        return probes
+
+    shared = build_objective_probe_bank(env, obs_dim, batch_size, rng)
+    if shared is None:
+        return None
+    return _repeat_shared_probes_for_agents(shared, len(agent_team_ids))
+
+
 def _objective_visibility_scores(env: gym.Env, obs_pool: torch.Tensor) -> np.ndarray:
     unwrapped = env.unwrapped
     pool = obs_pool.cpu().numpy()
+    semantic_spec = get_semantic_observation_spec(env)
+    if pool.shape[1] == semantic_spec.obs_dim:
+        spatial = pool[:, semantic_spec.ego_dim :].reshape(
+            pool.shape[0],
+            semantic_spec.spatial_channels,
+            semantic_spec.spatial_size,
+            semantic_spec.spatial_size,
+        )
+        requested_shelf_channel = 4
+        return spatial[:, requested_shelf_channel].sum(axis=(1, 2))
 
     if all(
         hasattr(unwrapped, name)
@@ -1592,12 +1735,129 @@ def sample_policy_probe_obs(
     raise ValueError("--probe-source must be rollout, objective-rollout, objective, or mixed")
 
 
+def sample_agent_conditioned_policy_probe_obs(
+    cfg: TrainConfig,
+    env: gym.Env,
+    rollout: Rollout,
+    rng: np.random.Generator,
+    n_agents: int,
+    batch_size: Optional[int] = None,
+) -> Tuple[torch.Tensor, Dict[str, float]]:
+    batch_size = max(
+        int(cfg.policy_probe_batch_size if batch_size is None else batch_size),
+        1,
+    )
+    obs_dim = int(rollout.obs.shape[-1])
+    team_ids = _agent_team_ids_from_env(env, n_agents)
+    meta = {
+        "objective_probe_count": 0.0,
+        "rollout_probe_count": 0.0,
+        "agent_conditioned_probe": 1.0,
+    }
+
+    if team_ids is None:
+        shared, shared_meta = sample_policy_probe_obs(
+            cfg,
+            env,
+            rollout,
+            rng,
+            batch_size=batch_size,
+        )
+        meta.update(shared_meta)
+        meta["agent_conditioned_probe_fallback"] = 1.0
+        return _repeat_shared_probes_for_agents(shared, n_agents), meta
+
+    source = cfg.probe_source
+    if source == "rollout":
+        probes = sample_common_probe_obs(rollout, batch_size, rng)
+        meta["rollout_probe_count"] = float(probes.shape[0])
+        return _repeat_shared_probes_for_agents(probes, n_agents), meta
+
+    if source == "objective-rollout":
+        probes = sample_objective_rollout_probe_obs(env, rollout, batch_size, rng)
+        meta["objective_probe_count"] = float(probes.shape[0])
+        return _repeat_shared_probes_for_agents(probes, n_agents), meta
+
+    if source == "objective":
+        probes = _build_agent_conditioned_objective_probe_bank(
+            env,
+            obs_dim,
+            batch_size,
+            rng,
+            team_ids,
+        )
+        if probes is None:
+            shared = sample_objective_rollout_probe_obs(env, rollout, batch_size, rng)
+            probes = _repeat_shared_probes_for_agents(shared, n_agents)
+            meta["agent_conditioned_probe_fallback"] = 1.0
+        meta["objective_probe_count"] = float(probes.shape[1])
+        meta["agent_conditioned_probe_agents"] = float(probes.shape[0])
+        return probes, meta
+
+    if source == "mixed":
+        objective_count = int(round(batch_size * cfg.objective_probe_fraction))
+        objective_count = int(np.clip(objective_count, 1, batch_size))
+        rollout_count = batch_size - objective_count
+        objective_probes = _build_agent_conditioned_objective_probe_bank(
+            env,
+            obs_dim,
+            objective_count,
+            rng,
+            team_ids,
+        )
+        if objective_probes is None:
+            shared = sample_objective_rollout_probe_obs(
+                env,
+                rollout,
+                objective_count,
+                rng,
+            )
+            objective_probes = _repeat_shared_probes_for_agents(shared, n_agents)
+            meta["agent_conditioned_probe_fallback"] = 1.0
+        probes = [objective_probes]
+        meta["objective_probe_count"] = float(objective_probes.shape[1])
+        if rollout_count > 0:
+            rollout_probes = sample_common_probe_obs(rollout, rollout_count, rng)
+            probes.append(_repeat_shared_probes_for_agents(rollout_probes, n_agents))
+            meta["rollout_probe_count"] = float(rollout_probes.shape[0])
+        stacked = torch.cat(probes, dim=1)
+        meta["agent_conditioned_probe_agents"] = float(stacked.shape[0])
+        return stacked, meta
+
+    raise ValueError("--probe-source must be rollout, objective-rollout, objective, or mixed")
+
+
 def _as_probe_sequences(probe_obs: torch.Tensor) -> torch.Tensor:
     if probe_obs.ndim == 2:
         return probe_obs.unsqueeze(1)
     if probe_obs.ndim == 3:
         return probe_obs
     raise ValueError("probe observations must have shape (M, obs_dim) or (M, Lp, obs_dim)")
+
+
+def _as_agent_conditioned_probe_sequences(
+    probe_obs: torch.Tensor,
+    n_agents: int,
+) -> torch.Tensor:
+    if probe_obs.ndim == 4:
+        if probe_obs.shape[0] != n_agents:
+            raise ValueError(
+                "agent-conditioned probe observations must have shape "
+                "(n_agents, M, Lp, obs_dim)"
+            )
+        return probe_obs
+    shared = _as_probe_sequences(probe_obs)
+    return shared.unsqueeze(0).expand(int(n_agents), -1, -1, -1)
+
+
+def _canonical_probe_count(probe_sequences: torch.Tensor) -> float:
+    if probe_sequences.ndim == 4:
+        return float(probe_sequences.shape[1] * probe_sequences.shape[2])
+    if probe_sequences.ndim == 3:
+        return float(probe_sequences.shape[0] * probe_sequences.shape[1])
+    if probe_sequences.ndim == 2:
+        return float(probe_sequences.shape[0])
+    return 0.0
 
 
 def sample_policy_probe_sequences(
@@ -1609,25 +1869,55 @@ def sample_policy_probe_sequences(
     sequence_length = max(int(cfg.pgct_probe_sequence_length), 1)
     sequence_count = max(int(cfg.policy_probe_batch_size), 1)
     flat_count = sequence_count * sequence_length
-    flat_probes, meta = sample_policy_probe_obs(
-        cfg,
-        env,
-        rollout,
-        rng,
-        batch_size=flat_count,
-    )
-    if flat_probes.shape[0] <= 0:
+    n_agents = int(getattr(env.unwrapped, "n_agents", 1))
+    if cfg.policy_probe_team_conditioning == "agent-team":
+        flat_probes, meta = sample_agent_conditioned_policy_probe_obs(
+            cfg,
+            env,
+            rollout,
+            rng,
+            n_agents=n_agents,
+            batch_size=flat_count,
+        )
+        probe_axis = 1
+    else:
+        flat_probes, meta = sample_policy_probe_obs(
+            cfg,
+            env,
+            rollout,
+            rng,
+            batch_size=flat_count,
+        )
+        probe_axis = 0
+
+    if flat_probes.shape[probe_axis] <= 0:
         raise ValueError("Cannot build an empty policy probe sequence bank")
-    if flat_probes.shape[0] < flat_count:
-        indices = torch.arange(flat_count, dtype=torch.long) % flat_probes.shape[0]
-        flat_probes = flat_probes[indices]
-    elif flat_probes.shape[0] > flat_count:
-        flat_probes = flat_probes[:flat_count]
-    sequences = flat_probes.reshape(sequence_count, sequence_length, -1).contiguous()
+
+    if cfg.policy_probe_team_conditioning == "agent-team":
+        if flat_probes.shape[1] < flat_count:
+            indices = torch.arange(flat_count, dtype=torch.long) % flat_probes.shape[1]
+            flat_probes = flat_probes[:, indices]
+        elif flat_probes.shape[1] > flat_count:
+            flat_probes = flat_probes[:, :flat_count]
+        sequences = flat_probes.reshape(
+            flat_probes.shape[0],
+            sequence_count,
+            sequence_length,
+            -1,
+        ).contiguous()
+    else:
+        if flat_probes.shape[0] < flat_count:
+            indices = torch.arange(flat_count, dtype=torch.long) % flat_probes.shape[0]
+            flat_probes = flat_probes[indices]
+        elif flat_probes.shape[0] > flat_count:
+            flat_probes = flat_probes[:flat_count]
+        sequences = flat_probes.reshape(sequence_count, sequence_length, -1).contiguous()
+
     meta.update(
         {
             "probe_sequence_count": float(sequence_count),
             "probe_sequence_length": float(sequence_length),
+            "probe_team_conditioned": float(sequences.ndim == 4),
         }
     )
     return sequences, meta
@@ -1640,19 +1930,25 @@ def policy_distance_similarity_matrices(
     device: torch.device,
     temperature: float,
 ) -> Tuple[np.ndarray, np.ndarray]:
-    probe_sequences = _as_probe_sequences(probe_obs).to(device)
-    batch_size = int(probe_sequences.shape[0])
-    sequence_length = int(probe_sequences.shape[1])
+    n_agents = len(agents)
+    probe_sequences = _as_agent_conditioned_probe_sequences(probe_obs, n_agents).to(
+        device
+    )
+    batch_size = int(probe_sequences.shape[1])
+    sequence_length = int(probe_sequences.shape[2])
     policy_probs = []
-    for net in agents:
+    for agent_id, net in enumerate(agents):
         actor_h, _ = net.initial_hidden(batch_size, device)
         step_probs = []
+        agent_probe_sequences = probe_sequences[agent_id]
         for step_idx in range(sequence_length):
-            logits, actor_h = net._actor_step(probe_sequences[:, step_idx], actor_h)
+            logits, actor_h = net._actor_step(
+                agent_probe_sequences[:, step_idx],
+                actor_h,
+            )
             step_probs.append(torch.softmax(logits, dim=-1))
         policy_probs.append(torch.stack(step_probs, dim=1).cpu())
 
-    n_agents = len(agents)
     distance = np.zeros((n_agents, n_agents), dtype=np.float32)
     similarity = np.eye(n_agents, dtype=np.float32)
     eps = 1e-8
@@ -2288,10 +2584,18 @@ def recurrent_critic_probe_targets(
     probe_sequences: torch.Tensor,
     device: torch.device,
 ) -> torch.Tensor:
+    agent_probe_sequences = _as_agent_conditioned_probe_sequences(
+        probe_sequences,
+        len(agents),
+    )
     return torch.stack(
         [
-            recurrent_critic_probe_values(agent, probe_sequences, device).detach()
-            for agent in agents
+            recurrent_critic_probe_values(
+                agent,
+                agent_probe_sequences[agent_id],
+                device,
+            ).detach()
+            for agent_id, agent in enumerate(agents)
         ],
         dim=0,
     )
@@ -2353,7 +2657,10 @@ def update_ippo(
             for agent_id in range(n_agents)
         ]
         if any(peer_donors):
-            peer_probe_tensor = _as_probe_sequences(peer_probe_sequences).to(device)
+            peer_probe_tensor = _as_agent_conditioned_probe_sequences(
+                peer_probe_sequences,
+                n_agents,
+            ).to(device)
             peer_target_values = recurrent_critic_probe_targets(
                 agents,
                 peer_probe_tensor,
@@ -2484,7 +2791,7 @@ def update_ippo(
                 ):
                     receiver_values = recurrent_critic_probe_values(
                         net,
-                        peer_probe_tensor,
+                        peer_probe_tensor[agent_id],
                         device,
                     )
                     for donor_id in peer_donors[agent_id]:
@@ -2588,6 +2895,7 @@ def apply_confidence_weighted_critic_consensus(
 def run_probe_episode(
     env_id: str,
     env_kwargs: Dict,
+    observation_format: str,
     agents: Sequence[RecurrentActorCritic],
     obs_dim: int,
     action_dim: int,
@@ -2601,7 +2909,7 @@ def run_probe_episode(
     forced_agent: Optional[int] = None,
     forced_offset: int = 1,
 ) -> np.ndarray:
-    env = make_env(env_id, env_kwargs)
+    env = make_env(env_id, env_kwargs, observation_format=observation_format)
     obs, _ = env.reset(seed=seed)
     n_agents = len(agents)
     actor_h = torch.zeros((n_agents, recurrent_hidden_dim), device=device)
@@ -2674,6 +2982,7 @@ def run_sparse_counterfactual_probes(
         base_returns = run_probe_episode(
             cfg.env_id,
             env_kwargs,
+            cfg.observation_format,
             agents,
             obs_dim,
             action_dim,
@@ -2687,6 +2996,7 @@ def run_sparse_counterfactual_probes(
         cf_returns = run_probe_episode(
             cfg.env_id,
             env_kwargs,
+            cfg.observation_format,
             agents,
             obs_dim,
             action_dim,
@@ -2705,6 +3015,94 @@ def run_sparse_counterfactual_probes(
         deltas.append(float(np.mean(np.abs(delta))))
 
     return {"probe_delta": float(np.mean(deltas)) if deltas else float("nan")}
+
+
+def _masked_finite_mean(values: np.ndarray, mask: np.ndarray) -> float:
+    selected = np.asarray(values, dtype=np.float64)[np.asarray(mask, dtype=bool)]
+    selected = selected[np.isfinite(selected)]
+    if selected.size == 0:
+        return float("nan")
+    return float(np.mean(selected))
+
+
+def oracle_pairwise_matrix_metrics(
+    values: np.ndarray,
+    true_clusters: Optional[Sequence[Sequence[int]]],
+    n_agents: int,
+    metric_name: str,
+    gap_name: Optional[str] = None,
+    gap_direction: str = "cross_minus_same",
+    mask: Optional[np.ndarray] = None,
+) -> Dict[str, float]:
+    if not true_clusters:
+        return {}
+    values = np.asarray(values, dtype=np.float64)
+    if values.shape != (n_agents, n_agents):
+        raise ValueError("values must have shape (n_agents, n_agents)")
+
+    true_labels = labels_from_clusters(true_clusters, n_agents)
+    upper_mask = np.triu(np.ones((n_agents, n_agents), dtype=bool), k=1)
+    if mask is not None:
+        upper_mask &= np.asarray(mask, dtype=bool)
+    same_mask = upper_mask & (true_labels[:, None] == true_labels[None, :])
+    cross_mask = upper_mask & (true_labels[:, None] != true_labels[None, :])
+
+    same_value = _masked_finite_mean(values, same_mask)
+    cross_value = _masked_finite_mean(values, cross_mask)
+    metrics = {
+        f"same_team_{metric_name}": same_value,
+        f"cross_team_{metric_name}": cross_value,
+    }
+    if gap_name:
+        if math.isnan(same_value) or math.isnan(cross_value):
+            gap = float("nan")
+        elif gap_direction == "same_minus_cross":
+            gap = float(same_value - cross_value)
+        elif gap_direction == "cross_minus_same":
+            gap = float(cross_value - same_value)
+        else:
+            raise ValueError(
+                "gap_direction must be 'same_minus_cross' or 'cross_minus_same'"
+            )
+        metrics[gap_name] = gap
+    return metrics
+
+
+def pairwise_matrix_metrics(
+    values: np.ndarray,
+    metric_name: str,
+    true_clusters: Optional[Sequence[Sequence[int]]] = None,
+) -> Dict[str, float]:
+    values = np.asarray(values, dtype=np.float64)
+    n_agents = int(values.shape[0])
+    true_labels = (
+        labels_from_clusters(true_clusters, n_agents) if true_clusters else None
+    )
+    metrics: Dict[str, float] = {}
+    for i in range(n_agents):
+        for j in range(i + 1, n_agents):
+            value = float(values[i, j])
+            if math.isnan(value):
+                continue
+            metrics[f"pair_{i}_{j}_{metric_name}"] = value
+            if true_labels is not None:
+                metrics[f"pair_{i}_{j}_same_team"] = float(
+                    true_labels[i] == true_labels[j]
+                )
+    return metrics
+
+
+def mask_gate_by_current_neighbors(
+    gate: np.ndarray,
+    current_neighbor_adjacency: np.ndarray,
+) -> np.ndarray:
+    gate = np.asarray(gate, dtype=np.float32)
+    current_neighbor_adjacency = np.asarray(current_neighbor_adjacency, dtype=np.float32)
+    if gate.shape != current_neighbor_adjacency.shape:
+        raise ValueError("gate and current_neighbor_adjacency must have the same shape")
+    masked = gate * (current_neighbor_adjacency > 0.0).astype(np.float32)
+    np.fill_diagonal(masked, 0.0)
+    return masked.astype(np.float32)
 
 
 def run_policy_similarity_probe_round(
@@ -2743,6 +3141,7 @@ def run_policy_similarity_probe_round(
     neighbor_smoothed = smoothed_distance[upper_neighbor]
     neighbor_affinity = affinity[upper_neighbor]
     active_weights = weights[upper_active]
+    true_clusters = oracle_clusters(env)
     metrics = {
         "policy_similarity": float(np.mean(neighbor_scores))
         if neighbor_scores.size
@@ -2763,9 +3162,51 @@ def run_policy_similarity_probe_round(
         "active_weight": float(np.mean(active_weights))
         if active_weights.size
         else float("nan"),
-        "probe_count": float(probe_sequences.shape[0] * probe_sequences.shape[1]),
+        "probe_count": _canonical_probe_count(probe_sequences),
         **probe_meta,
     }
+    metrics.update(pairwise_matrix_metrics(distance, "distance", true_clusters))
+    metrics.update(
+        oracle_pairwise_matrix_metrics(
+            distance,
+            true_clusters,
+            n_agents,
+            metric_name="distance",
+            gap_name="distance_gap",
+            gap_direction="cross_minus_same",
+        )
+    )
+    metrics.update(
+        oracle_pairwise_matrix_metrics(
+            distance,
+            true_clusters,
+            n_agents,
+            metric_name="neighbor_distance",
+            gap_name="neighbor_distance_gap",
+            gap_direction="cross_minus_same",
+            mask=neighbor_adj > 0.0,
+        )
+    )
+    metrics.update(
+        oracle_pairwise_matrix_metrics(
+            smoothed_distance,
+            true_clusters,
+            n_agents,
+            metric_name="smoothed_distance",
+            gap_name="smoothed_distance_gap",
+            gap_direction="cross_minus_same",
+        )
+    )
+    metrics.update(
+        oracle_pairwise_matrix_metrics(
+            affinity,
+            true_clusters,
+            n_agents,
+            metric_name="affinity",
+            gap_name="affinity_gap",
+            gap_direction="same_minus_cross",
+        )
+    )
     return metrics, probe_sequences
 
 
@@ -2794,6 +3235,7 @@ def run_policy_similarity_probes(
 def evaluate(
     env_id: str,
     env_kwargs: Dict,
+    observation_format: str,
     agents: Sequence[RecurrentActorCritic],
     episodes: int,
     horizon: int,
@@ -2861,7 +3303,11 @@ def evaluate(
             if should_render or should_collect_video
             else env_kwargs
         )
-        env = make_env(env_id, eval_env_kwargs)
+        env = make_env(
+            env_id,
+            eval_env_kwargs,
+            observation_format=observation_format,
+        )
         obs, _ = env.reset(seed=seed + episode)
         n_agents = len(agents)
         actor_h = torch.zeros((n_agents, recurrent_hidden_dim), device=device)
@@ -3558,6 +4004,21 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda"])
     parser.add_argument(
+        "--observation-format",
+        default="flat",
+        choices=["flat", "semantic"],
+        help=(
+            "flat keeps the original RWARE flattened local observation; "
+            "semantic returns ego features plus a CxSxS semantic local grid."
+        ),
+    )
+    parser.add_argument(
+        "--obs-encoder",
+        default="mlp",
+        choices=["mlp", "cnn"],
+        help="Observation encoder used by the recurrent actor and critic.",
+    )
+    parser.add_argument(
         "--graph-mode",
         default="policy",
         choices=["policy", "probe", "influence", "none", "oracle"],
@@ -3584,6 +4045,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=float,
         default=0.5,
         help="Fraction of mixed probes drawn from the objective probe bank.",
+    )
+    parser.add_argument(
+        "--policy-probe-team-conditioning",
+        default="shared",
+        choices=["shared", "agent-team"],
+        help=(
+            "shared compares every policy on the same canonical probe bank. "
+            "agent-team builds objective probes for each agent's inferred team, "
+            "which makes same-team and cross-team objectives more separable."
+        ),
     )
     parser.add_argument("--policy-similarity-temperature", type=float, default=0.25)
     parser.add_argument(
@@ -3800,6 +4271,8 @@ def main() -> None:
         raise ValueError("--pgct-alpha-epsilon must be positive")
     if cfg.pgct_warmup_updates < 0:
         raise ValueError("--pgct-warmup-updates must be non-negative")
+    if cfg.obs_encoder == "cnn" and cfg.observation_format != "semantic":
+        raise ValueError("--obs-encoder cnn requires --observation-format semantic")
     if transfer_components and not cfg.init_checkpoint:
         # This keeps the config explicit without forcing users to pass
         # --transfer-components none for ordinary from-scratch runs.
@@ -3819,7 +4292,11 @@ def main() -> None:
         cfg.auto_scale_request_queue,
     )
 
-    env = make_env(cfg.env_id, env_kwargs)
+    env = make_env(
+        cfg.env_id,
+        env_kwargs,
+        observation_format=cfg.observation_format,
+    )
     obs, _ = env.reset(seed=cfg.seed)
     n_agents = int(env.unwrapped.n_agents)
     obs_dims = get_flat_obs_dims(env)
@@ -3831,12 +4308,23 @@ def main() -> None:
     obs_dim = int(obs_dims[0])
     action_dim = int(action_dims[0])
 
+    encoder_kwargs: Dict[str, int] = {}
+    if cfg.obs_encoder == "cnn":
+        semantic_spec = get_semantic_observation_spec(env)
+        encoder_kwargs = {
+            "spatial_channels": int(semantic_spec.spatial_channels),
+            "spatial_size": int(semantic_spec.spatial_size),
+            "ego_dim": int(semantic_spec.ego_dim),
+        }
+
     agents = [
         RecurrentActorCritic(
             obs_dim=obs_dim,
             action_dim=action_dim,
             mlp_hidden_dim=cfg.mlp_hidden_dim,
             recurrent_hidden_dim=cfg.recurrent_hidden_dim,
+            encoder_type=cfg.obs_encoder,
+            **encoder_kwargs,
         ).to(device)
         for _ in range(n_agents)
     ]
@@ -3900,7 +4388,8 @@ def main() -> None:
     periodic_eval_count = 0
     print(
         f"env={cfg.env_id} agents={n_agents} obs_dim={obs_dim} "
-        f"action_dim={action_dim} device={device}"
+        f"action_dim={action_dim} obs={cfg.observation_format}/{cfg.obs_encoder} "
+        f"device={device}"
     )
     print(
         f"env_mechanics n_agents={env.unwrapped.n_agents} "
@@ -3994,6 +4483,7 @@ def main() -> None:
                 rng,
             )
 
+        true_clusters = oracle_clusters(env)
         peer_allocation: Optional[np.ndarray] = None
         if cfg.peer_transfer_mode == "pgct":
             warmup_complete = iteration >= cfg.pgct_warmup_updates
@@ -4007,6 +4497,24 @@ def main() -> None:
                     distance_threshold=cfg.pgct_distance_threshold,
                     distance_temperature=cfg.pgct_distance_temperature,
                     gate_power=cfg.pgct_gate_power,
+                )
+            unmasked_pgct_gate = pgct_gate.copy()
+            if cfg.comm_graph_mode == "physical":
+                current_neighbor_adj = communication_adjacency(
+                    env,
+                    n_agents,
+                    mode=cfg.comm_graph_mode,
+                )
+                pgct_gate = mask_gate_by_current_neighbors(
+                    pgct_gate,
+                    current_neighbor_adj,
+                )
+                probe_metrics["pgct_stale_gate_edges_suppressed"] = float(
+                    (
+                        np.sum(unmasked_pgct_gate > 0.0)
+                        - np.sum(pgct_gate > 0.0)
+                    )
+                    / 2.0
                 )
             allocation_denom = (
                 np.sum(pgct_gate, axis=1, keepdims=True)
@@ -4024,9 +4532,8 @@ def main() -> None:
                 )
                 probe_metrics.update(
                     {
-                        "critic_probe_count": float(
-                            peer_probe_sequences.shape[0]
-                            * peer_probe_sequences.shape[1]
+                        "critic_probe_count": _canonical_probe_count(
+                            peer_probe_sequences
                         ),
                         "critic_probe_sequence_count": critic_probe_meta[
                             "probe_sequence_count"
@@ -4041,6 +4548,16 @@ def main() -> None:
                     "pgct_gate_edges": float(np.sum(pgct_gate > 0.0) / 2.0),
                     "pgct_allocation_mass": float(np.sum(peer_allocation)),
                 }
+            )
+            probe_metrics.update(
+                oracle_pairwise_matrix_metrics(
+                    pgct_gate,
+                    true_clusters,
+                    n_agents,
+                    metric_name="gate",
+                    gap_name="gate_gap",
+                    gap_direction="same_minus_cross",
+                )
             )
         elif cfg.graph_mode == "oracle":
             consensus_weights = oracle_weight_matrix(env, n_agents)
@@ -4084,7 +4601,6 @@ def main() -> None:
         elapsed = max(time.time() - start_time, 1e-6)
         sps = env_steps / elapsed
         log_adj = (consensus_weights > 0.0).astype(np.float32)
-        true_clusters = oracle_clusters(env)
         wandb_payload: Dict[str, object] = {
             "train/env_steps": float(env_steps),
             "train/sps": float(sps),
@@ -4185,6 +4701,7 @@ def main() -> None:
             eval_metrics, eval_video = evaluate(
                 cfg.env_id,
                 env_kwargs,
+                cfg.observation_format,
                 agents,
                 cfg.eval_episodes,
                 cfg.eval_horizon,
@@ -4243,6 +4760,7 @@ def main() -> None:
     eval_metrics, eval_video = evaluate(
         cfg.env_id,
         env_kwargs,
+        cfg.observation_format,
         agents,
         cfg.eval_episodes,
         cfg.eval_horizon,

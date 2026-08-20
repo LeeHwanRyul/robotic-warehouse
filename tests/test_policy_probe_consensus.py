@@ -23,7 +23,10 @@ from examples.train_recurrent_ippo_consensus import (  # noqa: E402
     apply_confidence_weighted_critic_consensus,
     build_objective_probe_bank,
     critic_parameter_groups,
+    mask_gate_by_current_neighbors,
     normalized_mutual_info,
+    oracle_pairwise_matrix_metrics,
+    pairwise_matrix_metrics,
     parse_curriculum_stages,
     parse_transfer_components,
     policy_distance_similarity_matrices,
@@ -32,6 +35,10 @@ from examples.train_recurrent_ippo_consensus import (  # noqa: E402
     transfer_checkpoint_to_agents,
 )
 from rware.multi_team_grid import MultiTeamGrid  # noqa: E402
+from rware.utils.semantic_observation import (  # noqa: E402
+    RwareSemanticObservationWrapper,
+    get_semantic_observation_spec,
+)
 from rware.utils.probe_maps import RwareObjectiveProbeMapBuilder  # noqa: E402
 
 
@@ -89,6 +96,36 @@ def test_policy_probe_sequences_produce_distance_and_similarity():
     assert 0.0 <= similarity[0, 1] < 1.0
 
 
+def test_policy_distance_accepts_agent_conditioned_probe_sequences():
+    agents = [
+        RecurrentActorCritic(obs_dim=3, action_dim=2, mlp_hidden_dim=4, recurrent_hidden_dim=4),
+        RecurrentActorCritic(obs_dim=3, action_dim=2, mlp_hidden_dim=4, recurrent_hidden_dim=4),
+    ]
+    agents[1].load_state_dict(agents[0].state_dict())
+    shared_probe_sequences = torch.randn(5, 3, 3)
+    agent_conditioned = shared_probe_sequences.unsqueeze(0).repeat(2, 1, 1, 1)
+
+    distance, similarity = policy_distance_similarity_matrices(
+        agents,
+        agent_conditioned,
+        device=torch.device("cpu"),
+        temperature=0.25,
+    )
+    assert distance[0, 1] == pytest.approx(0.0, abs=1e-7)
+    assert similarity[0, 1] == pytest.approx(1.0)
+
+    with torch.no_grad():
+        agents[1].actor_head.bias[0] += 5.0
+    distance, similarity = policy_distance_similarity_matrices(
+        agents,
+        agent_conditioned,
+        device=torch.device("cpu"),
+        temperature=0.25,
+    )
+    assert distance[0, 1] > 0.0
+    assert 0.0 <= similarity[0, 1] < 1.0
+
+
 def test_pgct_distance_gate_and_receiver_allocation():
     estimator = TeamGraphEstimator(
         n_agents=3,
@@ -133,6 +170,66 @@ def test_pgct_distance_gate_and_receiver_allocation():
     assert gate[0, 2] == pytest.approx(0.0)
     assert allocation[0, 1] == pytest.approx(1.0)
     assert allocation[2].sum() == pytest.approx(0.0)
+
+
+def test_oracle_pairwise_probe_metrics_report_same_cross_gap_and_pairs():
+    distance = np.asarray(
+        [
+            [0.0, 0.50, 0.10, 0.70],
+            [0.50, 0.0, 0.60, 0.20],
+            [0.10, 0.60, 0.0, 0.80],
+            [0.70, 0.20, 0.80, 0.0],
+        ],
+        dtype=np.float32,
+    )
+    true_clusters = [[0, 2], [1, 3]]
+
+    metrics = oracle_pairwise_matrix_metrics(
+        distance,
+        true_clusters,
+        n_agents=4,
+        metric_name="distance",
+        gap_name="distance_gap",
+    )
+    pair_metrics = pairwise_matrix_metrics(
+        distance,
+        "distance",
+        true_clusters=true_clusters,
+    )
+
+    assert metrics["same_team_distance"] == pytest.approx(0.15)
+    assert metrics["cross_team_distance"] == pytest.approx(0.65)
+    assert metrics["distance_gap"] == pytest.approx(0.50)
+    assert pair_metrics["pair_0_1_distance"] == pytest.approx(0.50)
+    assert pair_metrics["pair_0_2_same_team"] == pytest.approx(1.0)
+    assert pair_metrics["pair_0_3_same_team"] == pytest.approx(0.0)
+
+
+def test_pgct_gate_is_masked_by_current_physical_neighbors():
+    stale_gate = np.asarray(
+        [
+            [0.0, 0.8, 0.4],
+            [0.8, 0.0, 0.7],
+            [0.4, 0.7, 0.0],
+        ],
+        dtype=np.float32,
+    )
+    current_neighbors = np.asarray(
+        [
+            [0.0, 0.0, 1.0],
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+        ],
+        dtype=np.float32,
+    )
+
+    masked_gate = mask_gate_by_current_neighbors(stale_gate, current_neighbors)
+
+    assert masked_gate[0, 1] == pytest.approx(0.0)
+    assert masked_gate[1, 2] == pytest.approx(0.0)
+    assert masked_gate[0, 2] == pytest.approx(0.4)
+    assert masked_gate[2, 0] == pytest.approx(0.4)
+    assert np.trace(masked_gate) == pytest.approx(0.0)
 
 
 def test_pgct_peer_loss_backpropagates_only_through_receiver_critic():
@@ -213,7 +310,15 @@ def test_rware_objective_probe_bank_exposes_team_goal_and_return_scenarios():
     )
     unwrapped = builder.probe_unwrapped
 
+    assert tuple(unwrapped.grid_size) == tuple(env.unwrapped.grid_size)
+    assert set(map(tuple, unwrapped.goals)) == set(map(tuple, env.unwrapped.goals))
+    assert np.array_equal(unwrapped.highways, env.unwrapped.highways)
+
     probes = builder.build(batch_size=48)
+    agent_conditioned_probes = builder.build_for_agent_teams(
+        [0, 1, 0, 1],
+        batch_size=24,
+    )
     scores = _objective_visibility_scores(env, probes)
     probe_np = probes.numpy()
     carrying = probe_np[:, 2] > 0.5
@@ -228,13 +333,18 @@ def test_rware_objective_probe_bank_exposes_team_goal_and_return_scenarios():
     sensor_locations = (1 + 2 * int(unwrapped.sensor_range)) ** 2
 
     requested_shelf_counts = []
+    visible_shelf_counts = []
     for probe in probe_np:
         requested_count = 0
+        shelf_count = 0
         for loc in range(sensor_locations):
             base = self_bits + loc * cell_stride + per_agent
+            if probe[base] > 0.5:
+                shelf_count += 1
             if probe[base] > 0.5 and probe[base + 1] > 0.5:
                 requested_count += 1
         requested_shelf_counts.append(requested_count)
+        visible_shelf_counts.append(shelf_count)
 
     for team_id, team_goals in enumerate(unwrapped.goals_by_team):
         assert any(
@@ -255,15 +365,64 @@ def test_rware_objective_probe_bank_exposes_team_goal_and_return_scenarios():
             for idx, (x, y) in enumerate(positions)
         ), f"missing return-at-home probe for team {team_id}"
 
-    dual_requested_probe_count = sum(
-        count >= 2 for count in requested_shelf_counts
+    dual_visible_probe_count = sum(
+        shelf_count >= 2 and requested_count >= 1
+        for shelf_count, requested_count in zip(
+            visible_shelf_counts,
+            requested_shelf_counts,
+        )
     )
 
     assert probes.shape == (48, obs_dim)
     assert np.count_nonzero(scores > 0.0) >= 36
-    assert max(requested_shelf_counts) >= 2
-    assert dual_requested_probe_count >= 24
+    assert max(visible_shelf_counts) >= 2
+    assert max(requested_shelf_counts) >= 1
+    assert dual_visible_probe_count >= 24
+    assert agent_conditioned_probes.shape == (4, 24, obs_dim)
+    assert torch.allclose(agent_conditioned_probes[0], agent_conditioned_probes[2])
+    assert torch.allclose(agent_conditioned_probes[1], agent_conditioned_probes[3])
+    assert not torch.allclose(agent_conditioned_probes[0], agent_conditioned_probes[1])
     env.close()
+
+
+def test_rware_objective_probe_bank_supports_semantic_observation_wrapper():
+    env = RwareSemanticObservationWrapper(
+        gym.make(
+            "rware-multiteam-tiny-4ag-2teams-v0",
+            sensor_range=3,
+            request_queue_size=2,
+            request_queue_size_per_team=1,
+            require_delivered_shelf_return=True,
+            reveal_team_info=True,
+        )
+    )
+    try:
+        env.reset(seed=17)
+        spec = get_semantic_observation_spec(env)
+        builder = RwareObjectiveProbeMapBuilder(
+            env,
+            obs_dim=spec.obs_dim,
+            rng=np.random.default_rng(0),
+        )
+        probes = builder.build(batch_size=16)
+        agent_conditioned = builder.build_for_agent_teams([0, 1, 0, 1], batch_size=8)
+
+        assert tuple(builder.probe_unwrapped.grid_size) == tuple(env.unwrapped.grid_size)
+        assert probes.shape == (16, spec.obs_dim)
+        assert agent_conditioned.shape == (4, 8, spec.obs_dim)
+        assert torch.allclose(agent_conditioned[0], agent_conditioned[2])
+        assert not torch.allclose(agent_conditioned[0], agent_conditioned[1])
+
+        spatial = probes[:, spec.ego_dim :].reshape(
+            probes.shape[0],
+            spec.spatial_channels,
+            spec.spatial_size,
+            spec.spatial_size,
+        )
+        assert torch.sum(spatial[:, 4]) > 0.0  # requested shelf channel
+        assert torch.sum(spatial[:, 10]) > 0.0  # visible loaded-agent channel
+    finally:
+        env.close()
 
 
 def test_rware_probe_map_builder_saves_visual_manifest(tmp_path):
@@ -298,7 +457,10 @@ def test_rware_probe_map_builder_saves_visual_manifest(tmp_path):
         assert len(builder.scenario_cycle) == 48
         assert len(manifest) == 32
         assert contact_sheet_path.exists()
-        assert any(row["requested_shelf_count"] >= 2 for row in manifest)
+        assert any(
+            row["shelf_count"] >= 2 and row["requested_shelf_count"] >= 1
+            for row in manifest
+        )
     finally:
         env.close()
 

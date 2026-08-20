@@ -1,8 +1,10 @@
 """Canonical RWARE probe maps used by PGCT policy probing.
 
 The training script imports the builder in this module to keep the synthetic
-probe bank as a visible, inspectable artifact. Run this file as a module to
-save PNG renderings of the current probe scenarios:
+probe bank as a visible, inspectable artifact. Probe states are realized in a
+warehouse with the same grid geometry as the training environment when that
+geometry is available. Run this file as a module to save PNG renderings of the
+current probe scenarios:
 
     python -m rware.utils.probe_maps --batch-size 48 --output-dir output/probe_maps
 """
@@ -11,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from copy import deepcopy
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
@@ -20,6 +23,12 @@ import numpy as np
 import torch
 
 from rware.multi_team_warehouse import MultiTeamWarehouse, TeamRewardMode
+from rware.utils.semantic_observation import (
+    RwareSemanticObservationWrapper,
+    SemanticObservationSpec,
+    build_semantic_observation,
+    get_semantic_observation_spec,
+)
 from rware.warehouse import Direction, RewardType
 
 
@@ -73,6 +82,12 @@ RWARE_TEAM_SCENARIO_BLOCKS: Tuple[Tuple[str, ...], ...] = (
         "neutral",
         "neutral",
     ),
+)
+
+RWARE_TEAM_SCENARIOS: Tuple[str, ...] = tuple(
+    scenario
+    for block in RWARE_TEAM_SCENARIO_BLOCKS
+    for scenario in block
 )
 
 
@@ -162,12 +177,20 @@ class RwareObjectiveProbeMapBuilder:
         self.per_shelf = int(self.unwrapped._obs_bits_per_shelf)
         self.sensor_range = int(self.unwrapped.sensor_range)
         self.cell_stride = self.per_agent + self.per_shelf
-        self.expected_dim = self.self_bits + (
+        self.flat_expected_dim = self.self_bits + (
             (1 + 2 * self.sensor_range) ** 2 * self.cell_stride
         )
-        if self.expected_dim != int(obs_dim):
+        self.semantic_spec: Optional[SemanticObservationSpec] = None
+        semantic_spec = get_semantic_observation_spec(env)
+        if self.flat_expected_dim == int(obs_dim):
+            self.expected_dim = self.flat_expected_dim
+        elif semantic_spec.obs_dim == int(obs_dim):
+            self.semantic_spec = semantic_spec
+            self.expected_dim = semantic_spec.obs_dim
+        else:
             raise ValueError(
-                f"obs_dim={obs_dim} does not match RWARE probe dim {self.expected_dim}"
+                f"obs_dim={obs_dim} does not match RWARE probe dims "
+                f"flat={self.flat_expected_dim} or semantic={semantic_spec.obs_dim}"
             )
 
         self.obs_dim = int(obs_dim)
@@ -180,10 +203,13 @@ class RwareObjectiveProbeMapBuilder:
         self.probe_env.reset(seed=0)
         self.probe_unwrapped = self.probe_env.unwrapped
         probe_obs_dim = int(self.probe_env.observation_space[0].shape[0])
-        if probe_obs_dim != self.obs_dim:
+        expected_probe_dim = (
+            self.flat_expected_dim if self.semantic_spec is None else self.flat_expected_dim
+        )
+        if probe_obs_dim != expected_probe_dim:
             raise ValueError(
-                f"custom probe env obs_dim={probe_obs_dim} does not match "
-                f"training obs_dim={self.obs_dim}"
+                f"custom probe env flat obs_dim={probe_obs_dim} does not match "
+                f"expected RWARE flat obs_dim={expected_probe_dim}"
             )
 
         self.goals_by_team = getattr(self.probe_unwrapped, "goals_by_team", None)
@@ -203,6 +229,43 @@ class RwareObjectiveProbeMapBuilder:
         }
         self._team_shelf_ids = self._snapshot_team_shelf_ids()
 
+    def _spec_kwargs(self) -> Dict[str, Any]:
+        spec = getattr(self.env, "spec", None) or getattr(self.unwrapped, "spec", None)
+        kwargs = getattr(spec, "kwargs", None)
+        if isinstance(kwargs, dict):
+            return deepcopy(kwargs)
+        return {}
+
+    def _layout_from_training_env(self) -> Optional[str]:
+        highways = getattr(self.unwrapped, "highways", None)
+        grid_size = getattr(self.unwrapped, "grid_size", None)
+        goals = getattr(self.unwrapped, "goals", None)
+        if highways is None or grid_size is None or goals is None:
+            return None
+
+        height, width = tuple(map(int, grid_size))
+        highway_grid = np.asarray(highways)
+        if highway_grid.shape[:2] != (height, width):
+            return None
+
+        goal_cells = {
+            (int(goal[0]), int(goal[1]))
+            for goal in goals
+            if len(tuple(goal)) >= 2
+        }
+        lines: List[str] = []
+        for y in range(height):
+            chars = []
+            for x in range(width):
+                if (x, y) in goal_cells:
+                    chars.append("g")
+                elif bool(highway_grid[y, x]):
+                    chars.append(".")
+                else:
+                    chars.append("x")
+            lines.append("".join(chars))
+        return "\n".join(lines)
+
     def _make_probe_env(self) -> MultiTeamWarehouse:
         n_agents = max(int(getattr(self.unwrapped, "n_agents", self.n_teams)), self.n_teams)
         team_reward_mode = getattr(
@@ -210,31 +273,127 @@ class RwareObjectiveProbeMapBuilder:
             "team_reward_mode",
             TeamRewardMode.INDIVIDUAL,
         )
-        return MultiTeamWarehouse(
-            shelf_columns=3,
-            column_height=3,
-            shelf_rows=1,
-            n_agents=n_agents,
-            msg_bits=int(getattr(self.unwrapped, "msg_bits", 0)),
-            sensor_range=self.sensor_range,
-            request_queue_size=max(self.n_teams, 2),
-            max_inactivity_steps=None,
-            max_steps=int(getattr(self.unwrapped, "max_steps", 500) or 500),
-            reward_type=getattr(self.unwrapped, "reward_type", RewardType.INDIVIDUAL),
-            layout=DEFAULT_RWARE_PROBE_LAYOUT,
-            normalised_coordinates=self.normalised,
-            render_mode=getattr(self.unwrapped, "render_mode", "human"),
-            n_teams=self.n_teams,
-            team_assignments=getattr(self.unwrapped, "_base_agent_team_ids", None),
-            request_queue_size_per_team=[1 for _ in range(self.n_teams)],
-            team_reward_mode=team_reward_mode,
-            shelf_team_mode="zones",
-            goal_team_mode="zones",
-            require_delivered_shelf_return=bool(
+        kwargs: Dict[str, Any] = {
+            "shelf_columns": 3,
+            "column_height": int(getattr(self.unwrapped, "column_height", 3) or 3),
+            "shelf_rows": 1,
+            "n_agents": n_agents,
+            "msg_bits": int(getattr(self.unwrapped, "msg_bits", 0)),
+            "sensor_range": self.sensor_range,
+            "request_queue_size": int(
+                getattr(self.unwrapped, "request_queue_size", max(self.n_teams, 2))
+            ),
+            "max_inactivity_steps": getattr(
+                self.unwrapped,
+                "max_inactivity_steps",
+                None,
+            ),
+            "max_steps": int(getattr(self.unwrapped, "max_steps", 500) or 500),
+            "reward_type": getattr(
+                self.unwrapped,
+                "reward_type",
+                RewardType.INDIVIDUAL,
+            ),
+            "layout": DEFAULT_RWARE_PROBE_LAYOUT,
+            "normalised_coordinates": self.normalised,
+            "render_mode": getattr(self.unwrapped, "render_mode", "human"),
+            "n_teams": self.n_teams,
+            "team_assignments": getattr(self.unwrapped, "_base_agent_team_ids", None),
+            "request_queue_size_per_team": list(
+                getattr(
+                    self.unwrapped,
+                    "request_queue_size_per_team",
+                    [1 for _ in range(self.n_teams)],
+                )
+            ),
+            "team_reward_mode": team_reward_mode,
+            "shelf_team_mode": getattr(self.unwrapped, "shelf_team_mode", "zones"),
+            "goal_team_mode": getattr(self.unwrapped, "goal_team_mode", "zones"),
+            "require_delivered_shelf_return": bool(
                 getattr(self.unwrapped, "require_delivered_shelf_return", False)
             ),
-            reveal_team_info=True,
+            "reveal_team_info": True,
+        }
+        kwargs.update(self._spec_kwargs())
+
+        layout = self._layout_from_training_env()
+        if layout is not None:
+            kwargs["layout"] = layout
+
+        kwargs.update(
+            {
+                "n_agents": n_agents,
+                "msg_bits": int(getattr(self.unwrapped, "msg_bits", 0)),
+                "sensor_range": self.sensor_range,
+                "request_queue_size": int(
+                    getattr(
+                        self.unwrapped,
+                        "request_queue_size",
+                        kwargs.get("request_queue_size", max(self.n_teams, 2)),
+                    )
+                ),
+                "max_inactivity_steps": getattr(
+                    self.unwrapped,
+                    "max_inactivity_steps",
+                    kwargs.get("max_inactivity_steps", None),
+                ),
+                "max_steps": int(
+                    getattr(
+                        self.unwrapped,
+                        "max_steps",
+                        kwargs.get("max_steps", 500),
+                    )
+                    or 500
+                ),
+                "reward_type": getattr(
+                    self.unwrapped,
+                    "reward_type",
+                    kwargs.get("reward_type", RewardType.INDIVIDUAL),
+                ),
+                "normalised_coordinates": self.normalised,
+                "render_mode": getattr(
+                    self.unwrapped,
+                    "render_mode",
+                    kwargs.get("render_mode", "human"),
+                ),
+                "n_teams": self.n_teams,
+                "team_assignments": getattr(
+                    self.unwrapped,
+                    "_base_agent_team_ids",
+                    kwargs.get("team_assignments", None),
+                ),
+                "request_queue_size_per_team": list(
+                    getattr(
+                        self.unwrapped,
+                        "request_queue_size_per_team",
+                        kwargs.get(
+                            "request_queue_size_per_team",
+                            [1 for _ in range(self.n_teams)],
+                        ),
+                    )
+                ),
+                "team_reward_mode": team_reward_mode,
+                "shelf_team_mode": getattr(
+                    self.unwrapped,
+                    "shelf_team_mode",
+                    kwargs.get("shelf_team_mode", "zones"),
+                ),
+                "goal_team_mode": getattr(
+                    self.unwrapped,
+                    "goal_team_mode",
+                    kwargs.get("goal_team_mode", "zones"),
+                ),
+                "require_delivered_shelf_return": bool(
+                    getattr(
+                        self.unwrapped,
+                        "require_delivered_shelf_return",
+                        kwargs.get("require_delivered_shelf_return", False),
+                    )
+                ),
+                "reveal_team_info": True,
+            }
         )
+        return MultiTeamWarehouse(**kwargs)
 
     @property
     def scenario_cycle(self) -> Tuple[Tuple[str, int], ...]:
@@ -294,6 +453,16 @@ class RwareObjectiveProbeMapBuilder:
             index=int(probe_id),
             name=scenario,
             team_id=int(team_id),
+            variant=variant,
+        )
+
+    def scenario_for_team(self, probe_id: int, team_id: int) -> RwareProbeScenario:
+        scenario = RWARE_TEAM_SCENARIOS[int(probe_id) % len(RWARE_TEAM_SCENARIOS)]
+        variant = int(probe_id) // len(RWARE_TEAM_SCENARIOS)
+        return RwareProbeScenario(
+            index=int(probe_id),
+            name=scenario,
+            team_id=int(team_id) % self.n_teams,
             variant=variant,
         )
 
@@ -552,161 +721,37 @@ class RwareObjectiveProbeMapBuilder:
 
         self._place_background_agents(focal)
         self.probe_unwrapped._recalc_grid()
+        if self.semantic_spec is not None:
+            return build_semantic_observation(self.probe_unwrapped, focal).astype(
+                np.float32
+            )
         return self.probe_unwrapped._make_obs(focal).astype(np.float32)
 
     def build(self, batch_size: int) -> torch.Tensor:
         probes = [self.build_one(idx) for idx in range(max(int(batch_size), 1))]
         return torch.as_tensor(np.stack(probes, axis=0), dtype=torch.float32)
 
+    def build_for_team(self, team_id: int, batch_size: int) -> torch.Tensor:
+        probes = [
+            self._build_realized_probe(self.scenario_for_team(idx, team_id))
+            for idx in range(max(int(batch_size), 1))
+        ]
+        return torch.as_tensor(np.stack(probes, axis=0), dtype=torch.float32)
+
+    def build_for_agent_teams(
+        self,
+        agent_team_ids: Sequence[int],
+        batch_size: int,
+    ) -> torch.Tensor:
+        team_probes = [
+            self.build_for_team(int(team_id), batch_size)
+            for team_id in agent_team_ids
+        ]
+        return torch.stack(team_probes, dim=0)
+
     def build_one(self, probe_id: int) -> np.ndarray:
         scenario = self.scenario_for(probe_id)
         return self._build_realized_probe(scenario)
-        team_id = scenario.team_id
-        variant = scenario.variant
-        home = self.team_shelf_home(team_id, variant)
-        goal = self.team_goal(team_id, variant)
-        other_goal = self.team_goal(self.other_team_id(team_id), variant)
-
-        if scenario.name == "team_home_pickup":
-            x, y = home
-            obs = self.make_probe(x, y, carrying=False, direction=Direction.UP)
-            self.set_shelf(obs, 0, 0, requested=True)
-        elif scenario.name == "team_home_approach":
-            x, y, direction = self.viewpoint_toward(home, variant)
-            obs = self.make_probe(x, y, carrying=False, direction=direction)
-            self.add_requested_shelf_toward(obs, x, y, home, requested=True)
-        elif scenario.name == "team_goal_approach":
-            x, y, direction = self.viewpoint_toward(goal, variant)
-            obs = self.make_probe(x, y, carrying=True, direction=direction)
-        elif scenario.name == "team_goal_at_goal":
-            x, y = goal
-            direction = self.direction_from_delta(
-                int(goal[0]) - int(home[0]),
-                int(goal[1]) - int(home[1]),
-            )
-            obs = self.make_probe(x, y, carrying=True, direction=direction)
-        elif scenario.name == "team_return_approach":
-            x, y, direction = self.viewpoint_toward(home, variant)
-            obs = self.make_probe(x, y, carrying=True, direction=direction)
-        elif scenario.name == "team_return_at_home":
-            x, y = home
-            obs = self.make_probe(x, y, carrying=True, direction=Direction.UP)
-        elif scenario.name == "wrong_team_goal":
-            x, y = other_goal
-            direction = self.direction_from_delta(
-                int(other_goal[0]) - int(home[0]),
-                int(other_goal[1]) - int(home[1]),
-            )
-            obs = self.make_probe(x, y, carrying=True, direction=direction)
-        elif scenario.name == "team_conflict":
-            x, y, direction = self.viewpoint_toward(home, variant)
-            obs = self.make_probe(x, y, carrying=False, direction=direction)
-            used_offsets = {
-                self.add_requested_shelf_toward(obs, x, y, home, requested=True)
-            }
-            for dy, dx in sample_cardinal_offsets(self.sensor_range, self.rng):
-                if (dy, dx) in used_offsets:
-                    continue
-                self.set_shelf(obs, dy, dx, requested=False)
-                break
-        elif scenario.name == "dual_requested_home_pair":
-            x, y, direction = self.dual_probe_position(home, team_id, variant)
-            obs = self.make_probe(x, y, carrying=False, direction=direction)
-            self.add_requested_pair_at_offsets(
-                obs,
-                self.team_separated_offsets(team_id, variant),
-            )
-        elif scenario.name == "dual_requested_other_home_pair":
-            other_home = self.team_shelf_home(self.other_team_id(team_id), variant)
-            x, y, direction = self.dual_probe_position(other_home, team_id, variant)
-            obs = self.make_probe(x, y, carrying=False, direction=direction)
-            self.add_requested_pair_at_offsets(
-                obs,
-                self.team_separated_offsets(team_id, variant + 1),
-            )
-        elif scenario.name == "dual_requested_goal_pair":
-            x, y, direction = self.dual_probe_position(goal, team_id, variant)
-            obs = self.make_probe(x, y, carrying=False, direction=direction)
-            self.add_requested_pair_at_offsets(
-                obs,
-                self.team_separated_offsets(team_id, variant + 2),
-            )
-        elif scenario.name == "dual_requested_goal_zone_pair":
-            x, y, direction = self.dual_probe_position(goal, team_id, variant + 1)
-            obs = self.make_probe(x, y, carrying=False, direction=direction)
-            self.add_requested_pair_at_offsets(
-                obs,
-                self.team_separated_offsets(team_id, variant + 3),
-            )
-        elif scenario.name == "dual_requested_opposite_axis":
-            x, y, _ = self.dual_probe_position(home, team_id, variant)
-            obs = self.make_probe(x, y, carrying=False, direction=Direction.UP)
-            self.add_requested_pair_at_offsets(
-                obs,
-                self.team_separated_offsets(team_id, variant + 4),
-            )
-        elif scenario.name == "dual_requested_front_side":
-            x, y, direction = self.dual_probe_position(home, team_id, variant)
-            obs = self.make_probe(x, y, carrying=False, direction=direction)
-            self.add_requested_pair_at_offsets(
-                obs,
-                self.team_separated_offsets(team_id, variant + 5),
-            )
-        elif scenario.name == "dual_requested_near_far":
-            x, y, direction = self.dual_probe_position(home, team_id, variant)
-            obs = self.make_probe(x, y, carrying=False, direction=direction)
-            self.add_requested_pair_at_offsets(
-                obs,
-                self.team_separated_offsets(team_id, variant + 6),
-            )
-        elif scenario.name == "dual_requested_diagonal":
-            x, y, _ = self.dual_probe_position(goal, team_id, variant)
-            obs = self.make_probe(x, y, carrying=False, direction=Direction.UP)
-            self.add_requested_pair_at_offsets(
-                obs,
-                self.team_separated_offsets(team_id, variant + 7),
-            )
-        elif scenario.name == "dual_requested_with_decoy":
-            x, y, direction = self.dual_probe_position(home, team_id, variant)
-            obs = self.make_probe(x, y, carrying=False, direction=direction)
-            used_offsets = self.add_requested_pair_at_offsets(
-                obs,
-                self.team_separated_offsets(team_id, variant + 8),
-            )
-            self.add_unrequested_decoy(obs, used_offsets)
-        elif scenario.name == "dual_requested_goal_with_decoy":
-            x, y, direction = self.dual_probe_position(goal, team_id, variant)
-            obs = self.make_probe(x, y, carrying=False, direction=direction)
-            used_offsets = self.add_requested_pair_at_offsets(
-                obs,
-                self.team_separated_offsets(team_id, variant + 9),
-            )
-            self.add_unrequested_decoy(obs, used_offsets)
-        elif scenario.name == "dual_requested_lane_choice":
-            x, y = int(self.width // 2), int(self.height // 2)
-            obs = self.make_probe(x, y, carrying=False, direction=Direction.UP)
-            reach = max(int(self.sensor_range), 1)
-            used_offsets = self.add_requested_pair_at_offsets(
-                obs,
-                [(0, -reach), (0, reach)],
-            )
-            if variant % 2:
-                self.add_unrequested_decoy(obs, used_offsets)
-        elif scenario.name == "dual_requested_cross_zone_choice":
-            x, y, direction = self.dual_probe_position(other_goal, team_id, variant)
-            obs = self.make_probe(x, y, carrying=False, direction=direction)
-            self.add_requested_pair_at_offsets(
-                obs,
-                self.team_separated_offsets(team_id, variant + 10),
-            )
-        else:
-            x = int(self.width // 2)
-            y = int(self.height // 2)
-            obs = self.make_probe(x, y, carrying=False, direction=Direction.UP)
-            offsets = sample_cardinal_offsets(self.sensor_range, self.rng)
-            if offsets:
-                self.set_shelf(obs, offsets[0][0], offsets[0][1], requested=False)
-        return obs
 
     def write_position(self, obs: np.ndarray, x: int, y: int) -> None:
         if self.normalised:
@@ -1073,6 +1118,73 @@ class RwareObjectiveProbeMapBuilder:
 
     def decode_observation(self, obs: np.ndarray) -> Dict[str, Any]:
         obs = np.asarray(obs, dtype=np.float32)
+        if self.semantic_spec is not None:
+            spec = self.semantic_spec
+            if self.normalised:
+                x = int(round(float(obs[0]) * max(self.width - 1, 1)))
+                y = int(round(float(obs[1]) * max(self.height - 1, 1)))
+            else:
+                x = int(round(float(obs[0])))
+                y = int(round(float(obs[1])))
+
+            direction_idx = int(np.argmax(obs[3 : 3 + len(Direction)]))
+            spatial = obs[spec.ego_dim :].reshape(
+                spec.spatial_channels,
+                spec.spatial_size,
+                spec.spatial_size,
+            )
+            cells: List[Dict[str, Any]] = []
+            requested_count = 0
+            shelf_count = 0
+            agent_count = 0
+            loaded_agent_count = 0
+            for row, dy in enumerate(
+                range(-self.sensor_range, self.sensor_range + 1)
+            ):
+                for col, dx in enumerate(
+                    range(-self.sensor_range, self.sensor_range + 1)
+                ):
+                    has_agent = bool(spatial[5, row, col] > 0.5)
+                    has_shelf = bool(spatial[3, row, col] > 0.5)
+                    requested = bool(spatial[4, row, col] > 0.5)
+                    loaded = bool(spatial[10, row, col] > 0.5)
+                    if has_agent:
+                        agent_count += 1
+                    if loaded:
+                        loaded_agent_count += 1
+                    if has_shelf:
+                        shelf_count += 1
+                    if requested:
+                        requested_count += 1
+                    direction = None
+                    if has_agent:
+                        direction = Direction(
+                            int(np.argmax(spatial[6:10, row, col]))
+                        ).name
+                    cells.append(
+                        {
+                            "dy": int(dy),
+                            "dx": int(dx),
+                            "has_agent": has_agent,
+                            "agent_direction": direction,
+                            "agent_loaded": loaded,
+                            "has_shelf": has_shelf,
+                            "shelf_requested": requested,
+                        }
+                    )
+            return {
+                "self_x": x,
+                "self_y": y,
+                "carrying": bool(obs[2] > 0.5),
+                "direction": Direction(direction_idx).name,
+                "on_highway": bool(obs[7] > 0.5),
+                "requested_shelf_count": int(requested_count),
+                "shelf_count": int(shelf_count),
+                "agent_count": int(agent_count),
+                "loaded_agent_count": int(loaded_agent_count),
+                "cells": cells,
+            }
+
         if self.normalised:
             x = int(round(float(obs[0]) * max(self.width - 1, 1)))
             y = int(round(float(obs[1]) * max(self.height - 1, 1)))
@@ -1449,6 +1561,23 @@ def build_rware_objective_probe_bank(
     return builder.build(batch_size)
 
 
+def build_rware_agent_conditioned_probe_bank(
+    env: gym.Env,
+    obs_dim: int,
+    batch_size: int,
+    rng: np.random.Generator,
+    agent_team_ids: Sequence[int],
+) -> Optional[torch.Tensor]:
+    unwrapped = env.unwrapped
+    if not all(
+        hasattr(unwrapped, name)
+        for name in RwareObjectiveProbeMapBuilder.REQUIRED_ENV_ATTRS
+    ):
+        return None
+    builder = RwareObjectiveProbeMapBuilder(env, obs_dim, rng)
+    return builder.build_for_agent_teams(agent_team_ids, batch_size)
+
+
 def save_rware_probe_map_images(
     env: gym.Env,
     obs_dim: int,
@@ -1564,6 +1693,12 @@ def _parse_args() -> argparse.Namespace:
         help="Gymnasium RWARE environment id.",
     )
     parser.add_argument("--env-kwargs-json", default="{}", help="JSON env kwargs.")
+    parser.add_argument(
+        "--observation-format",
+        default="flat",
+        choices=["flat", "semantic"],
+        help="Observation format used for the generated probe vectors.",
+    )
     parser.add_argument("--sensor-range", type=int, default=3)
     parser.add_argument("--request-queue-size", type=int, default=None)
     parser.add_argument("--request-queue-size-per-team", type=int, default=None)
@@ -1592,6 +1727,8 @@ def main() -> None:
         env_kwargs["reveal_team_info"] = True
 
     env = gym.make(args.env_id, render_mode="rgb_array", **env_kwargs)
+    if args.observation_format == "semantic":
+        env = RwareSemanticObservationWrapper(env)
     try:
         env.reset(seed=args.seed)
         obs_dim = int(env.observation_space[0].shape[0])
