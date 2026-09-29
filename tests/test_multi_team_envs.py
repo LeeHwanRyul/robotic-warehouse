@@ -659,6 +659,73 @@ def test_multiteam_rware_repeated_stationary_actions_are_penalized():
     assert env._stationary_action_streak[0] == 0
 
 
+def test_multiteam_rware_stationary_blocker_is_penalized():
+    env = MultiTeamWarehouse(
+        shelf_columns=3,
+        column_height=1,
+        shelf_rows=1,
+        n_agents=2,
+        msg_bits=0,
+        sensor_range=1,
+        request_queue_size=1,
+        request_queue_size_per_team=1,
+        max_inactivity_steps=None,
+        max_steps=20,
+        reward_type=RewardType.INDIVIDUAL,
+        layout=".....\n.x.g.\n.....",
+        n_teams=1,
+        team_assignments=[0, 0],
+        team_reward_mode=TeamRewardMode.INDIVIDUAL,
+        failed_forward_penalty=0.01,
+        blocking_agent_penalty=0.07,
+        deadlock_penalty=0.05,
+        deadlock_penalty_after=1,
+        reveal_team_info=True,
+    )
+    env.reset(seed=17)
+
+    env.agents[0].x = 0
+    env.agents[0].y = 1
+    env.agents[0].dir = Direction.RIGHT
+    env.agents[0].carrying_shelf = None
+    env.agents[1].x = 1
+    env.agents[1].y = 1
+    env.agents[1].dir = Direction.UP
+    env.agents[1].carrying_shelf = None
+    env._recalc_grid()
+    env._reset_progress_baselines()
+
+    _, rewards, _, _, info = env.step([Action.FORWARD, Action.NOOP])
+
+    assert rewards[0] == pytest.approx(-0.01)
+    assert rewards[1] == pytest.approx(-0.07)
+    assert info["failed_forwards"] == 1
+    assert info["blocking_agents"] == 1
+    assert info["deadlocked_agents"] == 0
+    assert info["reward_shaping"][1] == pytest.approx(-0.07)
+    assert info["blocking_agent_events"] == [
+        {"agent_id": 2, "position": (1, 1), "blocked_agent_id": 1}
+    ]
+
+    _, rewards, _, _, info = env.step([Action.FORWARD, Action.NOOP])
+
+    assert rewards[0] == pytest.approx(-0.06)
+    assert rewards[1] == pytest.approx(-0.07)
+    assert info["failed_forwards"] == 1
+    assert info["blocking_agents"] == 1
+    assert info["deadlocked_agents"] == 1
+    assert info["reward_shaping"][0] == pytest.approx(-0.05)
+    assert info["reward_shaping"][1] == pytest.approx(-0.07)
+    assert info["deadlock_events"] == [
+        {
+            "agent_id": 1,
+            "blocked_steps": 2,
+            "position": (0, 1),
+            "target": (1, 1),
+        }
+    ]
+
+
 def test_multiteam_rware_new_cell_reward_is_not_repeatable_loop_reward():
     env = MultiTeamWarehouse(
         shelf_columns=3,
