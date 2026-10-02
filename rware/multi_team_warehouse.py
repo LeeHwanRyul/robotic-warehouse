@@ -93,6 +93,9 @@ class MultiTeamWarehouse(Warehouse):
         wrong_team_penalty: float = 0.0,
         step_penalty: float = 0.0,
         failed_forward_penalty: float = 0.0,
+        blocking_agent_penalty: float = 0.0,
+        deadlock_penalty: float = 0.0,
+        deadlock_penalty_after: int = 5,
         forward_movement_reward: float = 0.0,
         stationary_action_penalty: float = 0.0,
         turn_action_penalty: float = 0.0,
@@ -120,6 +123,8 @@ class MultiTeamWarehouse(Warehouse):
         communication_range: Optional[int] = None,
         team_edge_threshold: float = 0.5,
         use_physical_comm_range: bool = True,
+        communication_enabled: bool = True,
+        communication_topology: str = "physical",
     ):
         if n_teams < 1:
             raise ValueError("n_teams must be positive")
@@ -188,6 +193,9 @@ class MultiTeamWarehouse(Warehouse):
         self.wrong_team_penalty = float(wrong_team_penalty)
         self.step_penalty = float(step_penalty)
         self.failed_forward_penalty = float(failed_forward_penalty)
+        self.blocking_agent_penalty = float(blocking_agent_penalty)
+        self.deadlock_penalty = float(deadlock_penalty)
+        self.deadlock_penalty_after = int(deadlock_penalty_after)
         self.forward_movement_reward = float(forward_movement_reward)
         self.stationary_action_penalty = float(stationary_action_penalty)
         self.turn_action_penalty = float(turn_action_penalty)
@@ -220,6 +228,8 @@ class MultiTeamWarehouse(Warehouse):
             "shelf_return_reward",
             "wrong_shelf_return_penalty",
             "premature_drop_penalty",
+            "blocking_agent_penalty",
+            "deadlock_penalty",
             "forward_movement_reward",
             "stationary_action_penalty",
             "turn_action_penalty",
@@ -235,6 +245,8 @@ class MultiTeamWarehouse(Warehouse):
                 raise ValueError(f"{name} must be non-negative")
         if self.stationary_streak_penalty_after < 0:
             raise ValueError("stationary_streak_penalty_after must be non-negative")
+        if self.deadlock_penalty_after < 0:
+            raise ValueError("deadlock_penalty_after must be non-negative")
         self.reveal_team_info = reveal_team_info
 
         self.shelf_team_ids: Dict[int, int] = {}
@@ -249,7 +261,19 @@ class MultiTeamWarehouse(Warehouse):
         self._last_wrong_return_events = []
         self._last_pickup_events = []
         self._last_invalid_toggle_events = []
+        self._last_failed_forward_events = []
+        self._last_blocking_agent_events = []
+        self._last_deadlock_events = []
         self._last_reward_shaping = np.zeros(self.n_agents, dtype=np.float32)
+        self._last_requested_actions = np.full(
+            self.n_agents,
+            int(Action.NOOP.value),
+            dtype=np.int32,
+        )
+        self._consecutive_failed_forward_steps = np.zeros(
+            self.n_agents,
+            dtype=np.int32,
+        )
         self._picked_request_shelf_ids_by_agent: List[Set[int]] = [
             set() for _ in range(self.n_agents)
         ]
@@ -280,6 +304,14 @@ class MultiTeamWarehouse(Warehouse):
         # This is for training-time selective sharing or debugging. It is not
         # included in the agents' observations.
         self.communication_range = int(sensor_range if communication_range is None else communication_range)
+        if communication_topology not in {"physical", "complete", "none"}:
+            raise ValueError("unknown communication_topology")
+        if self.communication_range < 0:
+            raise ValueError("Communication range must be nonnegative")
+        self.communication_enabled = bool(communication_enabled)
+        self.communication_topology = communication_topology
+        self._training_comm_weights = None
+        self.training_comm_directed = False
         self.team_edge_threshold = float(team_edge_threshold)
         self.use_physical_comm_range = bool(use_physical_comm_range)
         self.inferred_team_ids = -np.ones(self.n_agents, dtype=np.int32)
@@ -317,6 +349,24 @@ class MultiTeamWarehouse(Warehouse):
     def _assign_shelf_teams(self):
         self.shelf_team_ids = {}
         self.shelfs_by_team = [[] for _ in range(self.n_teams)]
+
+        if self.shelf_team_mode == "balanced_soft_zones":
+            if self.n_teams != 2:
+                raise ValueError("balanced_soft_zones requires two teams")
+            zones = [[shelf for shelf in self.shelfs
+                      if self._home_zone_id(shelf.x, shelf.y) == team]
+                     for team in range(2)]
+            if len(zones[0]) != len(zones[1]):
+                raise ValueError("balanced_soft_zones requires equal-sized shelf zones")
+            swap_count = int(round(len(zones[0]) * (1.0 - self.shelf_soft_zone_ratio)))
+            for team, shelves in enumerate(zones):
+                order = self.np_random.permutation(len(shelves))
+                swapped = set(order[:swap_count].tolist())
+                for idx, shelf in enumerate(shelves):
+                    owner = 1 - team if idx in swapped else team
+                    self.shelf_team_ids[shelf.id] = owner
+                    self.shelfs_by_team[owner].append(shelf)
+            return
 
         if self.shelf_team_mode == "round_robin":
             ordered_shelfs = sorted(self.shelfs, key=lambda shelf: (shelf.x, shelf.y, shelf.id))
@@ -628,13 +678,21 @@ class MultiTeamWarehouse(Warehouse):
         return float(max(int(height) + int(width) - 2, 1))
 
     def _nearest_requested_shelf_distance(self, agent) -> Optional[int]:
-        shelves = self._requested_shelves_for_agent(agent)
+        shelves = self._available_requested_shelves(agent)
         if not shelves:
             return None
         return min(
             self._distance(agent.x, agent.y, (shelf.x, shelf.y))
             for shelf in shelves
         )
+
+    def _available_requested_shelves(self, agent) -> List[Shelf]:
+        carried_ids = {
+            other.carrying_shelf.id for other in self.agents
+            if other.carrying_shelf is not None
+        }
+        return [shelf for shelf in self._requested_shelves_for_agent(agent)
+                if shelf.id not in carried_ids]
 
     def _goals_for_shelf_team(self, team_id: int) -> List[Tuple[int, int]]:
         if self.require_matching_team_goal and 0 <= team_id < len(self.goals_by_team):
@@ -808,6 +866,8 @@ class MultiTeamWarehouse(Warehouse):
 
     def set_training_comm_edges(self, edges):
         """Manually set communication edges for debugging or visualization."""
+        if not self.communication_enabled:
+            return self.set_training_comm_weights(np.zeros((self.n_agents, self.n_agents)))
         self.training_comm_adj = np.zeros((self.n_agents, self.n_agents), dtype=np.float32)
         self.training_comm_edges = []
         for i, j in edges:
@@ -822,6 +882,31 @@ class MultiTeamWarehouse(Warehouse):
             if edge not in self.training_comm_edges:
                 self.training_comm_edges.append(edge)
         return self.training_comm_adj.copy()
+
+    def get_neighbor_adjacency(self):
+        """Available links [receiver, sender]. No team labels are consulted."""
+        adj = np.zeros((self.n_agents, self.n_agents), dtype=np.float32)
+        if not self.communication_enabled or self.communication_topology == "none":
+            return adj
+        for i, receiver in enumerate(self.agents):
+            for j, sender in enumerate(self.agents):
+                if i == j:
+                    continue
+                if self.communication_topology == "complete":
+                    visible = True
+                else:
+                    visible = self._agents_within_comm_range(i, j)
+                adj[i, j] = float(visible)
+        return adj
+
+    def set_training_comm_weights(self, weights):
+        weights = np.asarray(weights, dtype=np.float32)
+        if weights.shape != (self.n_agents, self.n_agents) or not np.isfinite(weights).all() or np.any(weights < 0):
+            raise ValueError("communication weights must be finite nonnegative NxN")
+        self._training_comm_weights = weights.copy()
+        np.fill_diagonal(self._training_comm_weights, 0)
+        self.training_comm_directed = not np.allclose(weights, weights.T)
+        return self.update_training_comm_graph()
 
     def _agents_within_comm_range(self, i: int, j: int) -> bool:
         ai = self.agents[int(i)]
@@ -840,6 +925,15 @@ class MultiTeamWarehouse(Warehouse):
         3. both predictions exceed the confidence threshold,
         4. optionally, the agents are within communication_range.
         """
+        if self._training_comm_weights is not None or not self.communication_enabled:
+            weights = self._training_comm_weights
+            if weights is None:
+                weights = np.zeros((self.n_agents, self.n_agents), dtype=np.float32)
+            self.training_comm_adj = weights * self.get_neighbor_adjacency()
+            # Public edge tuples are (sender, receiver), matching arrow direction.
+            self.training_comm_edges = [(int(j), int(i)) for i, j in zip(*np.nonzero(self.training_comm_adj))
+                                        if self.training_comm_directed or i < j]
+            return self.training_comm_adj.copy()
         self.training_comm_adj = np.zeros((self.n_agents, self.n_agents), dtype=np.float32)
         self.training_comm_edges = []
 
@@ -883,7 +977,12 @@ class MultiTeamWarehouse(Warehouse):
         self._last_wrong_return_events = []
         self._last_pickup_events = []
         self._last_invalid_toggle_events = []
+        self._last_failed_forward_events = []
+        self._last_blocking_agent_events = []
+        self._last_deadlock_events = []
         self._last_reward_shaping[:] = 0.0
+        self._last_requested_actions[:] = int(Action.NOOP.value)
+        self._consecutive_failed_forward_steps[:] = 0
         self._shelves_awaiting_return.clear()
         self._shelf_return_team_ids.clear()
         for picked_shelf_ids in self._picked_request_shelf_ids_by_agent:
@@ -908,6 +1007,9 @@ class MultiTeamWarehouse(Warehouse):
             "wrong_returns": len(self._last_wrong_return_events),
             "pickups": len(self._last_pickup_events),
             "invalid_toggles": len(self._last_invalid_toggle_events),
+            "failed_forwards": len(self._last_failed_forward_events),
+            "blocking_agents": len(self._last_blocking_agent_events),
+            "deadlocked_agents": len(self._last_deadlock_events),
         }
         if self.reveal_team_info:
             info.update(
@@ -921,6 +1023,9 @@ class MultiTeamWarehouse(Warehouse):
                     "wrong_return_events": list(self._last_wrong_return_events),
                     "pickup_events": list(self._last_pickup_events),
                     "invalid_toggle_events": list(self._last_invalid_toggle_events),
+                    "failed_forward_events": list(self._last_failed_forward_events),
+                    "blocking_agent_events": list(self._last_blocking_agent_events),
+                    "deadlock_events": list(self._last_deadlock_events),
                     "shelves_awaiting_return": sorted(self._shelves_awaiting_return),
                     "shelf_home_positions": dict(self._shelf_home_positions),
                     "reward_shaping": self._last_reward_shaping.copy(),
@@ -953,13 +1058,23 @@ class MultiTeamWarehouse(Warehouse):
         self._last_wrong_return_events = []
         self._last_pickup_events = []
         self._last_invalid_toggle_events = []
+        self._last_failed_forward_events = []
+        self._last_blocking_agent_events = []
+        self._last_deadlock_events = []
 
+        requested_action_values = []
         for agent, action in zip(self.agents, actions):
             if self.msg_bits > 0:
                 agent.req_action = Action(action[0])
                 agent.message[:] = action[1:]
             else:
                 agent.req_action = Action(action)
+            requested_action_values.append(int(agent.req_action.value))
+        self._last_requested_actions[:] = np.asarray(
+            requested_action_values,
+            dtype=np.int32,
+        )
+
 
         commited_agents = set()
         movement_graph = nx.DiGraph()
@@ -1016,7 +1131,16 @@ class MultiTeamWarehouse(Warehouse):
         progress_shaping_rewards = np.zeros(self.n_agents, dtype=np.float32)
         requested_actions = [agent.req_action for agent in self.agents]
         before_positions = [(agent.x, agent.y) for agent in self.agents]
+        before_position_to_agent = {
+            position: agent_id for agent_id, position in enumerate(before_positions)
+        }
         before_carried_shelves = [agent.carrying_shelf for agent in self.agents]
+        # Freeze candidate positions for this transition. A teammate moving,
+        # picking up, or replacing a request must not reward an idle agent.
+        before_pickup_targets = [
+            [(int(shelf.x), int(shelf.y)) for shelf in self._available_requested_shelves(agent)]
+            for agent in self.agents
+        ]
         before_requested_shelf_distances = [
             (
                 None
@@ -1038,11 +1162,71 @@ class MultiTeamWarehouse(Warehouse):
             for agent in self.agents
         ]
 
+        blocking_agent_counts = np.zeros(self.n_agents, dtype=np.float32)
+        failed_agent_indices: Set[int] = set()
+        failed_agent_blocked_by_agent = np.zeros(self.n_agents, dtype=bool)
         for agent in failed_agents:
             assert agent.req_action == Action.FORWARD
+            agent_idx = int(agent.id) - 1
+            failed_agent_indices.add(agent_idx)
+            target = tuple(map(int, agent.req_location(self.grid_size)))
+            self._last_failed_forward_events.append(
+                {
+                    "agent_id": int(agent.id),
+                    "position": (int(agent.x), int(agent.y)),
+                    "target": target,
+                }
+            )
+            blocker_id = before_position_to_agent.get(target)
+            if blocker_id is not None and blocker_id != agent.id - 1:
+                blocker = self.agents[blocker_id]
+                blocker_is_moving = (
+                    blocker in commited_agents
+                    and blocker.req_action == Action.FORWARD
+                )
+                if not blocker_is_moving:
+                    blocking_agent_counts[blocker_id] += 1.0
+                    failed_agent_blocked_by_agent[agent_idx] = True
+                    self._last_blocking_agent_events.append(
+                        {
+                            "agent_id": int(blocker.id),
+                            "position": target,
+                            "blocked_agent_id": int(agent.id),
+                        }
+                    )
             agent.req_action = Action.NOOP
             if self.failed_forward_penalty:
                 rewards[agent.id - 1] -= self.failed_forward_penalty
+
+        for agent_idx in range(self.n_agents):
+            if agent_idx in failed_agent_indices:
+                self._consecutive_failed_forward_steps[agent_idx] += 1
+            else:
+                self._consecutive_failed_forward_steps[agent_idx] = 0
+
+        if self.blocking_agent_penalty:
+            shaping_rewards -= self.blocking_agent_penalty * blocking_agent_counts
+        if self.deadlock_penalty:
+            for agent_idx in sorted(failed_agent_indices):
+                if not failed_agent_blocked_by_agent[agent_idx]:
+                    continue
+                blocked_steps = int(self._consecutive_failed_forward_steps[agent_idx])
+                if blocked_steps <= self.deadlock_penalty_after:
+                    continue
+                shaping_rewards[agent_idx] -= self.deadlock_penalty
+                event = self._last_failed_forward_events[-1]
+                for candidate in self._last_failed_forward_events:
+                    if int(candidate["agent_id"]) == agent_idx + 1:
+                        event = candidate
+                        break
+                self._last_deadlock_events.append(
+                    {
+                        "agent_id": int(agent_idx + 1),
+                        "blocked_steps": blocked_steps,
+                        "position": event["position"],
+                        "target": event["target"],
+                    }
+                )
 
         for agent in self.agents:
             agent.prev_x, agent.prev_y = agent.x, agent.y
@@ -1151,7 +1335,11 @@ class MultiTeamWarehouse(Warehouse):
         for agent_id, agent in enumerate(self.agents):
             carried_before = before_carried_shelves[agent_id]
             if carried_before is None and agent.carrying_shelf is None:
-                after_distance = self._nearest_requested_shelf_distance(agent)
+                targets = before_pickup_targets[agent_id]
+                after_distance = min(
+                    (self._distance(agent.x, agent.y, target) for target in targets),
+                    default=None,
+                )
                 if self.reward_only_new_best_progress:
                     progress_reward = self._new_best_progress_reward(
                         self._best_requested_shelf_distances,
@@ -1165,6 +1353,8 @@ class MultiTeamWarehouse(Warehouse):
                         after_distance,
                         self.requested_shelf_progress_reward,
                     )
+                if before_positions[agent_id] == (agent.x, agent.y):
+                    progress_reward = 0.0
                 shaping_rewards[agent_id] += progress_reward
                 progress_shaping_rewards[agent_id] += progress_reward
             elif carried_before is not None and agent.carrying_shelf is carried_before:
@@ -1351,14 +1541,11 @@ class MultiTeamWarehouse(Warehouse):
             self._cur_inactive_steps += 1
         self._cur_steps += 1
 
-        if (
+        done = bool(
             self.max_inactivity_steps
             and self._cur_inactive_steps >= self.max_inactivity_steps
-        ) or (self.max_steps and self._cur_steps >= self.max_steps):
-            done = True
-        else:
-            done = False
-        truncated = False
+        )
+        truncated = bool(self.max_steps and self._cur_steps >= self.max_steps and not done)
 
         new_obs = tuple([self._make_obs(agent) for agent in self.agents])
         self.update_training_comm_graph()

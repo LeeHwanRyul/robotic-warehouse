@@ -681,12 +681,14 @@ class RwareObjectiveProbeMapBuilder:
         elif scenario.name == "team_return_approach":
             x, y, direction = self._view_cell_for_target(own_home, scenario.variant)
             focal = self._set_focal_agent(x, y, direction, team_id)
-            self._place_shelf(own_shelf, x, y, team_id, requested=False)
+            self._place_shelf(own_shelf, x, y, team_id, requested=True)
             focal.carrying_shelf = own_shelf
+            focal.has_delivered = True
         elif scenario.name == "team_return_at_home":
             focal = self._set_focal_agent(*own_home, Direction.UP, team_id)
-            self._place_shelf(own_shelf, *own_home, team_id, requested=False)
+            self._place_shelf(own_shelf, *own_home, team_id, requested=True)
             focal.carrying_shelf = own_shelf
+            focal.has_delivered = True
         elif scenario.name == "wrong_team_goal":
             focal = self._set_focal_agent(*other_goal, Direction.UP, team_id)
             self._place_shelf(own_shelf, *other_goal, team_id, requested=True)

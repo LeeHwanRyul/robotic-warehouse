@@ -172,6 +172,35 @@ def test_pgct_distance_gate_and_receiver_allocation():
     assert allocation[2].sum() == pytest.approx(0.0)
 
 
+def test_pgct_rejects_uninformative_uniform_policies():
+    agents = [
+        RecurrentActorCritic(obs_dim=3, action_dim=5, mlp_hidden_dim=8, recurrent_hidden_dim=8),
+        RecurrentActorCritic(obs_dim=3, action_dim=5, mlp_hidden_dim=8, recurrent_hidden_dim=8),
+    ]
+    probes = torch.randn(24, 1, 3)
+    distance, _, information = policy_distance_similarity_matrices(
+        agents, probes, torch.device("cpu"), 0.25, return_information=True
+    )
+    assert np.max(information) < 0.02
+    estimator = TeamGraphEstimator(2, 0.05, 1, 0.0, 0.95, min_policy_information=0.02)
+    estimator.update_policy_information(information)
+    estimator.update_from_policy_distance(distance, np.ones((2, 2)) - np.eye(2), 1.0)
+    assert not estimator.pgct_gate_matrix(True, 0.12, 0.25, 1.0).any()
+
+
+def test_pgct_information_gate_opens_only_after_both_policies_are_informative():
+    estimator = TeamGraphEstimator(2, 0.05, 2, 0.0, 0.95, min_policy_information=0.02)
+    adjacency = np.ones((2, 2), dtype=np.float32) - np.eye(2, dtype=np.float32)
+    distance = np.zeros((2, 2), dtype=np.float32)
+    for _ in range(2):
+        estimator.update_from_policy_distance(distance, adjacency, 1.0)
+    estimator.update_policy_information(np.array([0.03, 0.0]))
+    assert not estimator.pgct_gate_matrix(True, 0.12, 0.25, 1.0).any()
+    estimator.update_policy_information(np.array([0.03, 0.04]))
+    gate = estimator.pgct_gate_matrix(True, 0.12, 0.25, 1.0)
+    assert gate[0, 1] > 0 and gate[1, 0] > 0
+
+
 def test_oracle_pairwise_probe_metrics_report_same_cross_gap_and_pairs():
     distance = np.asarray(
         [

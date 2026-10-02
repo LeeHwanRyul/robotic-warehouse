@@ -17,7 +17,7 @@ from typing import Any, List, Sequence, Set, Tuple
 import gymnasium as gym
 import numpy as np
 
-from rware.warehouse import Direction, _LAYER_AGENTS, _LAYER_SHELFS
+from rware.warehouse import Action, Direction, _LAYER_AGENTS, _LAYER_SHELFS
 
 
 SEMANTIC_EGO_FEATURES: Tuple[str, ...] = (
@@ -29,6 +29,18 @@ SEMANTIC_EGO_FEATURES: Tuple[str, ...] = (
     "self_dir_left",
     "self_dir_right",
     "self_on_highway",
+    "self_prev_action_noop",
+    "self_prev_action_forward",
+    "self_prev_action_left",
+    "self_prev_action_right",
+    "self_prev_action_toggle_load",
+    "self_blocked_steps",
+    "self_waiting_steps",
+    "self_carrying_requested_shelf",
+    "self_return_phase",
+    "self_shelf_home_known",
+    "self_shelf_home_dx",
+    "self_shelf_home_dy",
 )
 
 
@@ -127,6 +139,7 @@ def _relevant_goal_cells(env: Any, agent: Any) -> Set[Tuple[int, int]]:
 
 def _write_ego_features(env: Any, agent: Any, out: np.ndarray) -> None:
     height, width = tuple(map(int, getattr(env, "grid_size")))
+    agent_idx = int(getattr(agent, "id", 0)) - 1
     if bool(getattr(env, "normalised_coordinates", False)):
         out[0] = float(agent.x) / float(max(width - 1, 1))
         out[1] = float(agent.y) / float(max(height - 1, 1))
@@ -136,6 +149,34 @@ def _write_ego_features(env: Any, agent: Any, out: np.ndarray) -> None:
     out[2] = 1.0 if getattr(agent, "carrying_shelf", None) is not None else 0.0
     out[3 + int(agent.dir.value)] = 1.0
     out[7] = 1.0 if bool(env._is_highway(int(agent.x), int(agent.y))) else 0.0
+
+    prev_action = int(Action.NOOP.value)
+    prev_actions = getattr(env, "_last_requested_actions", None)
+    if prev_actions is not None and 0 <= agent_idx < len(prev_actions):
+        prev_action = int(prev_actions[agent_idx])
+    if 0 <= prev_action <= int(Action.TOGGLE_LOAD.value):
+        out[8 + prev_action] = 1.0
+
+    blocked_steps = getattr(env, "_consecutive_failed_forward_steps", None)
+    if blocked_steps is not None and 0 <= agent_idx < len(blocked_steps):
+        out[13] = min(float(blocked_steps[agent_idx]), 10.0) / 10.0
+
+    waiting_steps = getattr(env, "_stationary_action_streak", None)
+    if waiting_steps is not None and 0 <= agent_idx < len(waiting_steps):
+        out[14] = min(float(waiting_steps[agent_idx]), 10.0) / 10.0
+
+    # Proprioceptive task state: the carried shelf's destination is retained
+    # through the return trip, even when its home is outside the local grid.
+    # No other agent's identity, goal, or remote shelf location is exposed.
+    shelf = getattr(agent, "carrying_shelf", None)
+    if shelf is not None:
+        out[15] = float(int(shelf.id) in _requested_shelf_ids_for_observation(env, agent))
+        out[16] = float(int(shelf.id) in getattr(env, "_shelves_awaiting_return", set()))
+        home = getattr(env, "_shelf_home_positions", {}).get(int(shelf.id))
+        if home is not None:
+            out[17] = 1.0
+            out[18] = float(home[0] - agent.x) / max(width - 1, 1)
+            out[19] = float(home[1] - agent.y) / max(height - 1, 1)
 
 
 def build_semantic_observation(env: Any, agent: Any) -> np.ndarray:

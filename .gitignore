@@ -155,6 +155,7 @@ coverage.xml
 *.cover
 .hypothesis/
 .pytest_cache/
+examples/generated_configs/
 
 # Translations
 *.mo
@@ -244,5 +245,19 @@ $RECYCLE.BIN/
 
 # Windows shortcuts
 *.lnk
+
+# WandB logs
+wandb/
+runs/
+*.wandb
+
+# Training checkpoints
+*.pt
+*.pth
+*.ckpt
+
+# Python cache
+__pycache__/
+*.pyc
 
 # End of https://www.gitignore.io/api/linux,python,windows,pycharm+all,visualstudiocode

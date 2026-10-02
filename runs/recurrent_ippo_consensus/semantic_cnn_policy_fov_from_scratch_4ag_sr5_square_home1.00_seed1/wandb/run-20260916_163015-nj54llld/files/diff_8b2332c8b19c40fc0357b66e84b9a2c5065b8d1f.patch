@@ -1,0 +1,2574 @@
+warning: in the working copy of 'examples/run_semantic_cnn_marl_pgct.ps1', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'examples/train_recurrent_ippo_consensus.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'rware/multi_team_warehouse.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'rware/rendering.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'rware/utils/probe_maps.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'rware/utils/semantic_observation.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tests/test_multi_team_envs.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tests/test_policy_probe_consensus.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tests/test_semantic_observation.py', LF will be replaced by CRLF the next time Git touches it
+diff --git a/.gitignore b/.gitignore
+index c4b8a47..4d2f1cd 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -154,7 +154,8 @@ nosetests.xml
+ coverage.xml
+ *.cover
+ .hypothesis/
+-.pytest_cache/
++.pytest_cache/
++examples/generated_configs/
+ 
+ # Translations
+ *.mo
+@@ -245,4 +246,4 @@ $RECYCLE.BIN/
+ # Windows shortcuts
+ *.lnk
+ 
+-# End of https://www.gitignore.io/api/linux,python,windows,pycharm+all,visualstudiocode
+\ No newline at end of file
++# End of https://www.gitignore.io/api/linux,python,windows,pycharm+all,visualstudiocode
+diff --git a/examples/run_semantic_cnn_marl_pgct.ps1 b/examples/run_semantic_cnn_marl_pgct.ps1
+index 7735efb..a239bb1 100644
+--- a/examples/run_semantic_cnn_marl_pgct.ps1
++++ b/examples/run_semantic_cnn_marl_pgct.ps1
+@@ -3,6 +3,7 @@ param(
+   [string] $Run = "policy-complete",
+   [int] $TotalTimesteps = 5000000,
+   [int] $ProbeInterval = 5,
++  [int] $SensorRange = 3,
+   [double] $PgctDistanceThreshold = 0.12,
+   [double] $PgctPeerLossCoef = 0.01,
+   [string] $InitCheckpoint = "runs\recurrent_ippo_consensus\stage1_semantic_cnn_sr3\final.pt",
+@@ -14,7 +15,7 @@ $Common = @(
+   "--env-id", "rware-multiteam-tiny-4ag-2teams-v0",
+   "--agent-count", "4",
+   "--team-count", "2",
+-  "--sensor-range", "3",
++  "--sensor-range", "$SensorRange",
+   "--env-kwargs-json", "@examples/env_kwargs_stage2_pgct_success.json",
+   "--observation-format", "semantic",
+   "--obs-encoder", "cnn",
+diff --git a/examples/train_recurrent_ippo_consensus.py b/examples/train_recurrent_ippo_consensus.py
+index 2df035f..e6a2b5e 100644
+--- a/examples/train_recurrent_ippo_consensus.py
++++ b/examples/train_recurrent_ippo_consensus.py
+@@ -30,7 +30,8 @@ from rware.utils.semantic_observation import (
+     RwareSemanticObservationWrapper,
+     get_semantic_observation_spec,
+ )
+-from rware.warehouse import Action, Direction, _LAYER_SHELFS
++from rware.utils.communication import TemporalConnectivity
++from rware.warehouse import Action, Direction, _LAYER_AGENTS, _LAYER_SHELFS
+ 
+ 
+ TensorPair = Tuple[torch.Tensor, torch.Tensor]
+@@ -338,6 +339,7 @@ class Rollout:
+     actor_h: torch.Tensor
+     critic_h: torch.Tensor
+     last_values: torch.Tensor
++    timeout_values: Optional[torch.Tensor] = None
+ 
+ 
+ @dataclass
+@@ -356,6 +358,8 @@ class RunnerState:
+     episode_invalid_toggles: float = 0.0
+     episode_wrong_returns: float = 0.0
+     episode_failed_forwards: float = 0.0
++    episode_blocking_agents: float = 0.0
++    episode_deadlocked_agents: float = 0.0
+     episode_requested_shelf_seen: bool = False
+     episode_first_requested_shelf_seen_step: Optional[int] = None
+     episode_first_pickup_step: Optional[int] = None
+@@ -426,6 +430,7 @@ class TrainConfig:
+     pgct_gate_power: float
+     pgct_alpha_epsilon: float
+     pgct_warmup_updates: int
++    pgct_min_policy_information: float
+     critic_consensus_tau: float
+     consensus_interval: int
+     save_dir: str
+@@ -448,6 +453,10 @@ class TrainConfig:
+     wandb_tags: str
+     wandb_log_eval_video: bool
+     wandb_video_interval: int
++    communication_enabled: bool = True
++    communication_fov_degrees: float = 120.0
++    directional_observation: bool = False
++    save_eval_video: bool = False
+ 
+ 
+ class TeamGraphEstimator:
+@@ -468,6 +477,7 @@ class TeamGraphEstimator:
+         join_threshold: Optional[float] = None,
+         leave_threshold: Optional[float] = None,
+         dwell_updates: int = 1,
++        min_policy_information: float = 0.0,
+     ):
+         self.n_agents = int(n_agents)
+         self.edge_threshold = float(edge_threshold)
+@@ -483,6 +493,7 @@ class TeamGraphEstimator:
+         if self.leave_threshold > self.join_threshold:
+             raise ValueError("leave_threshold must be <= join_threshold")
+         self.dwell_updates = max(int(dwell_updates), 1)
++        self.min_policy_information = max(float(min_policy_information), 0.0)
+ 
+         shape = (self.n_agents, self.n_agents)
+         self.count = np.zeros(shape, dtype=np.float64)
+@@ -496,6 +507,13 @@ class TeamGraphEstimator:
+         self.stable_adjacency = np.zeros(shape, dtype=np.float32)
+         self.join_streak = np.zeros(shape, dtype=np.int32)
+         self.leave_streak = np.zeros(shape, dtype=np.int32)
++        self.policy_information = np.zeros(self.n_agents, dtype=np.float64)
++
++    def update_policy_information(self, values: np.ndarray) -> None:
++        values = np.asarray(values, dtype=np.float64)
++        if values.shape != (self.n_agents,):
++            raise ValueError("policy information must have shape (n_agents,)")
++        self.policy_information = np.maximum(values, 0.0)
+ 
+     def update_pair_score(self, i: int, j: int, score: float) -> None:
+         i, j = int(i), int(j)
+@@ -526,7 +544,7 @@ class TeamGraphEstimator:
+         updates = 0
+         for i in range(self.n_agents):
+             for j in range(i + 1, self.n_agents):
+-                if self.last_neighbor_adjacency[i, j] <= 0.0:
++                if max(self.last_neighbor_adjacency[i, j], self.last_neighbor_adjacency[j, i]) <= 0.0:
+                     continue
+                 self.update_pair_score(i, j, similarity[i, j])
+                 updates += 1
+@@ -550,20 +568,18 @@ class TeamGraphEstimator:
+         updates = 0
+         for i in range(self.n_agents):
+             for j in range(i + 1, self.n_agents):
+-                if self.last_neighbor_adjacency[i, j] <= 0.0:
+-                    continue
+-                value = float(max(distance[i, j], 0.0))
+-                self.last_distance[i, j] = value
+-                self.last_distance[j, i] = value
+-                if self.distance_count[i, j] <= 0.0 or np.isnan(self.distance_ema[i, j]):
+-                    smoothed = value
+-                else:
+-                    smoothed = (1.0 - beta) * self.distance_ema[i, j] + beta * value
+-                self.distance_ema[i, j] = smoothed
+-                self.distance_ema[j, i] = smoothed
+-                self.distance_count[i, j] += 1.0
+-                self.distance_count[j, i] = self.distance_count[i, j]
+-                updates += 1
++                observed = False
++                for receiver, sender in ((i, j), (j, i)):
++                    if self.last_neighbor_adjacency[receiver, sender] <= 0:
++                        continue
++                    observed = True
++                    value = float(max(distance[receiver, sender], 0.0))
++                    self.last_distance[receiver, sender] = value
++                    old = self.distance_ema[receiver, sender]
++                    smoothed = value if np.isnan(old) else (1.0 - beta) * old + beta * value
++                    self.distance_ema[receiver, sender] = smoothed
++                    self.distance_count[receiver, sender] += 1.0
++                updates += int(observed)
+         return updates
+ 
+     def update_from_counterfactual(
+@@ -718,6 +734,8 @@ class TeamGraphEstimator:
+             ~np.isnan(self.distance_ema)
+             & (self.distance_count >= float(self.min_probe_count))
+             & (self.distance_ema < threshold)
++            & (self.policy_information[:, None] >= self.min_policy_information)
++            & (self.policy_information[None, :] >= self.min_policy_information)
+         )
+         if np.any(valid):
+             affinity = np.exp(-self.distance_ema[valid] / temperature)
+@@ -759,6 +777,7 @@ class TeamGraphEstimator:
+             "stable_adjacency": self.stable_adjacency.copy(),
+             "join_streak": self.join_streak.copy(),
+             "leave_streak": self.leave_streak.copy(),
++            "policy_information": self.policy_information.copy(),
+         }
+ 
+ 
+@@ -1203,7 +1222,11 @@ def local_rware_action_masks(
+             agent.carrying_shelf is not None
+             and int(unwrapped.grid[_LAYER_SHELFS, target_y, target_x]) > 0
+         ):
+-            masks[agent_id, forward_idx] = 0.0
++            occupant_id = int(unwrapped.grid[_LAYER_AGENTS, target_y, target_x])
++            # A loaded neighbor may move simultaneously. The environment's
++            # collision resolver decides this; do not prohibit legal convoys.
++            if not (occupant_id > 0 and agents[occupant_id - 1].carrying_shelf is not None):
++                masks[agent_id, forward_idx] = 0.0
+ 
+         if agent.carrying_shelf is None:
+             shelf_id = int(unwrapped.grid[_LAYER_SHELFS, int(agent.y), int(agent.x)])
+@@ -1314,6 +1337,78 @@ def rware_agent_positions(env: gym.Env, n_agents: int) -> List[Tuple[int, int]]:
+     return [(int(agent.x), int(agent.y)) for agent in agents[:n_agents]]
+ 
+ 
++def add_agent_event_counts(
++    events: object,
++    counts: np.ndarray,
++    key: str = "agent_id",
++) -> None:
++    if not isinstance(events, list):
++        return
++    for event in events:
++        if not isinstance(event, dict):
++            continue
++        try:
++            agent_idx = int(event.get(key, 0)) - 1
++        except (TypeError, ValueError):
++            continue
++        if 0 <= agent_idx < len(counts):
++            counts[agent_idx] += 1.0
++
++
++def per_agent_metrics(
++    prefix: str,
++    n_agents: int,
++    agent_step_counts: np.ndarray,
++    position_change_counts: np.ndarray,
++    pickup_counts: np.ndarray,
++    delivery_counts: np.ndarray,
++    return_counts: np.ndarray,
++    failed_forward_counts: np.ndarray,
++    blocking_counts: np.ndarray,
++    deadlock_counts: np.ndarray,
++) -> Dict[str, float]:
++    metrics: Dict[str, float] = {}
++    for agent_idx in range(n_agents):
++        denominator = max(float(agent_step_counts[agent_idx]), 1.0)
++        key_prefix = f"{prefix}agent_{agent_idx + 1}"
++        metrics[f"{key_prefix}_position_change_rate"] = float(
++            position_change_counts[agent_idx] / denominator
++        )
++        metrics[f"{key_prefix}_pickup_count"] = float(pickup_counts[agent_idx])
++        metrics[f"{key_prefix}_delivery_count"] = float(delivery_counts[agent_idx])
++        metrics[f"{key_prefix}_return_count"] = float(return_counts[agent_idx])
++        metrics[f"{key_prefix}_failed_forward_rate"] = float(
++            failed_forward_counts[agent_idx] / denominator
++        )
++        metrics[f"{key_prefix}_blocking_agent_rate"] = float(
++            blocking_counts[agent_idx] / denominator
++        )
++        metrics[f"{key_prefix}_deadlock_agent_rate"] = float(
++            deadlock_counts[agent_idx] / denominator
++        )
++    return metrics
++
++
++def format_agent_rates(metrics: Dict[str, float], key_suffix: str, n_agents: int) -> str:
++    values = [
++        metrics.get(f"agent_{agent_idx + 1}_{key_suffix}", float("nan"))
++        for agent_idx in range(n_agents)
++    ]
++    return "[" + ",".join(f"{value:.2f}" for value in values) + "]"
++
++
++def format_eval_agent_rates(
++    metrics: Dict[str, float],
++    key_suffix: str,
++    n_agents: int,
++) -> str:
++    values = [
++        metrics.get(f"eval_agent_{agent_idx + 1}_{key_suffix}", float("nan"))
++        for agent_idx in range(n_agents)
++    ]
++    return "[" + ",".join(f"{value:.2f}" for value in values) + "]"
++
++
+ def finite_mean(values: Sequence[float]) -> float:
+     finite_values = [float(value) for value in values if math.isfinite(float(value))]
+     return float(np.mean(finite_values)) if finite_values else float("nan")
+@@ -1330,6 +1425,8 @@ def optional_step_delta(
+ 
+ def clusters_from_adjacency(adjacency: np.ndarray) -> List[List[int]]:
+     adj = np.asarray(adjacency)
++    # Display weak components only; this is not directed temporal reachability.
++    adj = np.maximum(adj, adj.T)
+     n_agents = int(adj.shape[0])
+     seen = np.zeros(n_agents, dtype=bool)
+     clusters: List[List[int]] = []
+@@ -1361,6 +1458,9 @@ def set_global_seeds(seed: int) -> None:
+ 
+ def set_env_training_edges(env: gym.Env, adjacency: np.ndarray) -> None:
+     unwrapped = env.unwrapped
++    if hasattr(unwrapped, "set_training_comm_weights"):
++        unwrapped.set_training_comm_weights(adjacency)
++        return
+     if not hasattr(unwrapped, "set_training_comm_edges"):
+         return
+     edges = []
+@@ -1383,12 +1483,14 @@ def communication_adjacency(
+     n_agents: int,
+     mode: str = "physical",
+ ) -> np.ndarray:
++    if mode == "none" or not getattr(env.unwrapped, "communication_enabled", True):
++        return np.zeros((n_agents, n_agents), dtype=np.float32)
+     if mode == "complete":
+         adj = np.ones((n_agents, n_agents), dtype=np.float32)
+         np.fill_diagonal(adj, 0.0)
+         return adj
+-    if mode != "physical":
+-        raise ValueError("--comm-graph-mode must be 'physical' or 'complete'")
++    if mode not in {"physical", "fov"}:
++        raise ValueError("unknown communication graph mode")
+ 
+     unwrapped = env.unwrapped
+     if hasattr(unwrapped, "get_neighbor_adjacency"):
+@@ -1415,6 +1517,38 @@ def communication_adjacency(
+     return np.zeros((n_agents, n_agents), dtype=np.float32)
+ 
+ 
++def communication_weights(cfg, env, estimator, iteration):
++    """Eligibility before current geometry masking; frozen during each rollout."""
++    n = env.unwrapped.n_agents
++    zero = np.zeros((n, n), dtype=np.float32)
++    if not cfg.communication_enabled or cfg.graph_mode == "none" or cfg.peer_transfer_mode == "none":
++        return zero
++    if cfg.peer_transfer_mode == "pgct" and cfg.pgct_peer_loss_coef <= 0:
++        return zero
++    if cfg.peer_transfer_mode == "consensus" and (cfg.critic_consensus_tau <= 0 or cfg.consensus_interval <= 0):
++        return zero
++    if cfg.graph_mode == "oracle":
++        return oracle_weight_matrix(env, n)
++    if cfg.peer_transfer_mode == "pgct":
++        return estimator.pgct_gate_matrix(
++            iteration >= cfg.pgct_warmup_updates, cfg.pgct_distance_threshold,
++            cfg.pgct_distance_temperature, cfg.pgct_gate_power)
++    return estimator.consensus_weight_matrix()
++
++
++def enforce_communication_config(cfg):
++    """A single off flag wins over every transfer/graph option."""
++    if not cfg.communication_enabled or cfg.graph_mode == "none" or cfg.comm_graph_mode == "none":
++        cfg.communication_enabled = False
++        cfg.graph_mode = "none"
++        cfg.comm_graph_mode = "none"
++        cfg.peer_transfer_mode = "none"
++        cfg.probe_interval = 0
++        cfg.critic_consensus_tau = 0.0
++        cfg.consensus_interval = 0
++        cfg.pgct_peer_loss_coef = 0.0
++
++
+ def oracle_weight_matrix(env: gym.Env, n_agents: int) -> np.ndarray:
+     clusters = oracle_clusters(env)
+     weights = np.zeros((n_agents, n_agents), dtype=np.float32)
+@@ -1929,7 +2063,8 @@ def policy_distance_similarity_matrices(
+     probe_obs: torch.Tensor,
+     device: torch.device,
+     temperature: float,
+-) -> Tuple[np.ndarray, np.ndarray]:
++    return_information: bool = False,
++):
+     n_agents = len(agents)
+     probe_sequences = _as_agent_conditioned_probe_sequences(probe_obs, n_agents).to(
+         device
+@@ -1949,6 +2084,15 @@ def policy_distance_similarity_matrices(
+             step_probs.append(torch.softmax(logits, dim=-1))
+         policy_probs.append(torch.stack(step_probs, dim=1).cpu())
+ 
++    # KL(pi || Uniform) = log(|A|) - H(pi). It is near zero for the
++    # uninformative random policies produced by small initial actor logits.
++    policy_information = np.asarray([
++        float((math.log(probs.shape[-1]) - (
++            -torch.sum(probs.clamp_min(1e-8) * torch.log(probs.clamp_min(1e-8)), dim=-1)
++        )).mean().item())
++        for probs in policy_probs
++    ], dtype=np.float32)
++
+     distance = np.zeros((n_agents, n_agents), dtype=np.float32)
+     similarity = np.eye(n_agents, dtype=np.float32)
+     eps = 1e-8
+@@ -1967,6 +2111,8 @@ def policy_distance_similarity_matrices(
+             distance[j, i] = raw_distance
+             similarity[i, j] = score
+             similarity[j, i] = score
++    if return_information:
++        return distance, similarity, policy_information
+     return distance, similarity
+ 
+ 
+@@ -2007,6 +2153,7 @@ def collect_rollout(
+     )
+     logprob_buf = torch.zeros((rollout_steps, n_agents), dtype=torch.float32)
+     rewards_buf = torch.zeros((rollout_steps, n_agents), dtype=torch.float32)
++    timeout_values_buf = torch.zeros_like(rewards_buf)
+     dones_buf = torch.zeros((rollout_steps,), dtype=torch.float32)
+     values_buf = torch.zeros((rollout_steps, n_agents), dtype=torch.float32)
+     actor_h_buf = torch.zeros(
+@@ -2028,6 +2175,8 @@ def collect_rollout(
+     completed_carrying_at_end: List[float] = []
+     completed_invalid_toggle_rates: List[float] = []
+     completed_failed_forward_rates: List[float] = []
++    completed_blocking_agent_rates: List[float] = []
++    completed_deadlock_agent_rates: List[float] = []
+     completed_steps_to_seen: List[float] = []
+     completed_steps_to_pickup: List[float] = []
+     completed_steps_pickup_to_goal: List[float] = []
+@@ -2052,6 +2201,16 @@ def collect_rollout(
+     agent_step_count = 0.0
+     wall_state_count = 0.0
+     wall_action_counts = np.zeros((action_dim,), dtype=np.float64)
++    wall_action_prob_sums = np.zeros((action_dim,), dtype=np.float64)
++    wall_action_prob_count = 0.0
++    per_agent_step_counts = np.zeros((n_agents,), dtype=np.float64)
++    per_agent_position_change_counts = np.zeros((n_agents,), dtype=np.float64)
++    per_agent_pickup_counts = np.zeros((n_agents,), dtype=np.float64)
++    per_agent_delivery_counts = np.zeros((n_agents,), dtype=np.float64)
++    per_agent_return_counts = np.zeros((n_agents,), dtype=np.float64)
++    per_agent_failed_forward_counts = np.zeros((n_agents,), dtype=np.float64)
++    per_agent_blocking_counts = np.zeros((n_agents,), dtype=np.float64)
++    per_agent_deadlock_counts = np.zeros((n_agents,), dtype=np.float64)
+     return_distances: List[float] = []
+ 
+     for step in range(rollout_steps):
+@@ -2115,6 +2274,9 @@ def collect_rollout(
+             action_probs_np = action_probs.squeeze(0).detach().cpu().numpy()
+             action_prob_sums += action_probs_np
+             action_prob_count += 1.0
++            if blocked_forward_states[agent_id]:
++                wall_action_prob_sums += action_probs_np
++                wall_action_prob_count += 1.0
+             max_action_probs.append(float(np.max(action_probs_np)))
+             if (
+                 action_dim > int(Action.TOGGLE_LOAD.value)
+@@ -2160,9 +2322,9 @@ def collect_rollout(
+             if 0 <= int(action) < action_dim:
+                 wall_action_counts[int(action)] += 1.0
+ 
+-        failed_forwards = 0.0
++        masked_failed_forwards = 0.0
+         if action_dim > int(Action.FORWARD.value):
+-            failed_forwards = float(
++            masked_failed_forwards = float(
+                 sum(
+                     action == int(Action.FORWARD.value)
+                     and diagnostic_action_masks[agent_id, int(Action.FORWARD.value)]
+@@ -2170,16 +2332,68 @@ def collect_rollout(
+                     for agent_id, action in enumerate(actions)
+                 )
+             )
+-        forward_failure_count += failed_forwards
+         next_obs, rewards, done, truncated, info = env.step(actions)
++        failed_forwards = float(
++            info.get("failed_forwards", masked_failed_forwards)
++        )
++        blocking_agents = float(info.get("blocking_agents", 0.0))
++        deadlocked_agents = float(info.get("deadlocked_agents", 0.0))
++        forward_failure_count += failed_forwards
+         post_positions = rware_agent_positions(env, n_agents)
+-        position_change_count += float(
+-            sum(
++        moved_agents = np.asarray(
++            [
+                 before != after
+                 for before, after in zip(pre_positions, post_positions)
+-            )
++            ],
++            dtype=np.float64,
++        )
++        position_change_count += float(np.sum(moved_agents))
++        per_agent_step_counts += 1.0
++        per_agent_position_change_counts += moved_agents
++        add_agent_event_counts(
++            info.get("pickup_events", []),
++            per_agent_pickup_counts,
++            "agent_id",
++        )
++        add_agent_event_counts(
++            info.get("delivery_events", []),
++            per_agent_delivery_counts,
++            "carrier_id",
++        )
++        add_agent_event_counts(
++            info.get("return_events", []),
++            per_agent_return_counts,
++            "carrier_id",
++        )
++        add_agent_event_counts(
++            info.get("failed_forward_events", []),
++            per_agent_failed_forward_counts,
++            "agent_id",
++        )
++        add_agent_event_counts(
++            info.get("blocking_agent_events", []),
++            per_agent_blocking_counts,
++            "agent_id",
++        )
++        add_agent_event_counts(
++            info.get("deadlock_events", []),
++            per_agent_deadlock_counts,
++            "agent_id",
+         )
+         terminal = bool(done or truncated)
++        if truncated and not done:
++            # Bootstrap the final observation with its pre-reset recurrent state.
++            # GAE still stops at the reset, so the next episode cannot leak in.
++            timeout_obs = torch.as_tensor(
++                flatten_multi_agent_obs(env, next_obs), dtype=torch.float32, device=device
++            )
++            with torch.no_grad():
++                for agent_id, net in enumerate(agents):
++                    timeout_value, _ = net._critic_step(
++                        timeout_obs[agent_id].unsqueeze(0),
++                        state.critic_h[agent_id].unsqueeze(0),
++                    )
++                    timeout_values_buf[step, agent_id] = float(timeout_value.item())
+         rewards_array = np.asarray(rewards, dtype=np.float32)
+         shaping_array = np.asarray(
+             info.get("reward_shaping", np.zeros((n_agents,), dtype=np.float32)),
+@@ -2215,6 +2429,8 @@ def collect_rollout(
+         state.episode_invalid_toggles += invalid_toggles
+         state.episode_wrong_returns += wrong_returns
+         state.episode_failed_forwards += failed_forwards
++        state.episode_blocking_agents += blocking_agents
++        state.episode_deadlocked_agents += deadlocked_agents
+ 
+         if pickups > 0.0 and state.episode_first_pickup_step is None:
+             state.episode_first_pickup_step = state.episode_length
+@@ -2252,6 +2468,12 @@ def collect_rollout(
+             completed_failed_forward_rates.append(
+                 float(state.episode_failed_forwards / episode_action_count)
+             )
++            completed_blocking_agent_rates.append(
++                float(state.episode_blocking_agents / episode_action_count)
++            )
++            completed_deadlock_agent_rates.append(
++                float(state.episode_deadlocked_agents / episode_action_count)
++            )
+             completed_steps_to_seen.append(
+                 float(state.episode_first_requested_shelf_seen_step)
+                 if state.episode_first_requested_shelf_seen_step is not None
+@@ -2292,6 +2514,8 @@ def collect_rollout(
+             state.episode_invalid_toggles = 0.0
+             state.episode_wrong_returns = 0.0
+             state.episode_failed_forwards = 0.0
++            state.episode_blocking_agents = 0.0
++            state.episode_deadlocked_agents = 0.0
+             state.episode_requested_shelf_seen = False
+             state.episode_first_requested_shelf_seen_step = None
+             state.episode_first_pickup_step = None
+@@ -2322,6 +2546,7 @@ def collect_rollout(
+         actor_h=actor_h_buf,
+         critic_h=critic_h_buf,
+         last_values=last_values,
++        timeout_values=timeout_values_buf,
+     )
+     flat_actions = actions_buf.reshape(-1).numpy()
+     action_metrics = {
+@@ -2347,6 +2572,15 @@ def collect_rollout(
+         for action in Action
+         if int(action.value) < action_dim
+     }
++    wall_action_probability_metrics = {
++        f"wall_action_{action.name.lower()}_probability": (
++            float(wall_action_prob_sums[int(action.value)] / wall_action_prob_count)
++            if wall_action_prob_count > 0.0
++            else float("nan")
++        )
++        for action in Action
++        if int(action.value) < action_dim
++    }
+     agent_step_denominator = max(agent_step_count, 1.0)
+     pickup_opportunity_denominator = max(valid_pickup_opportunity_count, 1.0)
+     return_opportunity_denominator = max(valid_return_opportunity_count, 1.0)
+@@ -2417,6 +2651,12 @@ def collect_rollout(
+         "failed_forward_rate": float(np.mean(completed_failed_forward_rates))
+         if completed_failed_forward_rates
+         else float("nan"),
++        "blocking_agent_rate": float(np.mean(completed_blocking_agent_rates))
++        if completed_blocking_agent_rates
++        else float("nan"),
++        "deadlock_agent_rate": float(np.mean(completed_deadlock_agent_rates))
++        if completed_deadlock_agent_rates
++        else float("nan"),
+         "carrying_at_episode_end": float(np.mean(completed_carrying_at_end))
+         if completed_carrying_at_end
+         else float("nan"),
+@@ -2477,6 +2717,19 @@ def collect_rollout(
+         else float("nan"),
+         **action_probability_metrics,
+         **wall_action_metrics,
++        **wall_action_probability_metrics,
++        **per_agent_metrics(
++            "",
++            n_agents,
++            per_agent_step_counts,
++            per_agent_position_change_counts,
++            per_agent_pickup_counts,
++            per_agent_delivery_counts,
++            per_agent_return_counts,
++            per_agent_failed_forward_counts,
++            per_agent_blocking_counts,
++            per_agent_deadlock_counts,
++        ),
+         **action_metrics,
+     }
+     return rollout, state, metrics
+@@ -2489,6 +2742,7 @@ def compute_gae(
+     last_values: torch.Tensor,
+     gamma: float,
+     gae_lambda: float,
++    timeout_values: Optional[torch.Tensor] = None,
+ ) -> Tuple[torch.Tensor, torch.Tensor]:
+     rollout_steps, n_agents = rewards.shape
+     advantages = torch.zeros_like(rewards)
+@@ -2500,6 +2754,8 @@ def compute_gae(
+             next_value = values[step + 1]
+         next_nonterminal = 1.0 - dones[step]
+         delta = rewards[step] + gamma * next_value * next_nonterminal - values[step]
++        if timeout_values is not None:
++            delta = delta + gamma * timeout_values[step]
+         last_gae = delta + gamma * gae_lambda * next_nonterminal * last_gae
+         advantages[step] = last_gae
+     returns = advantages + values
+@@ -2619,10 +2875,12 @@ def update_ippo(
+         rollout.last_values,
+         cfg.gamma,
+         cfg.gae_lambda,
++        rollout.timeout_values,
+     )
+ 
+     n_agents = len(agents)
+     mean_abs_td_error = np.zeros((n_agents,), dtype=np.float64)
++    agent_diagnostics: Dict[str, float] = {}
+     metrics = {
+         "policy_loss": [],
+         "value_loss": [],
+@@ -2699,6 +2957,9 @@ def update_ippo(
+             )
+         )
+         agent_returns = returns[:, agent_id]
++        agent_diagnostics[f"agent_{agent_id}/actor_update_skipped"] = float(skip_actor_update)
++        agent_diagnostics[f"agent_{agent_id}/positive_reward_density"] = float(positive_reward_density.item())
++        agent_diagnostics[f"agent_{agent_id}/advantage_std"] = float(adv_std.item())
+         mean_abs_td_error[agent_id] = float(
+             torch.mean(torch.abs(agent_returns - rollout.values[:, agent_id])).item()
+         )
+@@ -2844,8 +3105,11 @@ def update_ippo(
+ 
+     graph_estimator.update_value_uncertainty(mean_abs_td_error)
+     return {
+-        name: float(np.mean(values)) if values else float("nan")
+-        for name, values in metrics.items()
++        **agent_diagnostics,
++        **{
++            name: float(np.mean(values)) if values else float("nan")
++            for name, values in metrics.items()
++        },
+     }
+ 
+ 
+@@ -2888,7 +3152,8 @@ def apply_confidence_weighted_critic_consensus(
+                 delta.add_(critic_snapshots[j][param_idx] - source, alpha=weight)
+             param.data.add_(delta, alpha=float(tau))
+ 
+-    return int(np.sum(active_weights > 0.0) / 2)
++    active = active_weights > 0
++    return int(np.triu(active | active.T, k=1).sum())
+ 
+ 
+ @torch.no_grad()
+@@ -3117,12 +3382,14 @@ def run_policy_similarity_probe_round(
+     n_agents = len(agents)
+     neighbor_adj = communication_adjacency(env, n_agents, mode=cfg.comm_graph_mode)
+     probe_sequences, probe_meta = sample_policy_probe_sequences(cfg, env, rollout, rng)
+-    distance, similarity = policy_distance_similarity_matrices(
++    distance, similarity, policy_information = policy_distance_similarity_matrices(
+         agents,
+         probe_sequences,
+         device=device,
+         temperature=cfg.policy_similarity_temperature,
++        return_information=True,
+     )
++    graph_estimator.update_policy_information(policy_information)
+     updates = graph_estimator.update_from_policy_similarity(similarity, neighbor_adj)
+     distance_updates = graph_estimator.update_from_policy_distance(
+         distance,
+@@ -3134,7 +3401,7 @@ def run_policy_similarity_probe_round(
+     affinity = graph_estimator.pgct_affinity_matrix(cfg.pgct_distance_temperature)
+ 
+     upper_mask = np.triu(np.ones((n_agents, n_agents), dtype=bool), k=1)
+-    upper_neighbor = upper_mask & (neighbor_adj > 0.0)
++    upper_neighbor = (~np.eye(n_agents, dtype=bool)) & (neighbor_adj > 0.0)
+     upper_active = upper_mask & (weights >= cfg.edge_threshold)
+     neighbor_scores = similarity[upper_neighbor]
+     neighbor_distances = distance[upper_neighbor]
+@@ -3155,7 +3422,7 @@ def run_policy_similarity_probe_round(
+         "pgct_affinity": float(np.mean(neighbor_affinity))
+         if neighbor_affinity.size
+         else float("nan"),
+-        "neighbor_edges": float(np.sum(upper_neighbor)),
++        "neighbor_arcs": float(np.sum(upper_neighbor)),
+         "updated_edges": float(updates),
+         "distance_updated_edges": float(distance_updates),
+         "active_edges": float(np.sum(upper_active)),
+@@ -3163,8 +3430,21 @@ def run_policy_similarity_probe_round(
+         if active_weights.size
+         else float("nan"),
+         "probe_count": _canonical_probe_count(probe_sequences),
++        "policy_information_mean": float(np.mean(policy_information)),
++        "policy_information_min": float(np.min(policy_information)),
++        "policy_information_ready_agents": float(
++            np.sum(policy_information >= cfg.pgct_min_policy_information)
++        ),
++        "directed_probe_count_min": float(np.min(
++            graph_estimator.distance_count[~np.eye(n_agents, dtype=bool)]
++        )),
++        "directed_probe_count_max": float(np.max(
++            graph_estimator.distance_count[~np.eye(n_agents, dtype=bool)]
++        )),
+         **probe_meta,
+     }
++    for agent_id, information in enumerate(policy_information):
++        metrics[f"agent_{agent_id}_policy_information"] = float(information)
+     metrics.update(pairwise_matrix_metrics(distance, "distance", true_clusters))
+     metrics.update(
+         oracle_pairwise_matrix_metrics(
+@@ -3248,11 +3528,13 @@ def evaluate(
+     render_mode: str = "human",
+     collect_video: bool = False,
+     use_action_mask: bool = True,
++    communication_gate: Optional[np.ndarray] = None,
+ ) -> Tuple[Dict[str, float], Optional[np.ndarray]]:
+     if episodes <= 0:
+         return {}, None
+     del obs_dim
+     action_dim = int(agents[0].action_dim)
++    n_agents = len(agents)
+     returns = []
+     discounted_returns = []
+     task_returns = []
+@@ -3267,6 +3549,8 @@ def evaluate(
+     carrying_at_end = []
+     invalid_toggle_rates = []
+     failed_forward_rates = []
++    blocking_agent_rates = []
++    deadlock_agent_rates = []
+     steps_to_seen = []
+     steps_to_pickup = []
+     steps_pickup_to_goal = []
+@@ -3292,8 +3576,19 @@ def evaluate(
+     agent_step_count = 0.0
+     wall_state_count = 0.0
+     wall_action_counts = np.zeros((action_dim,), dtype=np.float64)
++    wall_action_prob_sums = np.zeros((action_dim,), dtype=np.float64)
++    wall_action_prob_count = 0.0
++    per_agent_step_counts = np.zeros((n_agents,), dtype=np.float64)
++    per_agent_position_change_counts = np.zeros((n_agents,), dtype=np.float64)
++    per_agent_pickup_counts = np.zeros((n_agents,), dtype=np.float64)
++    per_agent_delivery_counts = np.zeros((n_agents,), dtype=np.float64)
++    per_agent_return_counts = np.zeros((n_agents,), dtype=np.float64)
++    per_agent_failed_forward_counts = np.zeros((n_agents,), dtype=np.float64)
++    per_agent_blocking_counts = np.zeros((n_agents,), dtype=np.float64)
++    per_agent_deadlock_counts = np.zeros((n_agents,), dtype=np.float64)
+     return_distances: List[float] = []
+     video_frames: List[np.ndarray] = []
++    communication_episode_metrics = []
+     for episode in range(episodes):
+         should_render = episode < render_episodes
+         should_collect_video = collect_video and episode == 0
+@@ -3309,7 +3604,8 @@ def evaluate(
+             observation_format=observation_format,
+         )
+         obs, _ = env.reset(seed=seed + episode)
+-        n_agents = len(agents)
++        set_env_training_edges(env, np.zeros((n_agents, n_agents), dtype=np.float32)
++                               if communication_gate is None else communication_gate)
+         actor_h = torch.zeros((n_agents, recurrent_hidden_dim), device=device)
+         critic_h = torch.zeros_like(actor_h)
+         ep_return = np.zeros((n_agents,), dtype=np.float64)
+@@ -3323,6 +3619,8 @@ def evaluate(
+         ep_invalid_toggles = 0.0
+         ep_wrong_returns = 0.0
+         ep_failed_forwards = 0.0
++        ep_blocking_agents = 0.0
++        ep_deadlocked_agents = 0.0
+         seen_requested_shelf = False
+         first_seen_step: Optional[int] = None
+         first_pickup_step: Optional[int] = None
+@@ -3390,6 +3688,9 @@ def evaluate(
+                 action_probs_np = action_probs.squeeze(0).detach().cpu().numpy()
+                 action_prob_sums += action_probs_np
+                 action_prob_count += 1.0
++                if blocked_forward_states[agent_id]:
++                    wall_action_prob_sums += action_probs_np
++                    wall_action_prob_count += 1.0
+                 max_action_probs.append(float(np.max(action_probs_np)))
+                 if (
+                     action_dim > int(Action.TOGGLE_LOAD.value)
+@@ -3433,8 +3734,9 @@ def evaluate(
+             for action in actions:
+                 if 0 <= action < action_dim:
+                     action_counts[action] += 1.0
++            masked_failed_forwards = 0.0
+             if action_dim > int(Action.FORWARD.value):
+-                step_failed_forwards = float(
++                masked_failed_forwards = float(
+                     sum(
+                         action == int(Action.FORWARD.value)
+                         and diagnostic_action_masks[
+@@ -3445,15 +3747,56 @@ def evaluate(
+                         for agent_id, action in enumerate(actions)
+                     )
+                 )
+-                ep_failed_forwards += step_failed_forwards
+-                forward_failure_count += step_failed_forwards
+             obs, rewards, done, truncated, info = env.step(actions)
++            step_failed_forwards = float(
++                info.get("failed_forwards", masked_failed_forwards)
++            )
++            step_blocking_agents = float(info.get("blocking_agents", 0.0))
++            step_deadlocked_agents = float(info.get("deadlocked_agents", 0.0))
++            ep_failed_forwards += step_failed_forwards
++            ep_blocking_agents += step_blocking_agents
++            ep_deadlocked_agents += step_deadlocked_agents
++            forward_failure_count += step_failed_forwards
+             post_positions = rware_agent_positions(env, n_agents)
+-            position_change_count += float(
+-                sum(
++            moved_agents = np.asarray(
++                [
+                     before != after
+                     for before, after in zip(pre_positions, post_positions)
+-                )
++                ],
++                dtype=np.float64,
++            )
++            position_change_count += float(np.sum(moved_agents))
++            per_agent_step_counts += 1.0
++            per_agent_position_change_counts += moved_agents
++            add_agent_event_counts(
++                info.get("pickup_events", []),
++                per_agent_pickup_counts,
++                "agent_id",
++            )
++            add_agent_event_counts(
++                info.get("delivery_events", []),
++                per_agent_delivery_counts,
++                "carrier_id",
++            )
++            add_agent_event_counts(
++                info.get("return_events", []),
++                per_agent_return_counts,
++                "carrier_id",
++            )
++            add_agent_event_counts(
++                info.get("failed_forward_events", []),
++                per_agent_failed_forward_counts,
++                "agent_id",
++            )
++            add_agent_event_counts(
++                info.get("blocking_agent_events", []),
++                per_agent_blocking_counts,
++                "agent_id",
++            )
++            add_agent_event_counts(
++                info.get("deadlock_events", []),
++                per_agent_deadlock_counts,
++                "agent_id",
+             )
+             rewards_array = np.asarray(rewards, dtype=np.float64)
+             shaping_array = np.asarray(
+@@ -3511,6 +3854,8 @@ def evaluate(
+             getattr(agent, "carrying_shelf", None) is not None
+             for agent in getattr(env.unwrapped, "agents", [])
+         )
++        if hasattr(env.unwrapped, "communication_metrics"):
++            communication_episode_metrics.append(env.unwrapped.communication_metrics())
+         env.close()
+         returns.append(float(np.mean(ep_return)))
+         discounted_returns.append(float(np.mean(ep_discounted_return)))
+@@ -3526,6 +3871,8 @@ def evaluate(
+         carrying_at_end.append(float(carrying))
+         invalid_toggle_rates.append(float(ep_invalid_toggles / episode_action_count))
+         failed_forward_rates.append(float(ep_failed_forwards / episode_action_count))
++        blocking_agent_rates.append(float(ep_blocking_agents / episode_action_count))
++        deadlock_agent_rates.append(float(ep_deadlocked_agents / episode_action_count))
+         steps_to_seen.append(
+             float(first_seen_step) if first_seen_step is not None else float("nan")
+         )
+@@ -3568,11 +3915,29 @@ def evaluate(
+         for action in Action
+         if int(action.value) < action_dim
+     }
++    wall_action_probability_metrics = {
++        f"eval_wall_action_{action.name.lower()}_probability": (
++            float(wall_action_prob_sums[int(action.value)] / wall_action_prob_count)
++            if wall_action_prob_count > 0.0
++            else float("nan")
++        )
++        for action in Action
++        if int(action.value) < action_dim
++    }
+     agent_step_denominator = max(agent_step_count, 1.0)
+     pickup_opportunity_denominator = max(valid_pickup_opportunity_count, 1.0)
+     return_opportunity_denominator = max(valid_return_opportunity_count, 1.0)
+     return {
+         "eval_return": float(np.mean(returns)),
++        **{f"eval_comm/{key}": float(np.mean([m[key] for m in communication_episode_metrics]))
++           for key in (communication_episode_metrics[0] if communication_episode_metrics else [])
++           if not key.endswith("_time")},
++        **{f"eval_comm/{key}_hit_rate": float(np.mean([m[key] >= 0 for m in communication_episode_metrics]))
++           for key in (communication_episode_metrics[0] if communication_episode_metrics else [])
++           if key.endswith("_time")},
++        **{f"eval_comm/{key}_mean_given_hit": float(np.mean([m[key] for m in communication_episode_metrics if m[key] >= 0]))
++           for key in (communication_episode_metrics[0] if communication_episode_metrics else [])
++           if key.endswith("_time") and any(m[key] >= 0 for m in communication_episode_metrics)},
+         "eval_discounted_return": float(np.mean(discounted_returns)),
+         "eval_task_return": float(np.mean(task_returns)),
+         "eval_shaping_return": float(np.mean(shaping_returns)),
+@@ -3602,6 +3967,8 @@ def evaluate(
+         "eval_wrong_returns": float(np.mean(wrong_return_counts)),
+         "eval_invalid_toggle_rate": float(np.mean(invalid_toggle_rates)),
+         "eval_failed_forward_rate": float(np.mean(failed_forward_rates)),
++        "eval_blocking_agent_rate": float(np.mean(blocking_agent_rates)),
++        "eval_deadlock_agent_rate": float(np.mean(deadlock_agent_rates)),
+         "eval_carrying_at_episode_end": float(np.mean(carrying_at_end)),
+         "eval_mean_steps_to_first_requested_shelf": finite_mean(steps_to_seen),
+         "eval_mean_steps_to_pickup": finite_mean(steps_to_pickup),
+@@ -3660,6 +4027,19 @@ def evaluate(
+         else float("nan"),
+         **action_probability_metrics,
+         **wall_action_metrics,
++        **wall_action_probability_metrics,
++        **per_agent_metrics(
++            "eval_",
++            n_agents,
++            per_agent_step_counts,
++            per_agent_position_change_counts,
++            per_agent_pickup_counts,
++            per_agent_delivery_counts,
++            per_agent_return_counts,
++            per_agent_failed_forward_counts,
++            per_agent_blocking_counts,
++            per_agent_deadlock_counts,
++        ),
+         **action_metrics,
+     }, video
+ 
+@@ -3824,9 +4204,10 @@ def graph_metrics(
+     if weights is None:
+         weights = graph_estimator.weight_matrix()
+     upper_mask = np.triu(np.ones_like(weights, dtype=bool), k=1)
+-    upper_weights = weights[upper_mask & (weights > 0.0)]
++    upper_weights = weights[(~np.eye(len(weights), dtype=bool)) & (weights > 0.0)]
+     return {
+-        "graph/edges": float(np.sum(adjacency) / 2.0),
++        "graph/edges": float(np.triu((adjacency > 0) | (adjacency.T > 0), k=1).sum()),
++        "graph/arcs": float(np.sum(adjacency > 0)),
+         "graph/clusters": float(len(clusters)),
+         "graph/max_cluster_size": float(max(cluster_sizes) if cluster_sizes else 0),
+         "graph/value_uncertainty": float(np.mean(graph_estimator.value_uncertainty)),
+@@ -3864,6 +4245,18 @@ def log_to_wandb(run, payload: Dict[str, object], step: int) -> None:
+     run.log(payload, step=step)
+ 
+ 
++def save_local_eval_video(video, path, fps):
++    import imageio.v2 as imageio
++    path = Path(path)
++    path.parent.mkdir(parents=True, exist_ok=True)
++    # Preserve dimensions; yuv444p accepts odd sizes without silent resizing.
++    with imageio.get_writer(str(path), fps=fps, codec="libx264", pixelformat="yuv444p",
++                            macro_block_size=1) as writer:
++        for frame in video.transpose(0, 2, 3, 1):
++            writer.append_data(frame)
++    print(f"video={path}")
++
++
+ def make_wandb_video(video: np.ndarray, fps: int):
+     import wandb
+ 
+@@ -4052,15 +4445,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
+         choices=["shared", "agent-team"],
+         help=(
+             "shared compares every policy on the same canonical probe bank. "
+-            "agent-team builds objective probes for each agent's inferred team, "
+-            "which makes same-team and cross-team objectives more separable."
++            "agent-team uses ORACLE team IDs to build different inputs per team; "
++            "use it only as a privileged diagnostic, not blind team discovery."
+         ),
+     )
+     parser.add_argument("--policy-similarity-temperature", type=float, default=0.25)
+     parser.add_argument(
+         "--comm-graph-mode",
+         default="physical",
+-        choices=["physical", "complete"],
++        choices=["physical", "fov", "complete", "none"],
+         help="Restrict policy comparisons to physical communication neighbors.",
+     )
+     parser.add_argument(
+@@ -4218,6 +4611,22 @@ def build_arg_parser() -> argparse.ArgumentParser:
+         skip_zero_reward_actor_update=True,
+         skip_no_positive_reward_actor_update=False,
+     )
++    parser.add_argument(
++        "--pgct-min-policy-information",
++        type=float,
++        default=0.02,
++        help=(
++            "Minimum mean KL(policy || uniform) on common probes required for "
++            "each endpoint before PGCT may open an edge."
++        ),
++    )
++    parser.add_argument("--no-communication", dest="communication_enabled", action="store_false",
++                        help="Disable ALL graph probing, peer transfer, consensus and rendered links.")
++    parser.add_argument("--communication-fov-degrees", type=float, default=120.0)
++    parser.add_argument("--directional-observation", action="store_true",
++                        help="Mask semantic spatial observations to the same Euclidean FoV sector.")
++    parser.add_argument("--save-eval-video", action="store_true",
++                        help="Save evaluation MP4 under the run's videos directory without requiring W&B.")
+     return parser
+ 
+ 
+@@ -4230,6 +4639,7 @@ def resolve_device(value: str) -> torch.device:
+ def main() -> None:
+     args = build_arg_parser().parse_args()
+     cfg = TrainConfig(**vars(args))
++    enforce_communication_config(cfg)
+     if cfg.graph_mode == "probe":
+         cfg.graph_mode = "policy"
+     curriculum_stages = parse_curriculum_stages(cfg.curriculum_stages)
+@@ -4271,6 +4681,8 @@ def main() -> None:
+         raise ValueError("--pgct-alpha-epsilon must be positive")
+     if cfg.pgct_warmup_updates < 0:
+         raise ValueError("--pgct-warmup-updates must be non-negative")
++    if cfg.pgct_min_policy_information < 0.0:
++        raise ValueError("--pgct-min-policy-information must be non-negative")
+     if cfg.obs_encoder == "cnn" and cfg.observation_format != "semantic":
+         raise ValueError("--obs-encoder cnn requires --observation-format semantic")
+     if transfer_components and not cfg.init_checkpoint:
+@@ -4280,6 +4692,7 @@ def main() -> None:
+ 
+     set_global_seeds(cfg.seed)
+     rng = np.random.default_rng(cfg.seed)
++    probe_rng = np.random.default_rng(cfg.seed + 9173)
+     device = resolve_device(cfg.device)
+     env_kwargs = parse_env_kwargs(cfg.env_kwargs_json)
+     if cfg.sensor_range > 0:
+@@ -4291,6 +4704,13 @@ def main() -> None:
+         cfg.team_count,
+         cfg.auto_scale_request_queue,
+     )
++    if "rware-multiteam" in cfg.env_id:
++        env_kwargs.update(communication_enabled=cfg.communication_enabled,
++                          communication_topology=cfg.comm_graph_mode,
++                          communication_fov_degrees=cfg.communication_fov_degrees,
++                          directional_observation=cfg.directional_observation)
++    elif cfg.comm_graph_mode == "fov" or cfg.directional_observation:
++        raise ValueError("FoV options require a multiteam RWARE environment")
+ 
+     env = make_env(
+         cfg.env_id,
+@@ -4299,6 +4719,7 @@ def main() -> None:
+     )
+     obs, _ = env.reset(seed=cfg.seed)
+     n_agents = int(env.unwrapped.n_agents)
++    transfer_tracker = TemporalConnectivity(n_agents)
+     obs_dims = get_flat_obs_dims(env)
+     action_dims = get_discrete_action_dims(env)
+     if len(set(obs_dims)) != 1:
+@@ -4359,6 +4780,7 @@ def main() -> None:
+         join_threshold=graph_join_threshold,
+         leave_threshold=graph_leave_threshold,
+         dwell_updates=cfg.graph_dwell_updates,
++        min_policy_information=cfg.pgct_min_policy_information,
+     )
+ 
+     actor_h = torch.zeros((n_agents, cfg.recurrent_hidden_dim), device=device)
+@@ -4429,7 +4851,7 @@ def main() -> None:
+             clusters = graph_estimator.clusters()
+             adj = graph_estimator.adjacency()
+             graph_weights = graph_estimator.weight_matrix()
+-        set_env_training_edges(env, adj)
++        set_env_training_edges(env, communication_weights(cfg, env, graph_estimator, iteration))
+ 
+         rollout, state, rollout_metrics = collect_rollout(
+             env,
+@@ -4450,21 +4872,18 @@ def main() -> None:
+             and cfg.probe_interval > 0
+             and iteration % cfg.probe_interval == 0
+         ):
+-            if cfg.peer_transfer_mode == "pgct" and iteration < cfg.pgct_warmup_updates:
+-                probe_metrics = {
+-                    "probe_delta": float("nan"),
+-                    "pgct_warmup_active": 1.0,
+-                }
+-            else:
+-                probe_metrics, peer_probe_sequences = run_policy_similarity_probe_round(
+-                    cfg,
+-                    env,
+-                    agents,
+-                    graph_estimator,
+-                    rollout,
+-                    device,
+-                    rng,
+-                )
++            probe_metrics, peer_probe_sequences = run_policy_similarity_probe_round(
++                cfg,
++                env,
++                agents,
++                graph_estimator,
++                rollout,
++                device,
++                probe_rng,
++            )
++            probe_metrics["pgct_warmup_active"] = float(
++                iteration < cfg.pgct_warmup_updates
++            )
+         elif (
+             cfg.graph_mode == "influence"
+             and cfg.probe_interval > 0
+@@ -4499,7 +4918,9 @@ def main() -> None:
+                     gate_power=cfg.pgct_gate_power,
+                 )
+             unmasked_pgct_gate = pgct_gate.copy()
+-            if cfg.comm_graph_mode == "physical":
++            if cfg.pgct_peer_loss_coef <= 0:
++                pgct_gate.fill(0)
++            if cfg.comm_graph_mode in {"physical", "fov", "none"}:
+                 current_neighbor_adj = communication_adjacency(
+                     env,
+                     n_agents,
+@@ -4509,12 +4930,11 @@ def main() -> None:
+                     pgct_gate,
+                     current_neighbor_adj,
+                 )
+-                probe_metrics["pgct_stale_gate_edges_suppressed"] = float(
++                probe_metrics["pgct_stale_gate_arcs_suppressed"] = float(
+                     (
+                         np.sum(unmasked_pgct_gate > 0.0)
+                         - np.sum(pgct_gate > 0.0)
+                     )
+-                    / 2.0
+                 )
+             allocation_denom = (
+                 np.sum(pgct_gate, axis=1, keepdims=True)
+@@ -4528,7 +4948,7 @@ def main() -> None:
+                     cfg,
+                     env,
+                     rollout,
+-                    rng,
++                    probe_rng,
+                 )
+                 probe_metrics.update(
+                     {
+@@ -4545,7 +4965,7 @@ def main() -> None:
+                 )
+             probe_metrics.update(
+                 {
+-                    "pgct_gate_edges": float(np.sum(pgct_gate > 0.0) / 2.0),
++                    "pgct_gate_arcs": float(np.sum(pgct_gate > 0.0)),
+                     "pgct_allocation_mass": float(np.sum(peer_allocation)),
+                 }
+             )
+@@ -4572,6 +4992,13 @@ def main() -> None:
+             consensus_weights = graph_estimator.consensus_weight_matrix()
+             log_clusters = graph_estimator.clusters()
+ 
++        if not cfg.communication_enabled or cfg.peer_transfer_mode == "none":
++            consensus_weights = np.zeros((n_agents, n_agents), dtype=np.float32)
++        else:
++            consensus_weights = mask_gate_by_current_neighbors(
++                consensus_weights, communication_adjacency(env, n_agents, cfg.comm_graph_mode))
++        set_env_training_edges(env, communication_weights(cfg, env, graph_estimator, iteration))
++
+         update_metrics = update_ippo(
+             agents,
+             optimizers,
+@@ -4601,12 +5028,39 @@ def main() -> None:
+         elapsed = max(time.time() - start_time, 1e-6)
+         sps = env_steps / elapsed
+         log_adj = (consensus_weights > 0.0).astype(np.float32)
++        # Record actual optimization-time directed transfers independently of W&B.
++        active_transfer = consensus_weights.copy()
++        if cfg.peer_transfer_mode == "consensus" and consensus_updates == 0:
++            active_transfer.fill(0)
++        transfer_tracker.update(active_transfer)
++        with (save_dir / "communication.jsonl").open("a", encoding="utf-8") as stream:
++            stream.write(json.dumps({
++                "env_steps": env_steps, "matrix_convention": "receiver_sender",
++                "enabled": cfg.communication_enabled,
++                "available": communication_adjacency(env, n_agents, cfg.comm_graph_mode).tolist(),
++                "transfer_weights": active_transfer.tolist(),
++                "policy_information": graph_estimator.policy_information.tolist(),
++                "directed_probe_counts": graph_estimator.distance_count.tolist(),
++                "policy_distance_ema": graph_estimator.distance_ema.tolist(),
++                "gate_requirements": {
++                    "warmup_updates": cfg.pgct_warmup_updates,
++                    "min_directed_probe_count": cfg.min_probe_count,
++                    "min_policy_information": cfg.pgct_min_policy_information,
++                    "max_policy_distance": cfg.pgct_distance_threshold,
++                },
++                "exchange_metrics_in_optimizer_updates": transfer_tracker.metrics(),
++                "episode_contact_metrics": env.unwrapped.communication_metrics()
++                    if hasattr(env.unwrapped, "communication_metrics") else {},
++            }) + "\n")
+         wandb_payload: Dict[str, object] = {
+             "train/env_steps": float(env_steps),
+             "train/sps": float(sps),
+             "train/consensus_updates": float(consensus_updates),
+         }
+         wandb_payload.update(prefixed_metrics("train", rollout_metrics))
++        if hasattr(env.unwrapped, "communication_metrics"):
++            wandb_payload.update(prefixed_metrics("comm", env.unwrapped.communication_metrics()))
++        wandb_payload.update(prefixed_metrics("comm/exchange", transfer_tracker.metrics()))
+         for action in Action:
+             action_name = action.name.lower()
+             action_key = f"action_{action.name.lower()}_rate"
+@@ -4684,10 +5138,17 @@ def main() -> None:
+                 f"ret_conv={rollout_metrics['return_conversion_rate']:.2f} "
+                 f"ret_dist={rollout_metrics['mean_return_home_distance']:.1f} "
+                 f"move={rollout_metrics['position_change_rate']:.2f} "
++                f"agent_move={format_agent_rates(rollout_metrics, 'position_change_rate', n_agents)} "
++                f"agent_deliv={format_agent_rates(rollout_metrics, 'delivery_count', n_agents)} "
++                f"fail_fwd={rollout_metrics['failed_forward_rate']:.3f} "
++                f"block={rollout_metrics['blocking_agent_rate']:.3f} "
++                f"dead={rollout_metrics['deadlock_agent_rate']:.3f} "
++                f"wall_fwd={rollout_metrics['wall_action_forward_rate']:.2f} "
++                f"wall_pfwd={rollout_metrics['wall_action_forward_probability']:.2f} "
+                 f"turn={rollout_metrics['action_left_rate'] + rollout_metrics['action_right_rate']:.2f} "
+                 f"sim={probe_metrics.get('policy_similarity', float('nan')):.3f} "
+                 f"delta={probe_metrics.get('probe_delta', float('nan')):.4f} "
+-                f"edges={np.sum(log_adj) / 2:.0f} "
++                f"arcs={np.sum(log_adj):.0f} "
+                 f"consensus_edges={consensus_updates} "
+                 f"clusters={format_clusters(log_clusters)}"
+             )
+@@ -4712,9 +5173,12 @@ def main() -> None:
+                 seed=cfg.seed + 5_000_000 + env_steps,
+                 render_episodes=cfg.eval_render_episodes if cfg.render_eval else 0,
+                 render_mode=cfg.eval_render_mode,
+-                collect_video=collect_eval_video,
++                collect_video=collect_eval_video or cfg.save_eval_video,
+                 use_action_mask=cfg.action_mask,
++                communication_gate=communication_weights(cfg, env, graph_estimator, iteration),
+             )
++            if cfg.save_eval_video and eval_video is not None:
++                save_local_eval_video(eval_video, save_dir / "videos" / f"eval_{iteration:05d}.mp4", cfg.eval_render_fps)
+             if eval_metrics:
+                 print(
+                     f"eval iter={iteration:04d} "
+@@ -4733,6 +5197,13 @@ def main() -> None:
+                     f"ret_conv={eval_metrics['eval_return_conversion_rate']:.2f} "
+                     f"ret_dist={eval_metrics['eval_mean_return_home_distance']:.1f} "
+                     f"move={eval_metrics['eval_position_change_rate']:.2f} "
++                    f"agent_move={format_eval_agent_rates(eval_metrics, 'position_change_rate', n_agents)} "
++                    f"agent_deliv={format_eval_agent_rates(eval_metrics, 'delivery_count', n_agents)} "
++                    f"fail_fwd={eval_metrics['eval_failed_forward_rate']:.3f} "
++                    f"block={eval_metrics['eval_blocking_agent_rate']:.3f} "
++                    f"dead={eval_metrics['eval_deadlock_agent_rate']:.3f} "
++                    f"wall_fwd={eval_metrics['eval_wall_action_forward_rate']:.2f} "
++                    f"wall_pfwd={eval_metrics['eval_wall_action_forward_probability']:.2f} "
+                     f"turn={eval_metrics['eval_action_left_rate'] + eval_metrics['eval_action_right_rate']:.2f}"
+                 )
+                 eval_payload: Dict[str, object] = eval_payload_from_metrics(
+@@ -4771,9 +5242,14 @@ def main() -> None:
+         seed=cfg.seed + 5_000_000,
+         render_episodes=cfg.eval_render_episodes if cfg.render_eval else 0,
+         render_mode=cfg.eval_render_mode,
+-        collect_video=cfg.track and cfg.wandb_log_eval_video,
++        collect_video=cfg.save_eval_video or (cfg.track and cfg.wandb_log_eval_video),
+         use_action_mask=cfg.action_mask,
++        communication_gate=communication_weights(cfg, env, graph_estimator, total_iterations),
+     )
++    if cfg.save_eval_video and eval_video is not None:
++        save_local_eval_video(eval_video, save_dir / "videos" / "final.mp4", cfg.eval_render_fps)
++    with (save_dir / "final_eval_metrics.json").open("w", encoding="utf-8") as stream:
++        json.dump(eval_metrics, stream, indent=2)
+     if eval_metrics:
+         print(
+             f"eval_return={eval_metrics['eval_return']:.3f} "
+@@ -4791,6 +5267,13 @@ def main() -> None:
+             f"eval_ret_conv={eval_metrics['eval_return_conversion_rate']:.2f} "
+             f"eval_ret_dist={eval_metrics['eval_mean_return_home_distance']:.1f} "
+             f"eval_move={eval_metrics['eval_position_change_rate']:.2f} "
++            f"eval_agent_move={format_eval_agent_rates(eval_metrics, 'position_change_rate', n_agents)} "
++            f"eval_agent_deliv={format_eval_agent_rates(eval_metrics, 'delivery_count', n_agents)} "
++            f"eval_fail_fwd={eval_metrics['eval_failed_forward_rate']:.3f} "
++            f"eval_block={eval_metrics['eval_blocking_agent_rate']:.3f} "
++            f"eval_dead={eval_metrics['eval_deadlock_agent_rate']:.3f} "
++            f"eval_wall_fwd={eval_metrics['eval_wall_action_forward_rate']:.2f} "
++            f"eval_wall_pfwd={eval_metrics['eval_wall_action_forward_probability']:.2f} "
+             f"eval_turn={eval_metrics['eval_action_left_rate'] + eval_metrics['eval_action_right_rate']:.2f}"
+         )
+         final_eval_payload: Dict[str, object] = eval_payload_from_metrics(
+diff --git a/output/probe_maps/000_team0_team_home_approach_v0.png b/output/probe_maps/000_team0_team_home_approach_v0.png
+deleted file mode 100644
+index de1c03f..0000000
+Binary files a/output/probe_maps/000_team0_team_home_approach_v0.png and /dev/null differ
+diff --git a/output/probe_maps/001_team0_team_home_pickup_v0.png b/output/probe_maps/001_team0_team_home_pickup_v0.png
+deleted file mode 100644
+index 8f0cca9..0000000
+Binary files a/output/probe_maps/001_team0_team_home_pickup_v0.png and /dev/null differ
+diff --git a/output/probe_maps/002_team0_team_goal_approach_v0.png b/output/probe_maps/002_team0_team_goal_approach_v0.png
+deleted file mode 100644
+index 83b6dcd..0000000
+Binary files a/output/probe_maps/002_team0_team_goal_approach_v0.png and /dev/null differ
+diff --git a/output/probe_maps/003_team0_team_goal_at_goal_v0.png b/output/probe_maps/003_team0_team_goal_at_goal_v0.png
+deleted file mode 100644
+index 23bf178..0000000
+Binary files a/output/probe_maps/003_team0_team_goal_at_goal_v0.png and /dev/null differ
+diff --git a/output/probe_maps/004_team1_team_home_approach_v0.png b/output/probe_maps/004_team1_team_home_approach_v0.png
+deleted file mode 100644
+index 803622c..0000000
+Binary files a/output/probe_maps/004_team1_team_home_approach_v0.png and /dev/null differ
+diff --git a/output/probe_maps/005_team1_team_home_pickup_v0.png b/output/probe_maps/005_team1_team_home_pickup_v0.png
+deleted file mode 100644
+index 85fea19..0000000
+Binary files a/output/probe_maps/005_team1_team_home_pickup_v0.png and /dev/null differ
+diff --git a/output/probe_maps/006_team1_team_goal_approach_v0.png b/output/probe_maps/006_team1_team_goal_approach_v0.png
+deleted file mode 100644
+index 435d8cf..0000000
+Binary files a/output/probe_maps/006_team1_team_goal_approach_v0.png and /dev/null differ
+diff --git a/output/probe_maps/007_team1_team_goal_at_goal_v0.png b/output/probe_maps/007_team1_team_goal_at_goal_v0.png
+deleted file mode 100644
+index f436f98..0000000
+Binary files a/output/probe_maps/007_team1_team_goal_at_goal_v0.png and /dev/null differ
+diff --git a/output/probe_maps/008_team0_team_return_approach_v0.png b/output/probe_maps/008_team0_team_return_approach_v0.png
+deleted file mode 100644
+index 1fb26a5..0000000
+Binary files a/output/probe_maps/008_team0_team_return_approach_v0.png and /dev/null differ
+diff --git a/output/probe_maps/009_team0_team_return_at_home_v0.png b/output/probe_maps/009_team0_team_return_at_home_v0.png
+deleted file mode 100644
+index 2fd9e43..0000000
+Binary files a/output/probe_maps/009_team0_team_return_at_home_v0.png and /dev/null differ
+diff --git a/output/probe_maps/010_team0_wrong_team_goal_v0.png b/output/probe_maps/010_team0_wrong_team_goal_v0.png
+deleted file mode 100644
+index 2df3220..0000000
+Binary files a/output/probe_maps/010_team0_wrong_team_goal_v0.png and /dev/null differ
+diff --git a/output/probe_maps/011_team0_team_conflict_v0.png b/output/probe_maps/011_team0_team_conflict_v0.png
+deleted file mode 100644
+index 8c411c5..0000000
+Binary files a/output/probe_maps/011_team0_team_conflict_v0.png and /dev/null differ
+diff --git a/output/probe_maps/012_team1_team_return_approach_v0.png b/output/probe_maps/012_team1_team_return_approach_v0.png
+deleted file mode 100644
+index 97f0dec..0000000
+Binary files a/output/probe_maps/012_team1_team_return_approach_v0.png and /dev/null differ
+diff --git a/output/probe_maps/013_team1_team_return_at_home_v0.png b/output/probe_maps/013_team1_team_return_at_home_v0.png
+deleted file mode 100644
+index 2ca0d33..0000000
+Binary files a/output/probe_maps/013_team1_team_return_at_home_v0.png and /dev/null differ
+diff --git a/output/probe_maps/014_team1_wrong_team_goal_v0.png b/output/probe_maps/014_team1_wrong_team_goal_v0.png
+deleted file mode 100644
+index a80094f..0000000
+Binary files a/output/probe_maps/014_team1_wrong_team_goal_v0.png and /dev/null differ
+diff --git a/output/probe_maps/015_team1_team_conflict_v0.png b/output/probe_maps/015_team1_team_conflict_v0.png
+deleted file mode 100644
+index 0033986..0000000
+Binary files a/output/probe_maps/015_team1_team_conflict_v0.png and /dev/null differ
+diff --git a/output/probe_maps/016_team0_dual_requested_home_pair_v0.png b/output/probe_maps/016_team0_dual_requested_home_pair_v0.png
+deleted file mode 100644
+index 26d05b4..0000000
+Binary files a/output/probe_maps/016_team0_dual_requested_home_pair_v0.png and /dev/null differ
+diff --git a/output/probe_maps/017_team0_dual_requested_other_home_pair_v0.png b/output/probe_maps/017_team0_dual_requested_other_home_pair_v0.png
+deleted file mode 100644
+index 26d05b4..0000000
+Binary files a/output/probe_maps/017_team0_dual_requested_other_home_pair_v0.png and /dev/null differ
+diff --git a/output/probe_maps/018_team0_dual_requested_goal_pair_v0.png b/output/probe_maps/018_team0_dual_requested_goal_pair_v0.png
+deleted file mode 100644
+index 4444805..0000000
+Binary files a/output/probe_maps/018_team0_dual_requested_goal_pair_v0.png and /dev/null differ
+diff --git a/output/probe_maps/019_team0_dual_requested_goal_zone_pair_v0.png b/output/probe_maps/019_team0_dual_requested_goal_zone_pair_v0.png
+deleted file mode 100644
+index 4444805..0000000
+Binary files a/output/probe_maps/019_team0_dual_requested_goal_zone_pair_v0.png and /dev/null differ
+diff --git a/output/probe_maps/020_team1_dual_requested_home_pair_v0.png b/output/probe_maps/020_team1_dual_requested_home_pair_v0.png
+deleted file mode 100644
+index 7621513..0000000
+Binary files a/output/probe_maps/020_team1_dual_requested_home_pair_v0.png and /dev/null differ
+diff --git a/output/probe_maps/021_team1_dual_requested_other_home_pair_v0.png b/output/probe_maps/021_team1_dual_requested_other_home_pair_v0.png
+deleted file mode 100644
+index 7621513..0000000
+Binary files a/output/probe_maps/021_team1_dual_requested_other_home_pair_v0.png and /dev/null differ
+diff --git a/output/probe_maps/022_team1_dual_requested_goal_pair_v0.png b/output/probe_maps/022_team1_dual_requested_goal_pair_v0.png
+deleted file mode 100644
+index b58808c..0000000
+Binary files a/output/probe_maps/022_team1_dual_requested_goal_pair_v0.png and /dev/null differ
+diff --git a/output/probe_maps/023_team1_dual_requested_goal_zone_pair_v0.png b/output/probe_maps/023_team1_dual_requested_goal_zone_pair_v0.png
+deleted file mode 100644
+index b58808c..0000000
+Binary files a/output/probe_maps/023_team1_dual_requested_goal_zone_pair_v0.png and /dev/null differ
+diff --git a/output/probe_maps/024_team0_dual_requested_opposite_axis_v0.png b/output/probe_maps/024_team0_dual_requested_opposite_axis_v0.png
+deleted file mode 100644
+index 26d05b4..0000000
+Binary files a/output/probe_maps/024_team0_dual_requested_opposite_axis_v0.png and /dev/null differ
+diff --git a/output/probe_maps/025_team0_dual_requested_front_side_v0.png b/output/probe_maps/025_team0_dual_requested_front_side_v0.png
+deleted file mode 100644
+index 26d05b4..0000000
+Binary files a/output/probe_maps/025_team0_dual_requested_front_side_v0.png and /dev/null differ
+diff --git a/output/probe_maps/026_team0_dual_requested_near_far_v0.png b/output/probe_maps/026_team0_dual_requested_near_far_v0.png
+deleted file mode 100644
+index 26d05b4..0000000
+Binary files a/output/probe_maps/026_team0_dual_requested_near_far_v0.png and /dev/null differ
+diff --git a/output/probe_maps/027_team0_dual_requested_diagonal_v0.png b/output/probe_maps/027_team0_dual_requested_diagonal_v0.png
+deleted file mode 100644
+index 26d05b4..0000000
+Binary files a/output/probe_maps/027_team0_dual_requested_diagonal_v0.png and /dev/null differ
+diff --git a/output/probe_maps/028_team1_dual_requested_opposite_axis_v0.png b/output/probe_maps/028_team1_dual_requested_opposite_axis_v0.png
+deleted file mode 100644
+index 7621513..0000000
+Binary files a/output/probe_maps/028_team1_dual_requested_opposite_axis_v0.png and /dev/null differ
+diff --git a/output/probe_maps/029_team1_dual_requested_front_side_v0.png b/output/probe_maps/029_team1_dual_requested_front_side_v0.png
+deleted file mode 100644
+index 7621513..0000000
+Binary files a/output/probe_maps/029_team1_dual_requested_front_side_v0.png and /dev/null differ
+diff --git a/output/probe_maps/030_team1_dual_requested_near_far_v0.png b/output/probe_maps/030_team1_dual_requested_near_far_v0.png
+deleted file mode 100644
+index 7621513..0000000
+Binary files a/output/probe_maps/030_team1_dual_requested_near_far_v0.png and /dev/null differ
+diff --git a/output/probe_maps/031_team1_dual_requested_diagonal_v0.png b/output/probe_maps/031_team1_dual_requested_diagonal_v0.png
+deleted file mode 100644
+index 7621513..0000000
+Binary files a/output/probe_maps/031_team1_dual_requested_diagonal_v0.png and /dev/null differ
+diff --git a/output/probe_maps/032_team0_dual_requested_with_decoy_v0.png b/output/probe_maps/032_team0_dual_requested_with_decoy_v0.png
+deleted file mode 100644
+index 5822cb2..0000000
+Binary files a/output/probe_maps/032_team0_dual_requested_with_decoy_v0.png and /dev/null differ
+diff --git a/output/probe_maps/033_team0_dual_requested_goal_with_decoy_v0.png b/output/probe_maps/033_team0_dual_requested_goal_with_decoy_v0.png
+deleted file mode 100644
+index e9ccd89..0000000
+Binary files a/output/probe_maps/033_team0_dual_requested_goal_with_decoy_v0.png and /dev/null differ
+diff --git a/output/probe_maps/034_team0_dual_requested_lane_choice_v0.png b/output/probe_maps/034_team0_dual_requested_lane_choice_v0.png
+deleted file mode 100644
+index 4444805..0000000
+Binary files a/output/probe_maps/034_team0_dual_requested_lane_choice_v0.png and /dev/null differ
+diff --git a/output/probe_maps/035_team0_dual_requested_cross_zone_choice_v0.png b/output/probe_maps/035_team0_dual_requested_cross_zone_choice_v0.png
+deleted file mode 100644
+index 26d05b4..0000000
+Binary files a/output/probe_maps/035_team0_dual_requested_cross_zone_choice_v0.png and /dev/null differ
+diff --git a/output/probe_maps/036_team1_dual_requested_with_decoy_v0.png b/output/probe_maps/036_team1_dual_requested_with_decoy_v0.png
+deleted file mode 100644
+index c9d1ebf..0000000
+Binary files a/output/probe_maps/036_team1_dual_requested_with_decoy_v0.png and /dev/null differ
+diff --git a/output/probe_maps/037_team1_dual_requested_goal_with_decoy_v0.png b/output/probe_maps/037_team1_dual_requested_goal_with_decoy_v0.png
+deleted file mode 100644
+index e8aacf9..0000000
+Binary files a/output/probe_maps/037_team1_dual_requested_goal_with_decoy_v0.png and /dev/null differ
+diff --git a/output/probe_maps/038_team1_dual_requested_lane_choice_v0.png b/output/probe_maps/038_team1_dual_requested_lane_choice_v0.png
+deleted file mode 100644
+index b58808c..0000000
+Binary files a/output/probe_maps/038_team1_dual_requested_lane_choice_v0.png and /dev/null differ
+diff --git a/output/probe_maps/039_team1_dual_requested_cross_zone_choice_v0.png b/output/probe_maps/039_team1_dual_requested_cross_zone_choice_v0.png
+deleted file mode 100644
+index 7621513..0000000
+Binary files a/output/probe_maps/039_team1_dual_requested_cross_zone_choice_v0.png and /dev/null differ
+diff --git a/output/probe_maps/040_team0_dual_requested_home_pair_v0.png b/output/probe_maps/040_team0_dual_requested_home_pair_v0.png
+deleted file mode 100644
+index 26d05b4..0000000
+Binary files a/output/probe_maps/040_team0_dual_requested_home_pair_v0.png and /dev/null differ
+diff --git a/output/probe_maps/041_team0_dual_requested_goal_pair_v0.png b/output/probe_maps/041_team0_dual_requested_goal_pair_v0.png
+deleted file mode 100644
+index 4444805..0000000
+Binary files a/output/probe_maps/041_team0_dual_requested_goal_pair_v0.png and /dev/null differ
+diff --git a/output/probe_maps/042_team0_neutral_v0.png b/output/probe_maps/042_team0_neutral_v0.png
+deleted file mode 100644
+index ea6ceef..0000000
+Binary files a/output/probe_maps/042_team0_neutral_v0.png and /dev/null differ
+diff --git a/output/probe_maps/043_team0_neutral_v0.png b/output/probe_maps/043_team0_neutral_v0.png
+deleted file mode 100644
+index ea6ceef..0000000
+Binary files a/output/probe_maps/043_team0_neutral_v0.png and /dev/null differ
+diff --git a/output/probe_maps/044_team1_dual_requested_home_pair_v0.png b/output/probe_maps/044_team1_dual_requested_home_pair_v0.png
+deleted file mode 100644
+index 7621513..0000000
+Binary files a/output/probe_maps/044_team1_dual_requested_home_pair_v0.png and /dev/null differ
+diff --git a/output/probe_maps/045_team1_dual_requested_goal_pair_v0.png b/output/probe_maps/045_team1_dual_requested_goal_pair_v0.png
+deleted file mode 100644
+index b58808c..0000000
+Binary files a/output/probe_maps/045_team1_dual_requested_goal_pair_v0.png and /dev/null differ
+diff --git a/output/probe_maps/046_team1_neutral_v0.png b/output/probe_maps/046_team1_neutral_v0.png
+deleted file mode 100644
+index 8991bdd..0000000
+Binary files a/output/probe_maps/046_team1_neutral_v0.png and /dev/null differ
+diff --git a/output/probe_maps/047_team1_neutral_v0.png b/output/probe_maps/047_team1_neutral_v0.png
+deleted file mode 100644
+index 8991bdd..0000000
+Binary files a/output/probe_maps/047_team1_neutral_v0.png and /dev/null differ
+diff --git a/output/probe_maps/probe_contact_sheet.png b/output/probe_maps/probe_contact_sheet.png
+deleted file mode 100644
+index 1f766dd..0000000
+Binary files a/output/probe_maps/probe_contact_sheet.png and /dev/null differ
+diff --git a/runs/graph_connectivity/graph_connectivity.png b/runs/graph_connectivity/graph_connectivity.png
+deleted file mode 100644
+index 1f069ca..0000000
+Binary files a/runs/graph_connectivity/graph_connectivity.png and /dev/null differ
+diff --git a/runs/graph_connectivity/graph_connectivity_oracle.png b/runs/graph_connectivity/graph_connectivity_oracle.png
+deleted file mode 100644
+index b1f042c..0000000
+Binary files a/runs/graph_connectivity/graph_connectivity_oracle.png and /dev/null differ
+diff --git a/runs/graph_connectivity/graph_connectivity_range4.png b/runs/graph_connectivity/graph_connectivity_range4.png
+deleted file mode 100644
+index 1c681b6..0000000
+Binary files a/runs/graph_connectivity/graph_connectivity_range4.png and /dev/null differ
+diff --git a/rware/multi_team_warehouse.py b/rware/multi_team_warehouse.py
+index b22f2c2..9c5f601 100644
+--- a/rware/multi_team_warehouse.py
++++ b/rware/multi_team_warehouse.py
+@@ -3,6 +3,7 @@ from typing import Dict, List, Optional, Sequence, Set, Tuple
+ 
+ import networkx as nx
+ import numpy as np
++from rware.utils.communication import in_sector, TemporalConnectivity
+ 
+ from rware.warehouse import (
+     _LAYER_AGENTS,
+@@ -93,6 +94,9 @@ class MultiTeamWarehouse(Warehouse):
+         wrong_team_penalty: float = 0.0,
+         step_penalty: float = 0.0,
+         failed_forward_penalty: float = 0.0,
++        blocking_agent_penalty: float = 0.0,
++        deadlock_penalty: float = 0.0,
++        deadlock_penalty_after: int = 5,
+         forward_movement_reward: float = 0.0,
+         stationary_action_penalty: float = 0.0,
+         turn_action_penalty: float = 0.0,
+@@ -120,6 +124,10 @@ class MultiTeamWarehouse(Warehouse):
+         communication_range: Optional[int] = None,
+         team_edge_threshold: float = 0.5,
+         use_physical_comm_range: bool = True,
++        communication_enabled: bool = True,
++        communication_topology: str = "physical",
++        communication_fov_degrees: float = 120.0,
++        directional_observation: bool = False,
+     ):
+         if n_teams < 1:
+             raise ValueError("n_teams must be positive")
+@@ -188,6 +196,9 @@ class MultiTeamWarehouse(Warehouse):
+         self.wrong_team_penalty = float(wrong_team_penalty)
+         self.step_penalty = float(step_penalty)
+         self.failed_forward_penalty = float(failed_forward_penalty)
++        self.blocking_agent_penalty = float(blocking_agent_penalty)
++        self.deadlock_penalty = float(deadlock_penalty)
++        self.deadlock_penalty_after = int(deadlock_penalty_after)
+         self.forward_movement_reward = float(forward_movement_reward)
+         self.stationary_action_penalty = float(stationary_action_penalty)
+         self.turn_action_penalty = float(turn_action_penalty)
+@@ -220,6 +231,8 @@ class MultiTeamWarehouse(Warehouse):
+             "shelf_return_reward",
+             "wrong_shelf_return_penalty",
+             "premature_drop_penalty",
++            "blocking_agent_penalty",
++            "deadlock_penalty",
+             "forward_movement_reward",
+             "stationary_action_penalty",
+             "turn_action_penalty",
+@@ -235,6 +248,8 @@ class MultiTeamWarehouse(Warehouse):
+                 raise ValueError(f"{name} must be non-negative")
+         if self.stationary_streak_penalty_after < 0:
+             raise ValueError("stationary_streak_penalty_after must be non-negative")
++        if self.deadlock_penalty_after < 0:
++            raise ValueError("deadlock_penalty_after must be non-negative")
+         self.reveal_team_info = reveal_team_info
+ 
+         self.shelf_team_ids: Dict[int, int] = {}
+@@ -249,7 +264,19 @@ class MultiTeamWarehouse(Warehouse):
+         self._last_wrong_return_events = []
+         self._last_pickup_events = []
+         self._last_invalid_toggle_events = []
++        self._last_failed_forward_events = []
++        self._last_blocking_agent_events = []
++        self._last_deadlock_events = []
+         self._last_reward_shaping = np.zeros(self.n_agents, dtype=np.float32)
++        self._last_requested_actions = np.full(
++            self.n_agents,
++            int(Action.NOOP.value),
++            dtype=np.int32,
++        )
++        self._consecutive_failed_forward_steps = np.zeros(
++            self.n_agents,
++            dtype=np.int32,
++        )
+         self._picked_request_shelf_ids_by_agent: List[Set[int]] = [
+             set() for _ in range(self.n_agents)
+         ]
+@@ -280,6 +307,18 @@ class MultiTeamWarehouse(Warehouse):
+         # This is for training-time selective sharing or debugging. It is not
+         # included in the agents' observations.
+         self.communication_range = int(sensor_range if communication_range is None else communication_range)
++        if communication_topology not in {"physical", "fov", "complete", "none"}:
++            raise ValueError("unknown communication_topology")
++        if not 0 < communication_fov_degrees <= 360 or self.communication_range < 0:
++            raise ValueError("FoV must be in (0, 360] and communication range nonnegative")
++        self.communication_enabled = bool(communication_enabled)
++        self.communication_topology = communication_topology
++        self.communication_fov_degrees = float(communication_fov_degrees)
++        self.directional_observation = bool(directional_observation)
++        self._training_comm_weights = None
++        self.training_comm_directed = False
++        self.contact_tracker = TemporalConnectivity(self.n_agents)
++        self.effective_contact_tracker = TemporalConnectivity(self.n_agents)
+         self.team_edge_threshold = float(team_edge_threshold)
+         self.use_physical_comm_range = bool(use_physical_comm_range)
+         self.inferred_team_ids = -np.ones(self.n_agents, dtype=np.int32)
+@@ -318,6 +357,24 @@ class MultiTeamWarehouse(Warehouse):
+         self.shelf_team_ids = {}
+         self.shelfs_by_team = [[] for _ in range(self.n_teams)]
+ 
++        if self.shelf_team_mode == "balanced_soft_zones":
++            if self.n_teams != 2:
++                raise ValueError("balanced_soft_zones requires two teams")
++            zones = [[shelf for shelf in self.shelfs
++                      if self._home_zone_id(shelf.x, shelf.y) == team]
++                     for team in range(2)]
++            if len(zones[0]) != len(zones[1]):
++                raise ValueError("balanced_soft_zones requires equal-sized shelf zones")
++            swap_count = int(round(len(zones[0]) * (1.0 - self.shelf_soft_zone_ratio)))
++            for team, shelves in enumerate(zones):
++                order = self.np_random.permutation(len(shelves))
++                swapped = set(order[:swap_count].tolist())
++                for idx, shelf in enumerate(shelves):
++                    owner = 1 - team if idx in swapped else team
++                    self.shelf_team_ids[shelf.id] = owner
++                    self.shelfs_by_team[owner].append(shelf)
++            return
++
+         if self.shelf_team_mode == "round_robin":
+             ordered_shelfs = sorted(self.shelfs, key=lambda shelf: (shelf.x, shelf.y, shelf.id))
+             for idx, shelf in enumerate(ordered_shelfs):
+@@ -628,7 +685,7 @@ class MultiTeamWarehouse(Warehouse):
+         return float(max(int(height) + int(width) - 2, 1))
+ 
+     def _nearest_requested_shelf_distance(self, agent) -> Optional[int]:
+-        shelves = self._requested_shelves_for_agent(agent)
++        shelves = self._available_requested_shelves(agent)
+         if not shelves:
+             return None
+         return min(
+@@ -636,6 +693,14 @@ class MultiTeamWarehouse(Warehouse):
+             for shelf in shelves
+         )
+ 
++    def _available_requested_shelves(self, agent) -> List[Shelf]:
++        carried_ids = {
++            other.carrying_shelf.id for other in self.agents
++            if other.carrying_shelf is not None
++        }
++        return [shelf for shelf in self._requested_shelves_for_agent(agent)
++                if shelf.id not in carried_ids]
++
+     def _goals_for_shelf_team(self, team_id: int) -> List[Tuple[int, int]]:
+         if self.require_matching_team_goal and 0 <= team_id < len(self.goals_by_team):
+             return list(self.goals_by_team[team_id])
+@@ -808,6 +873,8 @@ class MultiTeamWarehouse(Warehouse):
+ 
+     def set_training_comm_edges(self, edges):
+         """Manually set communication edges for debugging or visualization."""
++        if not self.communication_enabled:
++            return self.set_training_comm_weights(np.zeros((self.n_agents, self.n_agents)))
+         self.training_comm_adj = np.zeros((self.n_agents, self.n_agents), dtype=np.float32)
+         self.training_comm_edges = []
+         for i, j in edges:
+@@ -823,6 +890,37 @@ class MultiTeamWarehouse(Warehouse):
+                 self.training_comm_edges.append(edge)
+         return self.training_comm_adj.copy()
+ 
++    def cell_in_fov(self, agent, x, y, radius=None):
++        return in_sector(agent, x, y, self.sensor_range if radius is None else radius,
++                         self.communication_fov_degrees)
++
++    def get_neighbor_adjacency(self):
++        """Available links [receiver, sender]. No team labels are consulted."""
++        adj = np.zeros((self.n_agents, self.n_agents), dtype=np.float32)
++        if not self.communication_enabled or self.communication_topology == "none":
++            return adj
++        for i, receiver in enumerate(self.agents):
++            for j, sender in enumerate(self.agents):
++                if i == j:
++                    continue
++                if self.communication_topology == "complete":
++                    visible = True
++                elif self.communication_topology == "fov":
++                    visible = self.cell_in_fov(receiver, sender.x, sender.y, self.communication_range)
++                else:
++                    visible = self._agents_within_comm_range(i, j)
++                adj[i, j] = float(visible)
++        return adj
++
++    def set_training_comm_weights(self, weights):
++        weights = np.asarray(weights, dtype=np.float32)
++        if weights.shape != (self.n_agents, self.n_agents) or not np.isfinite(weights).all() or np.any(weights < 0):
++            raise ValueError("communication weights must be finite nonnegative NxN")
++        self._training_comm_weights = weights.copy()
++        np.fill_diagonal(self._training_comm_weights, 0)
++        self.training_comm_directed = True
++        return self.update_training_comm_graph()
++
+     def _agents_within_comm_range(self, i: int, j: int) -> bool:
+         ai = self.agents[int(i)]
+         aj = self.agents[int(j)]
+@@ -840,6 +938,14 @@ class MultiTeamWarehouse(Warehouse):
+         3. both predictions exceed the confidence threshold,
+         4. optionally, the agents are within communication_range.
+         """
++        if self._training_comm_weights is not None or not self.communication_enabled:
++            weights = self._training_comm_weights
++            if weights is None:
++                weights = np.zeros((self.n_agents, self.n_agents), dtype=np.float32)
++            self.training_comm_adj = weights * self.get_neighbor_adjacency()
++            # Public edge tuples are (sender, receiver), matching arrow direction.
++            self.training_comm_edges = [(int(j), int(i)) for i, j in zip(*np.nonzero(self.training_comm_adj))]
++            return self.training_comm_adj.copy()
+         self.training_comm_adj = np.zeros((self.n_agents, self.n_agents), dtype=np.float32)
+         self.training_comm_edges = []
+ 
+@@ -866,6 +972,8 @@ class MultiTeamWarehouse(Warehouse):
+ 
+     def reset(self, seed=None, options=None):
+         obs, _ = super().reset(seed=seed, options=options)
++        self.contact_tracker = TemporalConnectivity(self.n_agents)
++        self.effective_contact_tracker = TemporalConnectivity(self.n_agents)
+ 
+         if self.shuffle_team_assignments_on_reset:
+             self.agent_team_ids = self.np_random.permutation(self._base_agent_team_ids)
+@@ -883,7 +991,12 @@ class MultiTeamWarehouse(Warehouse):
+         self._last_wrong_return_events = []
+         self._last_pickup_events = []
+         self._last_invalid_toggle_events = []
++        self._last_failed_forward_events = []
++        self._last_blocking_agent_events = []
++        self._last_deadlock_events = []
+         self._last_reward_shaping[:] = 0.0
++        self._last_requested_actions[:] = int(Action.NOOP.value)
++        self._consecutive_failed_forward_steps[:] = 0
+         self._shelves_awaiting_return.clear()
+         self._shelf_return_team_ids.clear()
+         for picked_shelf_ids in self._picked_request_shelf_ids_by_agent:
+@@ -908,6 +1021,9 @@ class MultiTeamWarehouse(Warehouse):
+             "wrong_returns": len(self._last_wrong_return_events),
+             "pickups": len(self._last_pickup_events),
+             "invalid_toggles": len(self._last_invalid_toggle_events),
++            "failed_forwards": len(self._last_failed_forward_events),
++            "blocking_agents": len(self._last_blocking_agent_events),
++            "deadlocked_agents": len(self._last_deadlock_events),
+         }
+         if self.reveal_team_info:
+             info.update(
+@@ -921,6 +1037,9 @@ class MultiTeamWarehouse(Warehouse):
+                     "wrong_return_events": list(self._last_wrong_return_events),
+                     "pickup_events": list(self._last_pickup_events),
+                     "invalid_toggle_events": list(self._last_invalid_toggle_events),
++                    "failed_forward_events": list(self._last_failed_forward_events),
++                    "blocking_agent_events": list(self._last_blocking_agent_events),
++                    "deadlock_events": list(self._last_deadlock_events),
+                     "shelves_awaiting_return": sorted(self._shelves_awaiting_return),
+                     "shelf_home_positions": dict(self._shelf_home_positions),
+                     "reward_shaping": self._last_reward_shaping.copy(),
+@@ -953,13 +1072,23 @@ class MultiTeamWarehouse(Warehouse):
+         self._last_wrong_return_events = []
+         self._last_pickup_events = []
+         self._last_invalid_toggle_events = []
++        self._last_failed_forward_events = []
++        self._last_blocking_agent_events = []
++        self._last_deadlock_events = []
+ 
++        requested_action_values = []
+         for agent, action in zip(self.agents, actions):
+             if self.msg_bits > 0:
+                 agent.req_action = Action(action[0])
+                 agent.message[:] = action[1:]
+             else:
+                 agent.req_action = Action(action)
++            requested_action_values.append(int(agent.req_action.value))
++        self._last_requested_actions[:] = np.asarray(
++            requested_action_values,
++            dtype=np.int32,
++        )
++
+ 
+         commited_agents = set()
+         movement_graph = nx.DiGraph()
+@@ -1016,7 +1145,16 @@ class MultiTeamWarehouse(Warehouse):
+         progress_shaping_rewards = np.zeros(self.n_agents, dtype=np.float32)
+         requested_actions = [agent.req_action for agent in self.agents]
+         before_positions = [(agent.x, agent.y) for agent in self.agents]
++        before_position_to_agent = {
++            position: agent_id for agent_id, position in enumerate(before_positions)
++        }
+         before_carried_shelves = [agent.carrying_shelf for agent in self.agents]
++        # Freeze candidate positions for this transition. A teammate moving,
++        # picking up, or replacing a request must not reward an idle agent.
++        before_pickup_targets = [
++            [(int(shelf.x), int(shelf.y)) for shelf in self._available_requested_shelves(agent)]
++            for agent in self.agents
++        ]
+         before_requested_shelf_distances = [
+             (
+                 None
+@@ -1038,12 +1176,72 @@ class MultiTeamWarehouse(Warehouse):
+             for agent in self.agents
+         ]
+ 
++        blocking_agent_counts = np.zeros(self.n_agents, dtype=np.float32)
++        failed_agent_indices: Set[int] = set()
++        failed_agent_blocked_by_agent = np.zeros(self.n_agents, dtype=bool)
+         for agent in failed_agents:
+             assert agent.req_action == Action.FORWARD
++            agent_idx = int(agent.id) - 1
++            failed_agent_indices.add(agent_idx)
++            target = tuple(map(int, agent.req_location(self.grid_size)))
++            self._last_failed_forward_events.append(
++                {
++                    "agent_id": int(agent.id),
++                    "position": (int(agent.x), int(agent.y)),
++                    "target": target,
++                }
++            )
++            blocker_id = before_position_to_agent.get(target)
++            if blocker_id is not None and blocker_id != agent.id - 1:
++                blocker = self.agents[blocker_id]
++                blocker_is_moving = (
++                    blocker in commited_agents
++                    and blocker.req_action == Action.FORWARD
++                )
++                if not blocker_is_moving:
++                    blocking_agent_counts[blocker_id] += 1.0
++                    failed_agent_blocked_by_agent[agent_idx] = True
++                    self._last_blocking_agent_events.append(
++                        {
++                            "agent_id": int(blocker.id),
++                            "position": target,
++                            "blocked_agent_id": int(agent.id),
++                        }
++                    )
+             agent.req_action = Action.NOOP
+             if self.failed_forward_penalty:
+                 rewards[agent.id - 1] -= self.failed_forward_penalty
+ 
++        for agent_idx in range(self.n_agents):
++            if agent_idx in failed_agent_indices:
++                self._consecutive_failed_forward_steps[agent_idx] += 1
++            else:
++                self._consecutive_failed_forward_steps[agent_idx] = 0
++
++        if self.blocking_agent_penalty:
++            shaping_rewards -= self.blocking_agent_penalty * blocking_agent_counts
++        if self.deadlock_penalty:
++            for agent_idx in sorted(failed_agent_indices):
++                if not failed_agent_blocked_by_agent[agent_idx]:
++                    continue
++                blocked_steps = int(self._consecutive_failed_forward_steps[agent_idx])
++                if blocked_steps <= self.deadlock_penalty_after:
++                    continue
++                shaping_rewards[agent_idx] -= self.deadlock_penalty
++                event = self._last_failed_forward_events[-1]
++                for candidate in self._last_failed_forward_events:
++                    if int(candidate["agent_id"]) == agent_idx + 1:
++                        event = candidate
++                        break
++                self._last_deadlock_events.append(
++                    {
++                        "agent_id": int(agent_idx + 1),
++                        "blocked_steps": blocked_steps,
++                        "position": event["position"],
++                        "target": event["target"],
++                    }
++                )
++
+         for agent in self.agents:
+             agent.prev_x, agent.prev_y = agent.x, agent.y
+ 
+@@ -1151,7 +1349,11 @@ class MultiTeamWarehouse(Warehouse):
+         for agent_id, agent in enumerate(self.agents):
+             carried_before = before_carried_shelves[agent_id]
+             if carried_before is None and agent.carrying_shelf is None:
+-                after_distance = self._nearest_requested_shelf_distance(agent)
++                targets = before_pickup_targets[agent_id]
++                after_distance = min(
++                    (self._distance(agent.x, agent.y, target) for target in targets),
++                    default=None,
++                )
+                 if self.reward_only_new_best_progress:
+                     progress_reward = self._new_best_progress_reward(
+                         self._best_requested_shelf_distances,
+@@ -1165,6 +1367,8 @@ class MultiTeamWarehouse(Warehouse):
+                         after_distance,
+                         self.requested_shelf_progress_reward,
+                     )
++                if before_positions[agent_id] == (agent.x, agent.y):
++                    progress_reward = 0.0
+                 shaping_rewards[agent_id] += progress_reward
+                 progress_shaping_rewards[agent_id] += progress_reward
+             elif carried_before is not None and agent.carrying_shelf is carried_before:
+@@ -1351,16 +1555,21 @@ class MultiTeamWarehouse(Warehouse):
+             self._cur_inactive_steps += 1
+         self._cur_steps += 1
+ 
+-        if (
++        done = bool(
+             self.max_inactivity_steps
+             and self._cur_inactive_steps >= self.max_inactivity_steps
+-        ) or (self.max_steps and self._cur_steps >= self.max_steps):
+-            done = True
+-        else:
+-            done = False
+-        truncated = False
++        )
++        truncated = bool(self.max_steps and self._cur_steps >= self.max_steps and not done)
+ 
+         new_obs = tuple([self._make_obs(agent) for agent in self.agents])
+         self.update_training_comm_graph()
+         info = self._get_info()
++        self.contact_tracker.update(self.get_neighbor_adjacency())
++        self.effective_contact_tracker.update(self.training_comm_adj)
++        info["communication_metrics"] = self.communication_metrics()
+         return new_obs, list(rewards), done, truncated, info
++
++    def communication_metrics(self):
++        return {f"{prefix}/{key}": value
++                for prefix, tracker in (("available", self.contact_tracker), ("eligible", self.effective_contact_tracker))
++                for key, value in tracker.metrics().items()}
+diff --git a/rware/rendering.py b/rware/rendering.py
+index a1f8b5e..2bfbec4 100644
+--- a/rware/rendering.py
++++ b/rware/rendering.py
+@@ -105,7 +105,7 @@ class Viewer(object):
+         self.width = self.map_width + self.side_panel_width
+         self.height = self.map_height
+         self.window = pyglet.window.Window(
+-            width=self.width, height=self.height, display=display, resizable=True
++            width=self.width, height=self.height, display=display, resizable=True, visible=False
+         )
+         self.window.on_close = self.window_closed_by_user
+         self.isopen = True
+@@ -141,22 +141,19 @@ class Viewer(object):
+         else:
+             n_agents = len(env.agents)
+             r = int(env.sensor_range)
+-            view_size = 2 * r + 1
+-            block_h = view_size * self.mini_grid_size
++            metrics = self._side_panel_layout_metrics(r)
+ 
+-            title_h = 24
+-            label_h = 14
+-            row_gap = 36
+-            agent_block_h = label_h + block_h + row_gap
+-
+-            available_h = max(1, self.map_height - 2 * self.side_panel_padding - title_h)
+-            rows_per_col = max(1, int(available_h // agent_block_h))
++            available_h = max(
++                1,
++                self.map_height
++                - 2 * self.side_panel_padding
++                - metrics["title_h"],
++            )
++            rows_per_col = max(1, int(available_h // metrics["agent_block_h"]))
+             n_panel_cols = max(1, int(math.ceil(n_agents / rows_per_col)))
+-
+-            block_w = view_size * self.mini_grid_size
+-            panel_col_width = max(125, block_w + 45)
+             required_side_panel_width = (
+-                2 * self.side_panel_padding + n_panel_cols * panel_col_width
++                2 * self.side_panel_padding
++                + n_panel_cols * metrics["panel_col_width"]
+             )
+ 
+             # Keep the map height fixed; expand only horizontally.
+@@ -169,6 +166,8 @@ class Viewer(object):
+             self.height = required_height
+ 
+     def render(self, env, return_rgb_array=False):
++        if not return_rgb_array and not self.window.visible:
++            self.window.set_visible(True)
+         self._ensure_window_size_for_side_panel(env)
+ 
+         glClearColor(*_BACKGROUND_COLOR, 0)
+@@ -217,6 +216,55 @@ class Viewer(object):
+             for c in color
+         )
+ 
++    def _side_panel_layout_metrics(self, r):
++        view_size = 2 * int(r) + 1
++        cell = self.mini_grid_size
++        block_w = view_size * cell
++        block_h = view_size * cell
++
++        title_h = 24
++        agent_label_h = 14
++        view_label_h = 12
++        view_gap = 8
++        row_gap = 28
++        agent_block_h = (
++            agent_label_h
++            + view_label_h
++            + block_h
++            + view_gap
++            + view_label_h
++            + block_h
++            + row_gap
++        )
++
++        return {
++            "view_size": view_size,
++            "cell": cell,
++            "block_w": block_w,
++            "block_h": block_h,
++            "title_h": title_h,
++            "agent_label_h": agent_label_h,
++            "view_label_h": view_label_h,
++            "view_gap": view_gap,
++            "row_gap": row_gap,
++            "agent_block_h": agent_block_h,
++            "panel_col_width": max(125, block_w + 45),
++        }
++
++    def _rotated_local_indices(self, dx, dy, r, direction):
++        """Map local offsets to display row/col using the CNN observation rotation."""
++        row = dy + r
++        col = dx + r
++        view_size = 2 * r + 1
++
++        if direction == Direction.DOWN:
++            return view_size - 1 - row, view_size - 1 - col
++        if direction == Direction.LEFT:
++            return col, view_size - 1 - row
++        if direction == Direction.RIGHT:
++            return view_size - 1 - col, row
++        return row, col
++
+     def _cell_center(self, x, y):
+         """Return screen-space center of a warehouse cell."""
+         render_y = self.rows - int(y) - 1
+@@ -259,6 +307,13 @@ class Viewer(object):
+             y0 = max(0, int(agent.y) - r)
+             y1 = min(self.rows - 1, int(agent.y) + r)
+ 
++            if getattr(env, "directional_observation", False):
++                for wy in range(y0, y1 + 1):
++                    for wx in range(x0, x1 + 1):
++                        if env.cell_in_fov(agent, wx, wy):
++                            cx, cy = self._cell_center(wx, wy)
++                            self._add_rect_outline(batch, cx-14, cy-14, cx+14, cy+14, color)
++                continue
+             # Convert environment y-range to pyglet y-range.
+             render_y_bottom = self.rows - y1 - 1
+             render_y_top = self.rows - y0 - 1
+@@ -275,6 +330,11 @@ class Viewer(object):
+     def _draw_training_comm_edges(self, env):
+         """Draw dynamic communication/network edges between agents on the main map."""
+         edges = getattr(env, "training_comm_edges", [])
++        eligible = set(edges)
++        if getattr(env, "training_comm_directed", False) and getattr(env, "communication_enabled", True):
++            available = env.get_neighbor_adjacency()
++            edges = [(int(j), int(i)) for i, j in zip(*np.nonzero(available))
++                     if (int(j), int(i)) not in eligible] + list(edges)
+         if not edges:
+             return
+ 
+@@ -287,8 +347,20 @@ class Viewer(object):
+             x1, y1 = self._cell_center(ai.x, ai.y)
+             x2, y2 = self._cell_center(aj.x, aj.y)
+ 
+-            # Black edge with a simple line. Agents are drawn after this, so circles stay visible.
+-            color = (20, 20, 20)
++            color = (0, 110, 90) if (i, j) in eligible else (165, 165, 165)
++            if getattr(env, "training_comm_directed", False):
++                dx, dy = x2 - x1, y2 - y1
++                length = math.hypot(dx, dy)
++                if length <= 0:
++                    continue
++                ux, uy = dx / length, dy / length
++                shift = 3.0
++                x1, y1 = x1 + ux*11 - uy*shift, y1 + uy*11 + ux*shift
++                x2, y2 = x2 - ux*12 - uy*shift, y2 - uy*12 + ux*shift
++                batch.add(3, gl.GL_TRIANGLES, None,
++                          ("v2f", (x2, y2, x2-ux*8-uy*4, y2-uy*8+ux*4,
++                                   x2-ux*8+uy*4, y2-uy*8-ux*4)),
++                          ("c3B", (*color, *color, *color)))
+             batch.add(
+                 2,
+                 gl.GL_LINES,
+@@ -296,7 +368,9 @@ class Viewer(object):
+                 ("v2f", (x1, y1, x2, y2)),
+                 ("c3B", (*color, *color)),
+             )
++        gl.glLineWidth(2.0)
+         batch.draw()
++        gl.glLineWidth(1.0)
+ 
+     def _draw_side_panel(self, env):
+         """Draw a right-side panel containing each agent's local field of view.
+@@ -316,7 +390,8 @@ class Viewer(object):
+         batch.draw()
+ 
+         title = pyglet.text.Label(
+-            "Agent local views",
++            ("COMM OFF | independent" if not getattr(env, "communication_enabled", True)
++             else f"{getattr(env, 'communication_topology', 'physical')} | gray: available | green: PGCT eligible ({len(getattr(env, 'training_comm_edges', []))}) | sender -> receiver"),
+             font_name="Calibri",
+             font_size=12,
+             bold=True,
+@@ -332,26 +407,28 @@ class Viewer(object):
+             return
+ 
+         r = int(env.sensor_range)
+-        view_size = 2 * r + 1
+-        cell = self.mini_grid_size
+-        block_w = view_size * cell
+-        block_h = view_size * cell
+-
+-        title_h = 24
+-        label_h = 14
+-        row_gap = 36
+-        agent_block_h = label_h + block_h + row_gap
+-
+-        available_h = max(1, self.map_height - 2 * self.side_panel_padding - title_h)
+-        rows_per_col = max(1, int(available_h // agent_block_h))
+-        panel_col_width = max(125, block_w + 45)
++        metrics = self._side_panel_layout_metrics(r)
++        cell = metrics["cell"]
++        block_h = metrics["block_h"]
++
++        available_h = max(
++            1,
++            self.map_height
++            - 2 * self.side_panel_padding
++            - metrics["title_h"],
++        )
++        rows_per_col = max(1, int(available_h // metrics["agent_block_h"]))
+ 
+         for idx, agent in enumerate(env.agents):
+             col_idx = idx // rows_per_col
+             row_idx = idx % rows_per_col
+ 
+-            col_x0 = panel_x0 + col_idx * panel_col_width
+-            y_cursor = top - title_h - row_idx * agent_block_h
++            col_x0 = panel_x0 + col_idx * metrics["panel_col_width"]
++            y_cursor = (
++                top
++                - metrics["title_h"]
++                - row_idx * metrics["agent_block_h"]
++            )
+ 
+             if hasattr(env, "agent_team_ids"):
+                 team_id = int(env.agent_team_ids[agent.id - 1])
+@@ -380,11 +457,61 @@ class Viewer(object):
+             )
+             label.draw()
+ 
++            world_label_y = y_cursor - metrics["agent_label_h"]
++            world_label = pyglet.text.Label(
++                "world",
++                font_name="Calibri",
++                font_size=8,
++                x=col_x0,
++                y=world_label_y,
++                anchor_x="left",
++                anchor_y="top",
++                color=(*_BLACK, 255),
++            )
++            world_label.draw()
++
+             grid_x0 = col_x0
+-            grid_y0 = y_cursor - label_h - block_h
++            grid_y0 = world_label_y - metrics["view_label_h"] - block_h
+             self._draw_agent_local_view(env, agent, grid_x0, grid_y0, cell, r)
+ 
+-    def _draw_agent_local_view(self, env, center_agent, x0, y0, cell, r):
++            rotated_label_y = grid_y0 - metrics["view_gap"]
++            rotated_label = pyglet.text.Label(
++                "agent/CNN",
++                font_name="Calibri",
++                font_size=8,
++                x=col_x0,
++                y=rotated_label_y,
++                anchor_x="left",
++                anchor_y="top",
++                color=(*_BLACK, 255),
++            )
++            rotated_label.draw()
++
++            rotated_grid_y0 = (
++                rotated_label_y
++                - metrics["view_label_h"]
++                - block_h
++            )
++            self._draw_agent_local_view(
++                env,
++                agent,
++                grid_x0,
++                rotated_grid_y0,
++                cell,
++                r,
++                rotate_to_agent=True,
++            )
++
++    def _draw_agent_local_view(
++        self,
++        env,
++        center_agent,
++        x0,
++        y0,
++        cell,
++        r,
++        rotate_to_agent=False,
++    ):
+         """Draw one agent-centered local observation panel."""
+         view_size = 2 * r + 1
+         batch = pyglet.graphics.Batch()
+@@ -399,14 +526,23 @@ class Viewer(object):
+             for dx in range(-r, r + 1):
+                 wx = int(center_agent.x) + dx
+                 wy = int(center_agent.y) + dy
+-                lx = dx + r
+-                ly = dy + r
+-                # In the mini panel, top row corresponds to smaller environment y.
+-                px0 = x0 + lx * cell
+-                py0 = y0 + (view_size - 1 - ly) * cell
++                if rotate_to_agent:
++                    display_row, display_col = self._rotated_local_indices(
++                        dx, dy, r, center_agent.dir
++                    )
++                else:
++                    display_row = dy + r
++                    display_col = dx + r
++                # World view is north-up; rotated view puts the agent's front at the top.
++                px0 = x0 + display_col * cell
++                py0 = y0 + (view_size - 1 - display_row) * cell
+                 px1 = px0 + cell
+                 py1 = py0 + cell
+ 
++                if getattr(env, "directional_observation", False) and not env.cell_in_fov(center_agent, wx, wy):
++                    self._add_filled_rect(batch, px0, py0, px1, py1, (65, 65, 65))
++                    continue
++
+                 if wx < 0 or wx >= self.cols or wy < 0 or wy >= self.rows:
+                     fill = (210, 210, 210)
+                 else:
+@@ -439,13 +575,20 @@ class Viewer(object):
+                 wx = int(center_agent.x) + dx
+                 wy = int(center_agent.y) + dy
+                 agent = agent_by_pos.get((wx, wy))
++                if getattr(env, "directional_observation", False) and not env.cell_in_fov(center_agent, wx, wy):
++                    continue
+                 if agent is None:
+                     continue
+ 
+-                lx = dx + r
+-                ly = dy + r
+-                cx = x0 + lx * cell + cell / 2
+-                cy = y0 + (view_size - 1 - ly) * cell + cell / 2
++                if rotate_to_agent:
++                    display_row, display_col = self._rotated_local_indices(
++                        dx, dy, r, center_agent.dir
++                    )
++                else:
++                    display_row = dy + r
++                    display_col = dx + r
++                cx = x0 + display_col * cell + cell / 2
++                cy = y0 + (view_size - 1 - display_row) * cell + cell / 2
+                 radius = max(3, cell / 3)
+ 
+                 if hasattr(env, "agent_team_ids"):
+diff --git a/rware/utils/probe_maps.py b/rware/utils/probe_maps.py
+index 3b052c5..b048f09 100644
+--- a/rware/utils/probe_maps.py
++++ b/rware/utils/probe_maps.py
+@@ -202,6 +202,8 @@ class RwareObjectiveProbeMapBuilder:
+         self.probe_env = self._make_probe_env()
+         self.probe_env.reset(seed=0)
+         self.probe_unwrapped = self.probe_env.unwrapped
++        self.probe_unwrapped.directional_observation = getattr(self.unwrapped, "directional_observation", False)
++        self.probe_unwrapped.communication_fov_degrees = getattr(self.unwrapped, "communication_fov_degrees", 120.0)
+         probe_obs_dim = int(self.probe_env.observation_space[0].shape[0])
+         expected_probe_dim = (
+             self.flat_expected_dim if self.semantic_spec is None else self.flat_expected_dim
+@@ -681,12 +683,14 @@ class RwareObjectiveProbeMapBuilder:
+         elif scenario.name == "team_return_approach":
+             x, y, direction = self._view_cell_for_target(own_home, scenario.variant)
+             focal = self._set_focal_agent(x, y, direction, team_id)
+-            self._place_shelf(own_shelf, x, y, team_id, requested=False)
++            self._place_shelf(own_shelf, x, y, team_id, requested=True)
+             focal.carrying_shelf = own_shelf
++            focal.has_delivered = True
+         elif scenario.name == "team_return_at_home":
+             focal = self._set_focal_agent(*own_home, Direction.UP, team_id)
+-            self._place_shelf(own_shelf, *own_home, team_id, requested=False)
++            self._place_shelf(own_shelf, *own_home, team_id, requested=True)
+             focal.carrying_shelf = own_shelf
++            focal.has_delivered = True
+         elif scenario.name == "wrong_team_goal":
+             focal = self._set_focal_agent(*other_goal, Direction.UP, team_id)
+             self._place_shelf(own_shelf, *other_goal, team_id, requested=True)
+diff --git a/rware/utils/semantic_observation.py b/rware/utils/semantic_observation.py
+index 07d0c93..19dfc0b 100644
+--- a/rware/utils/semantic_observation.py
++++ b/rware/utils/semantic_observation.py
+@@ -17,7 +17,7 @@ from typing import Any, List, Sequence, Set, Tuple
+ import gymnasium as gym
+ import numpy as np
+ 
+-from rware.warehouse import Direction, _LAYER_AGENTS, _LAYER_SHELFS
++from rware.warehouse import Action, Direction, _LAYER_AGENTS, _LAYER_SHELFS
+ 
+ 
+ SEMANTIC_EGO_FEATURES: Tuple[str, ...] = (
+@@ -29,6 +29,18 @@ SEMANTIC_EGO_FEATURES: Tuple[str, ...] = (
+     "self_dir_left",
+     "self_dir_right",
+     "self_on_highway",
++    "self_prev_action_noop",
++    "self_prev_action_forward",
++    "self_prev_action_left",
++    "self_prev_action_right",
++    "self_prev_action_toggle_load",
++    "self_blocked_steps",
++    "self_waiting_steps",
++    "self_carrying_requested_shelf",
++    "self_return_phase",
++    "self_shelf_home_known",
++    "self_shelf_home_dx",
++    "self_shelf_home_dy",
+ )
+ 
+ 
+@@ -127,6 +139,7 @@ def _relevant_goal_cells(env: Any, agent: Any) -> Set[Tuple[int, int]]:
+ 
+ def _write_ego_features(env: Any, agent: Any, out: np.ndarray) -> None:
+     height, width = tuple(map(int, getattr(env, "grid_size")))
++    agent_idx = int(getattr(agent, "id", 0)) - 1
+     if bool(getattr(env, "normalised_coordinates", False)):
+         out[0] = float(agent.x) / float(max(width - 1, 1))
+         out[1] = float(agent.y) / float(max(height - 1, 1))
+@@ -137,6 +150,34 @@ def _write_ego_features(env: Any, agent: Any, out: np.ndarray) -> None:
+     out[3 + int(agent.dir.value)] = 1.0
+     out[7] = 1.0 if bool(env._is_highway(int(agent.x), int(agent.y))) else 0.0
+ 
++    prev_action = int(Action.NOOP.value)
++    prev_actions = getattr(env, "_last_requested_actions", None)
++    if prev_actions is not None and 0 <= agent_idx < len(prev_actions):
++        prev_action = int(prev_actions[agent_idx])
++    if 0 <= prev_action <= int(Action.TOGGLE_LOAD.value):
++        out[8 + prev_action] = 1.0
++
++    blocked_steps = getattr(env, "_consecutive_failed_forward_steps", None)
++    if blocked_steps is not None and 0 <= agent_idx < len(blocked_steps):
++        out[13] = min(float(blocked_steps[agent_idx]), 10.0) / 10.0
++
++    waiting_steps = getattr(env, "_stationary_action_streak", None)
++    if waiting_steps is not None and 0 <= agent_idx < len(waiting_steps):
++        out[14] = min(float(waiting_steps[agent_idx]), 10.0) / 10.0
++
++    # Proprioceptive task state: the carried shelf's destination is retained
++    # through the return trip, even when its home is outside the local grid.
++    # No other agent's identity, goal, or remote shelf location is exposed.
++    shelf = getattr(agent, "carrying_shelf", None)
++    if shelf is not None:
++        out[15] = float(int(shelf.id) in _requested_shelf_ids_for_observation(env, agent))
++        out[16] = float(int(shelf.id) in getattr(env, "_shelves_awaiting_return", set()))
++        home = getattr(env, "_shelf_home_positions", {}).get(int(shelf.id))
++        if home is not None:
++            out[17] = 1.0
++            out[18] = float(home[0] - agent.x) / max(width - 1, 1)
++            out[19] = float(home[1] - agent.y) / max(height - 1, 1)
++
+ 
+ def build_semantic_observation(env: Any, agent: Any) -> np.ndarray:
+     """Build one agent's egocentric semantic observation as a flat vector."""
+@@ -159,6 +200,8 @@ def build_semantic_observation(env: Any, agent: Any) -> np.ndarray:
+         wy = int(agent.y) + int(dy)
+         for col, dx in enumerate(range(-sensor_range, sensor_range + 1)):
+             wx = int(agent.x) + int(dx)
++            if getattr(env, "directional_observation", False) and not env.cell_in_fov(agent, wx, wy):
++                continue  # unseen: all channels zero, distinct from known free cells
+             if wx < 0 or wy < 0 or wx >= width or wy >= height:
+                 spatial[0, row, col] = 1.0
+                 continue
+diff --git a/tests/test_multi_team_envs.py b/tests/test_multi_team_envs.py
+index ffed294..7aec301 100644
+--- a/tests/test_multi_team_envs.py
++++ b/tests/test_multi_team_envs.py
+@@ -659,6 +659,73 @@ def test_multiteam_rware_repeated_stationary_actions_are_penalized():
+     assert env._stationary_action_streak[0] == 0
+ 
+ 
++def test_multiteam_rware_stationary_blocker_is_penalized():
++    env = MultiTeamWarehouse(
++        shelf_columns=3,
++        column_height=1,
++        shelf_rows=1,
++        n_agents=2,
++        msg_bits=0,
++        sensor_range=1,
++        request_queue_size=1,
++        request_queue_size_per_team=1,
++        max_inactivity_steps=None,
++        max_steps=20,
++        reward_type=RewardType.INDIVIDUAL,
++        layout=".....\n.x.g.\n.....",
++        n_teams=1,
++        team_assignments=[0, 0],
++        team_reward_mode=TeamRewardMode.INDIVIDUAL,
++        failed_forward_penalty=0.01,
++        blocking_agent_penalty=0.07,
++        deadlock_penalty=0.05,
++        deadlock_penalty_after=1,
++        reveal_team_info=True,
++    )
++    env.reset(seed=17)
++
++    env.agents[0].x = 0
++    env.agents[0].y = 1
++    env.agents[0].dir = Direction.RIGHT
++    env.agents[0].carrying_shelf = None
++    env.agents[1].x = 1
++    env.agents[1].y = 1
++    env.agents[1].dir = Direction.UP
++    env.agents[1].carrying_shelf = None
++    env._recalc_grid()
++    env._reset_progress_baselines()
++
++    _, rewards, _, _, info = env.step([Action.FORWARD, Action.NOOP])
++
++    assert rewards[0] == pytest.approx(-0.01)
++    assert rewards[1] == pytest.approx(-0.07)
++    assert info["failed_forwards"] == 1
++    assert info["blocking_agents"] == 1
++    assert info["deadlocked_agents"] == 0
++    assert info["reward_shaping"][1] == pytest.approx(-0.07)
++    assert info["blocking_agent_events"] == [
++        {"agent_id": 2, "position": (1, 1), "blocked_agent_id": 1}
++    ]
++
++    _, rewards, _, _, info = env.step([Action.FORWARD, Action.NOOP])
++
++    assert rewards[0] == pytest.approx(-0.06)
++    assert rewards[1] == pytest.approx(-0.07)
++    assert info["failed_forwards"] == 1
++    assert info["blocking_agents"] == 1
++    assert info["deadlocked_agents"] == 1
++    assert info["reward_shaping"][0] == pytest.approx(-0.05)
++    assert info["reward_shaping"][1] == pytest.approx(-0.07)
++    assert info["deadlock_events"] == [
++        {
++            "agent_id": 1,
++            "blocked_steps": 2,
++            "position": (0, 1),
++            "target": (1, 1),
++        }
++    ]
++
++
+ def test_multiteam_rware_new_cell_reward_is_not_repeatable_loop_reward():
+     env = MultiTeamWarehouse(
+         shelf_columns=3,
+diff --git a/tests/test_policy_probe_consensus.py b/tests/test_policy_probe_consensus.py
+index de08a7a..68381fc 100644
+--- a/tests/test_policy_probe_consensus.py
++++ b/tests/test_policy_probe_consensus.py
+@@ -172,6 +172,35 @@ def test_pgct_distance_gate_and_receiver_allocation():
+     assert allocation[2].sum() == pytest.approx(0.0)
+ 
+ 
++def test_pgct_rejects_uninformative_uniform_policies():
++    agents = [
++        RecurrentActorCritic(obs_dim=3, action_dim=5, mlp_hidden_dim=8, recurrent_hidden_dim=8),
++        RecurrentActorCritic(obs_dim=3, action_dim=5, mlp_hidden_dim=8, recurrent_hidden_dim=8),
++    ]
++    probes = torch.randn(24, 1, 3)
++    distance, _, information = policy_distance_similarity_matrices(
++        agents, probes, torch.device("cpu"), 0.25, return_information=True
++    )
++    assert np.max(information) < 0.02
++    estimator = TeamGraphEstimator(2, 0.05, 1, 0.0, 0.95, min_policy_information=0.02)
++    estimator.update_policy_information(information)
++    estimator.update_from_policy_distance(distance, np.ones((2, 2)) - np.eye(2), 1.0)
++    assert not estimator.pgct_gate_matrix(True, 0.12, 0.25, 1.0).any()
++
++
++def test_pgct_information_gate_opens_only_after_both_policies_are_informative():
++    estimator = TeamGraphEstimator(2, 0.05, 2, 0.0, 0.95, min_policy_information=0.02)
++    adjacency = np.ones((2, 2), dtype=np.float32) - np.eye(2, dtype=np.float32)
++    distance = np.zeros((2, 2), dtype=np.float32)
++    for _ in range(2):
++        estimator.update_from_policy_distance(distance, adjacency, 1.0)
++    estimator.update_policy_information(np.array([0.03, 0.0]))
++    assert not estimator.pgct_gate_matrix(True, 0.12, 0.25, 1.0).any()
++    estimator.update_policy_information(np.array([0.03, 0.04]))
++    gate = estimator.pgct_gate_matrix(True, 0.12, 0.25, 1.0)
++    assert gate[0, 1] > 0 and gate[1, 0] > 0
++
++
+ def test_oracle_pairwise_probe_metrics_report_same_cross_gap_and_pairs():
+     distance = np.asarray(
+         [
+diff --git a/tests/test_semantic_observation.py b/tests/test_semantic_observation.py
+index f8cfa76..2c2f4b1 100644
+--- a/tests/test_semantic_observation.py
++++ b/tests/test_semantic_observation.py
+@@ -3,6 +3,7 @@ from pathlib import Path
+ 
+ import gymnasium as gym
+ import numpy as np
++import pytest
+ import torch
+ 
+ ROOT = Path(__file__).resolve().parents[1]
+@@ -16,7 +17,8 @@ from rware.utils.semantic_observation import (
+     build_semantic_observation,
+     get_semantic_observation_spec,
+ )
+-from rware.warehouse import Direction
++from rware.multi_team_warehouse import MultiTeamWarehouse, TeamRewardMode
++from rware.warehouse import Action, Direction, RewardType
+ 
+ 
+ def _cell_value(obs, spec, channel, sensor_range, dy, dx):
+@@ -106,3 +108,55 @@ def test_semantic_wrapper_and_cnn_actor_critic_forward():
+     finally:
+         env.close()
+ 
++
++def test_semantic_observation_tracks_action_and_blocked_history():
++    env = RwareSemanticObservationWrapper(
++        MultiTeamWarehouse(
++            shelf_columns=3,
++            column_height=1,
++            shelf_rows=1,
++            n_agents=2,
++            msg_bits=0,
++            sensor_range=1,
++            request_queue_size=1,
++            request_queue_size_per_team=1,
++            max_inactivity_steps=None,
++            max_steps=20,
++            reward_type=RewardType.INDIVIDUAL,
++            layout=".....\n.x.g.\n.....",
++            n_teams=1,
++            team_assignments=[0, 0],
++            team_reward_mode=TeamRewardMode.INDIVIDUAL,
++            reveal_team_info=True,
++        )
++    )
++    try:
++        obs, _ = env.reset(seed=17)
++        spec = get_semantic_observation_spec(env)
++        feature_index = {
++            name: idx for idx, name in enumerate(spec.ego_features)
++        }
++        assert obs[0][feature_index["self_prev_action_noop"]] == 1.0
++
++        unwrapped = env.unwrapped
++        unwrapped.agents[0].x = 0
++        unwrapped.agents[0].y = 1
++        unwrapped.agents[0].dir = Direction.RIGHT
++        unwrapped.agents[0].carrying_shelf = None
++        unwrapped.agents[1].x = 1
++        unwrapped.agents[1].y = 1
++        unwrapped.agents[1].dir = Direction.UP
++        unwrapped.agents[1].carrying_shelf = None
++        unwrapped._recalc_grid()
++        unwrapped._reset_progress_baselines()
++
++        obs, _, _, _, info = env.step([Action.FORWARD, Action.NOOP])
++
++        assert info["failed_forwards"] == 1
++        assert obs[0][feature_index["self_prev_action_forward"]] == 1.0
++        assert obs[0][feature_index["self_blocked_steps"]] == pytest.approx(0.1)
++        assert obs[1][feature_index["self_prev_action_noop"]] == 1.0
++        assert obs[1][feature_index["self_waiting_steps"]] == pytest.approx(0.1)
++    finally:
++        env.close()
++

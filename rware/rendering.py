@@ -105,7 +105,7 @@ class Viewer(object):
         self.width = self.map_width + self.side_panel_width
         self.height = self.map_height
         self.window = pyglet.window.Window(
-            width=self.width, height=self.height, display=display, resizable=True
+            width=self.width, height=self.height, display=display, resizable=True, visible=False
         )
         self.window.on_close = self.window_closed_by_user
         self.isopen = True
@@ -141,22 +141,19 @@ class Viewer(object):
         else:
             n_agents = len(env.agents)
             r = int(env.sensor_range)
-            view_size = 2 * r + 1
-            block_h = view_size * self.mini_grid_size
+            metrics = self._side_panel_layout_metrics(r)
 
-            title_h = 24
-            label_h = 14
-            row_gap = 36
-            agent_block_h = label_h + block_h + row_gap
-
-            available_h = max(1, self.map_height - 2 * self.side_panel_padding - title_h)
-            rows_per_col = max(1, int(available_h // agent_block_h))
+            available_h = max(
+                1,
+                self.map_height
+                - 2 * self.side_panel_padding
+                - metrics["title_h"],
+            )
+            rows_per_col = max(1, int(available_h // metrics["agent_block_h"]))
             n_panel_cols = max(1, int(math.ceil(n_agents / rows_per_col)))
-
-            block_w = view_size * self.mini_grid_size
-            panel_col_width = max(125, block_w + 45)
             required_side_panel_width = (
-                2 * self.side_panel_padding + n_panel_cols * panel_col_width
+                2 * self.side_panel_padding
+                + n_panel_cols * metrics["panel_col_width"]
             )
 
             # Keep the map height fixed; expand only horizontally.
@@ -169,6 +166,8 @@ class Viewer(object):
             self.height = required_height
 
     def render(self, env, return_rgb_array=False):
+        if not return_rgb_array and not self.window.visible:
+            self.window.set_visible(True)
         self._ensure_window_size_for_side_panel(env)
 
         glClearColor(*_BACKGROUND_COLOR, 0)
@@ -216,6 +215,60 @@ class Viewer(object):
             int(c * (1.0 - alpha))
             for c in color
         )
+
+    def _side_panel_layout_metrics(self, r):
+        view_size = 2 * int(r) + 1
+        title_h = 24
+        agent_label_h = 14
+        view_label_h = 12
+        view_gap = 8
+        row_gap = 28
+        # Fit both local views even when a single agent block would otherwise
+        # exceed the fixed map height (e.g. tiny warehouse, sensor range 5).
+        available_grid_h = (
+            self.map_height - 2 * self.side_panel_padding - title_h
+            - agent_label_h - 2 * view_label_h - view_gap - row_gap
+        )
+        cell = max(1, min(self.mini_grid_size, available_grid_h // (2 * view_size)))
+        block_w = view_size * cell
+        block_h = view_size * cell
+        agent_block_h = (
+            agent_label_h
+            + view_label_h
+            + block_h
+            + view_gap
+            + view_label_h
+            + block_h
+            + row_gap
+        )
+
+        return {
+            "view_size": view_size,
+            "cell": cell,
+            "block_w": block_w,
+            "block_h": block_h,
+            "title_h": title_h,
+            "agent_label_h": agent_label_h,
+            "view_label_h": view_label_h,
+            "view_gap": view_gap,
+            "row_gap": row_gap,
+            "agent_block_h": agent_block_h,
+            "panel_col_width": max(125, block_w + 45),
+        }
+
+    def _rotated_local_indices(self, dx, dy, r, direction):
+        """Map local offsets to display row/col using the CNN observation rotation."""
+        row = dy + r
+        col = dx + r
+        view_size = 2 * r + 1
+
+        if direction == Direction.DOWN:
+            return view_size - 1 - row, view_size - 1 - col
+        if direction == Direction.LEFT:
+            return col, view_size - 1 - row
+        if direction == Direction.RIGHT:
+            return view_size - 1 - col, row
+        return row, col
 
     def _cell_center(self, x, y):
         """Return screen-space center of a warehouse cell."""
@@ -275,6 +328,7 @@ class Viewer(object):
     def _draw_training_comm_edges(self, env):
         """Draw dynamic communication/network edges between agents on the main map."""
         edges = getattr(env, "training_comm_edges", [])
+        eligible = set(edges)
         if not edges:
             return
 
@@ -287,8 +341,20 @@ class Viewer(object):
             x1, y1 = self._cell_center(ai.x, ai.y)
             x2, y2 = self._cell_center(aj.x, aj.y)
 
-            # Black edge with a simple line. Agents are drawn after this, so circles stay visible.
-            color = (20, 20, 20)
+            color = (0, 110, 90) if (i, j) in eligible else (165, 165, 165)
+            if getattr(env, "training_comm_directed", False):
+                dx, dy = x2 - x1, y2 - y1
+                length = math.hypot(dx, dy)
+                if length <= 0:
+                    continue
+                ux, uy = dx / length, dy / length
+                shift = 3.0
+                x1, y1 = x1 + ux*11 - uy*shift, y1 + uy*11 + ux*shift
+                x2, y2 = x2 - ux*12 - uy*shift, y2 - uy*12 + ux*shift
+                batch.add(3, gl.GL_TRIANGLES, None,
+                          ("v2f", (x2, y2, x2-ux*8-uy*4, y2-uy*8+ux*4,
+                                   x2-ux*8+uy*4, y2-uy*8-ux*4)),
+                          ("c3B", (*color, *color, *color)))
             batch.add(
                 2,
                 gl.GL_LINES,
@@ -296,7 +362,9 @@ class Viewer(object):
                 ("v2f", (x1, y1, x2, y2)),
                 ("c3B", (*color, *color)),
             )
+        gl.glLineWidth(2.0)
         batch.draw()
+        gl.glLineWidth(1.0)
 
     def _draw_side_panel(self, env):
         """Draw a right-side panel containing each agent's local field of view.
@@ -316,7 +384,8 @@ class Viewer(object):
         batch.draw()
 
         title = pyglet.text.Label(
-            "Agent local views",
+            ("COMM OFF | independent" if not getattr(env, "communication_enabled", True)
+             else f"PGCT accepted links: {len(getattr(env, 'training_comm_edges', []))} | {getattr(env, 'communication_topology', 'physical')}"),
             font_name="Calibri",
             font_size=12,
             bold=True,
@@ -332,26 +401,28 @@ class Viewer(object):
             return
 
         r = int(env.sensor_range)
-        view_size = 2 * r + 1
-        cell = self.mini_grid_size
-        block_w = view_size * cell
-        block_h = view_size * cell
+        metrics = self._side_panel_layout_metrics(r)
+        cell = metrics["cell"]
+        block_h = metrics["block_h"]
 
-        title_h = 24
-        label_h = 14
-        row_gap = 36
-        agent_block_h = label_h + block_h + row_gap
-
-        available_h = max(1, self.map_height - 2 * self.side_panel_padding - title_h)
-        rows_per_col = max(1, int(available_h // agent_block_h))
-        panel_col_width = max(125, block_w + 45)
+        available_h = max(
+            1,
+            self.map_height
+            - 2 * self.side_panel_padding
+            - metrics["title_h"],
+        )
+        rows_per_col = max(1, int(available_h // metrics["agent_block_h"]))
 
         for idx, agent in enumerate(env.agents):
             col_idx = idx // rows_per_col
             row_idx = idx % rows_per_col
 
-            col_x0 = panel_x0 + col_idx * panel_col_width
-            y_cursor = top - title_h - row_idx * agent_block_h
+            col_x0 = panel_x0 + col_idx * metrics["panel_col_width"]
+            y_cursor = (
+                top
+                - metrics["title_h"]
+                - row_idx * metrics["agent_block_h"]
+            )
 
             if hasattr(env, "agent_team_ids"):
                 team_id = int(env.agent_team_ids[agent.id - 1])
@@ -380,11 +451,61 @@ class Viewer(object):
             )
             label.draw()
 
+            world_label_y = y_cursor - metrics["agent_label_h"]
+            world_label = pyglet.text.Label(
+                "world",
+                font_name="Calibri",
+                font_size=8,
+                x=col_x0,
+                y=world_label_y,
+                anchor_x="left",
+                anchor_y="top",
+                color=(*_BLACK, 255),
+            )
+            world_label.draw()
+
             grid_x0 = col_x0
-            grid_y0 = y_cursor - label_h - block_h
+            grid_y0 = world_label_y - metrics["view_label_h"] - block_h
             self._draw_agent_local_view(env, agent, grid_x0, grid_y0, cell, r)
 
-    def _draw_agent_local_view(self, env, center_agent, x0, y0, cell, r):
+            rotated_label_y = grid_y0 - metrics["view_gap"]
+            rotated_label = pyglet.text.Label(
+                "agent/CNN",
+                font_name="Calibri",
+                font_size=8,
+                x=col_x0,
+                y=rotated_label_y,
+                anchor_x="left",
+                anchor_y="top",
+                color=(*_BLACK, 255),
+            )
+            rotated_label.draw()
+
+            rotated_grid_y0 = (
+                rotated_label_y
+                - metrics["view_label_h"]
+                - block_h
+            )
+            self._draw_agent_local_view(
+                env,
+                agent,
+                grid_x0,
+                rotated_grid_y0,
+                cell,
+                r,
+                rotate_to_agent=True,
+            )
+
+    def _draw_agent_local_view(
+        self,
+        env,
+        center_agent,
+        x0,
+        y0,
+        cell,
+        r,
+        rotate_to_agent=False,
+    ):
         """Draw one agent-centered local observation panel."""
         view_size = 2 * r + 1
         batch = pyglet.graphics.Batch()
@@ -399,11 +520,16 @@ class Viewer(object):
             for dx in range(-r, r + 1):
                 wx = int(center_agent.x) + dx
                 wy = int(center_agent.y) + dy
-                lx = dx + r
-                ly = dy + r
-                # In the mini panel, top row corresponds to smaller environment y.
-                px0 = x0 + lx * cell
-                py0 = y0 + (view_size - 1 - ly) * cell
+                if rotate_to_agent:
+                    display_row, display_col = self._rotated_local_indices(
+                        dx, dy, r, center_agent.dir
+                    )
+                else:
+                    display_row = dy + r
+                    display_col = dx + r
+                # World view is north-up; rotated view puts the agent's front at the top.
+                px0 = x0 + display_col * cell
+                py0 = y0 + (view_size - 1 - display_row) * cell
                 px1 = px0 + cell
                 py1 = py0 + cell
 
@@ -442,10 +568,15 @@ class Viewer(object):
                 if agent is None:
                     continue
 
-                lx = dx + r
-                ly = dy + r
-                cx = x0 + lx * cell + cell / 2
-                cy = y0 + (view_size - 1 - ly) * cell + cell / 2
+                if rotate_to_agent:
+                    display_row, display_col = self._rotated_local_indices(
+                        dx, dy, r, center_agent.dir
+                    )
+                else:
+                    display_row = dy + r
+                    display_col = dx + r
+                cx = x0 + display_col * cell + cell / 2
+                cy = y0 + (view_size - 1 - display_row) * cell + cell / 2
                 radius = max(3, cell / 3)
 
                 if hasattr(env, "agent_team_ids"):

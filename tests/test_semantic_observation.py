@@ -3,6 +3,7 @@ from pathlib import Path
 
 import gymnasium as gym
 import numpy as np
+import pytest
 import torch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,7 +17,8 @@ from rware.utils.semantic_observation import (
     build_semantic_observation,
     get_semantic_observation_spec,
 )
-from rware.warehouse import Direction
+from rware.multi_team_warehouse import MultiTeamWarehouse, TeamRewardMode
+from rware.warehouse import Action, Direction, RewardType
 
 
 def _cell_value(obs, spec, channel, sensor_range, dy, dx):
@@ -103,6 +105,58 @@ def test_semantic_wrapper_and_cnn_actor_critic_forward():
         assert value.shape == (1,)
         assert next_actor_h.shape == (1, 32)
         assert next_critic_h.shape == (1, 32)
+    finally:
+        env.close()
+
+
+def test_semantic_observation_tracks_action_and_blocked_history():
+    env = RwareSemanticObservationWrapper(
+        MultiTeamWarehouse(
+            shelf_columns=3,
+            column_height=1,
+            shelf_rows=1,
+            n_agents=2,
+            msg_bits=0,
+            sensor_range=1,
+            request_queue_size=1,
+            request_queue_size_per_team=1,
+            max_inactivity_steps=None,
+            max_steps=20,
+            reward_type=RewardType.INDIVIDUAL,
+            layout=".....\n.x.g.\n.....",
+            n_teams=1,
+            team_assignments=[0, 0],
+            team_reward_mode=TeamRewardMode.INDIVIDUAL,
+            reveal_team_info=True,
+        )
+    )
+    try:
+        obs, _ = env.reset(seed=17)
+        spec = get_semantic_observation_spec(env)
+        feature_index = {
+            name: idx for idx, name in enumerate(spec.ego_features)
+        }
+        assert obs[0][feature_index["self_prev_action_noop"]] == 1.0
+
+        unwrapped = env.unwrapped
+        unwrapped.agents[0].x = 0
+        unwrapped.agents[0].y = 1
+        unwrapped.agents[0].dir = Direction.RIGHT
+        unwrapped.agents[0].carrying_shelf = None
+        unwrapped.agents[1].x = 1
+        unwrapped.agents[1].y = 1
+        unwrapped.agents[1].dir = Direction.UP
+        unwrapped.agents[1].carrying_shelf = None
+        unwrapped._recalc_grid()
+        unwrapped._reset_progress_baselines()
+
+        obs, _, _, _, info = env.step([Action.FORWARD, Action.NOOP])
+
+        assert info["failed_forwards"] == 1
+        assert obs[0][feature_index["self_prev_action_forward"]] == 1.0
+        assert obs[0][feature_index["self_blocked_steps"]] == pytest.approx(0.1)
+        assert obs[1][feature_index["self_prev_action_noop"]] == 1.0
+        assert obs[1][feature_index["self_waiting_steps"]] == pytest.approx(0.1)
     finally:
         env.close()
 

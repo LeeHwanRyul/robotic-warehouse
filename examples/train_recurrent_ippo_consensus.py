@@ -30,7 +30,7 @@ from rware.utils.semantic_observation import (
     RwareSemanticObservationWrapper,
     get_semantic_observation_spec,
 )
-from rware.warehouse import Action, Direction, _LAYER_SHELFS
+from rware.warehouse import Action, Direction, _LAYER_AGENTS, _LAYER_SHELFS
 
 
 TensorPair = Tuple[torch.Tensor, torch.Tensor]
@@ -338,6 +338,7 @@ class Rollout:
     actor_h: torch.Tensor
     critic_h: torch.Tensor
     last_values: torch.Tensor
+    timeout_values: Optional[torch.Tensor] = None
 
 
 @dataclass
@@ -356,6 +357,8 @@ class RunnerState:
     episode_invalid_toggles: float = 0.0
     episode_wrong_returns: float = 0.0
     episode_failed_forwards: float = 0.0
+    episode_blocking_agents: float = 0.0
+    episode_deadlocked_agents: float = 0.0
     episode_requested_shelf_seen: bool = False
     episode_first_requested_shelf_seen_step: Optional[int] = None
     episode_first_pickup_step: Optional[int] = None
@@ -426,6 +429,7 @@ class TrainConfig:
     pgct_gate_power: float
     pgct_alpha_epsilon: float
     pgct_warmup_updates: int
+    pgct_min_policy_information: float
     critic_consensus_tau: float
     consensus_interval: int
     save_dir: str
@@ -448,6 +452,10 @@ class TrainConfig:
     wandb_tags: str
     wandb_log_eval_video: bool
     wandb_video_interval: int
+    communication_enabled: bool = True
+    pgct_gate_style: str = "threshold"
+    fixed_canonical_probes: bool = False
+    save_eval_video: bool = False
 
 
 class TeamGraphEstimator:
@@ -468,6 +476,8 @@ class TeamGraphEstimator:
         join_threshold: Optional[float] = None,
         leave_threshold: Optional[float] = None,
         dwell_updates: int = 1,
+        min_policy_information: float = 0.0,
+        gate_style: str = "soft",
     ):
         self.n_agents = int(n_agents)
         self.edge_threshold = float(edge_threshold)
@@ -483,6 +493,8 @@ class TeamGraphEstimator:
         if self.leave_threshold > self.join_threshold:
             raise ValueError("leave_threshold must be <= join_threshold")
         self.dwell_updates = max(int(dwell_updates), 1)
+        self.gate_style = gate_style
+        self.min_policy_information = max(float(min_policy_information), 0.0)
 
         shape = (self.n_agents, self.n_agents)
         self.count = np.zeros(shape, dtype=np.float64)
@@ -496,6 +508,13 @@ class TeamGraphEstimator:
         self.stable_adjacency = np.zeros(shape, dtype=np.float32)
         self.join_streak = np.zeros(shape, dtype=np.int32)
         self.leave_streak = np.zeros(shape, dtype=np.int32)
+        self.policy_information = np.zeros(self.n_agents, dtype=np.float64)
+
+    def update_policy_information(self, values: np.ndarray) -> None:
+        values = np.asarray(values, dtype=np.float64)
+        if values.shape != (self.n_agents,):
+            raise ValueError("policy information must have shape (n_agents,)")
+        self.policy_information = np.maximum(values, 0.0)
 
     def update_pair_score(self, i: int, j: int, score: float) -> None:
         i, j = int(i), int(j)
@@ -526,7 +545,7 @@ class TeamGraphEstimator:
         updates = 0
         for i in range(self.n_agents):
             for j in range(i + 1, self.n_agents):
-                if self.last_neighbor_adjacency[i, j] <= 0.0:
+                if max(self.last_neighbor_adjacency[i, j], self.last_neighbor_adjacency[j, i]) <= 0.0:
                     continue
                 self.update_pair_score(i, j, similarity[i, j])
                 updates += 1
@@ -550,20 +569,18 @@ class TeamGraphEstimator:
         updates = 0
         for i in range(self.n_agents):
             for j in range(i + 1, self.n_agents):
-                if self.last_neighbor_adjacency[i, j] <= 0.0:
-                    continue
-                value = float(max(distance[i, j], 0.0))
-                self.last_distance[i, j] = value
-                self.last_distance[j, i] = value
-                if self.distance_count[i, j] <= 0.0 or np.isnan(self.distance_ema[i, j]):
-                    smoothed = value
-                else:
-                    smoothed = (1.0 - beta) * self.distance_ema[i, j] + beta * value
-                self.distance_ema[i, j] = smoothed
-                self.distance_ema[j, i] = smoothed
-                self.distance_count[i, j] += 1.0
-                self.distance_count[j, i] = self.distance_count[i, j]
-                updates += 1
+                observed = False
+                for receiver, sender in ((i, j), (j, i)):
+                    if self.last_neighbor_adjacency[receiver, sender] <= 0:
+                        continue
+                    observed = True
+                    value = float(max(distance[receiver, sender], 0.0))
+                    self.last_distance[receiver, sender] = value
+                    old = self.distance_ema[receiver, sender]
+                    smoothed = value if np.isnan(old) else (1.0 - beta) * old + beta * value
+                    self.distance_ema[receiver, sender] = smoothed
+                    self.distance_count[receiver, sender] += 1.0
+                updates += int(observed)
         return updates
 
     def update_from_counterfactual(
@@ -718,11 +735,14 @@ class TeamGraphEstimator:
             ~np.isnan(self.distance_ema)
             & (self.distance_count >= float(self.min_probe_count))
             & (self.distance_ema < threshold)
+            & (self.policy_information[:, None] >= self.min_policy_information)
+            & (self.policy_information[None, :] >= self.min_policy_information)
         )
         if np.any(valid):
             affinity = np.exp(-self.distance_ema[valid] / temperature)
             raw_gate = np.clip((affinity - tau_safe) / denom, 0.0, 1.0)
-            gate[valid] = np.power(raw_gate, power).astype(np.float32)
+            gate[valid] = (1.0 if self.gate_style == "threshold"
+                           else np.power(raw_gate, power).astype(np.float32))
         np.fill_diagonal(gate, 0.0)
         return gate
 
@@ -759,6 +779,7 @@ class TeamGraphEstimator:
             "stable_adjacency": self.stable_adjacency.copy(),
             "join_streak": self.join_streak.copy(),
             "leave_streak": self.leave_streak.copy(),
+            "policy_information": self.policy_information.copy(),
         }
 
 
@@ -1203,7 +1224,11 @@ def local_rware_action_masks(
             agent.carrying_shelf is not None
             and int(unwrapped.grid[_LAYER_SHELFS, target_y, target_x]) > 0
         ):
-            masks[agent_id, forward_idx] = 0.0
+            occupant_id = int(unwrapped.grid[_LAYER_AGENTS, target_y, target_x])
+            # A loaded neighbor may move simultaneously. The environment's
+            # collision resolver decides this; do not prohibit legal convoys.
+            if not (occupant_id > 0 and agents[occupant_id - 1].carrying_shelf is not None):
+                masks[agent_id, forward_idx] = 0.0
 
         if agent.carrying_shelf is None:
             shelf_id = int(unwrapped.grid[_LAYER_SHELFS, int(agent.y), int(agent.x)])
@@ -1314,6 +1339,78 @@ def rware_agent_positions(env: gym.Env, n_agents: int) -> List[Tuple[int, int]]:
     return [(int(agent.x), int(agent.y)) for agent in agents[:n_agents]]
 
 
+def add_agent_event_counts(
+    events: object,
+    counts: np.ndarray,
+    key: str = "agent_id",
+) -> None:
+    if not isinstance(events, list):
+        return
+    for event in events:
+        if not isinstance(event, dict):
+            continue
+        try:
+            agent_idx = int(event.get(key, 0)) - 1
+        except (TypeError, ValueError):
+            continue
+        if 0 <= agent_idx < len(counts):
+            counts[agent_idx] += 1.0
+
+
+def per_agent_metrics(
+    prefix: str,
+    n_agents: int,
+    agent_step_counts: np.ndarray,
+    position_change_counts: np.ndarray,
+    pickup_counts: np.ndarray,
+    delivery_counts: np.ndarray,
+    return_counts: np.ndarray,
+    failed_forward_counts: np.ndarray,
+    blocking_counts: np.ndarray,
+    deadlock_counts: np.ndarray,
+) -> Dict[str, float]:
+    metrics: Dict[str, float] = {}
+    for agent_idx in range(n_agents):
+        denominator = max(float(agent_step_counts[agent_idx]), 1.0)
+        key_prefix = f"{prefix}agent_{agent_idx + 1}"
+        metrics[f"{key_prefix}_position_change_rate"] = float(
+            position_change_counts[agent_idx] / denominator
+        )
+        metrics[f"{key_prefix}_pickup_count"] = float(pickup_counts[agent_idx])
+        metrics[f"{key_prefix}_delivery_count"] = float(delivery_counts[agent_idx])
+        metrics[f"{key_prefix}_return_count"] = float(return_counts[agent_idx])
+        metrics[f"{key_prefix}_failed_forward_rate"] = float(
+            failed_forward_counts[agent_idx] / denominator
+        )
+        metrics[f"{key_prefix}_blocking_agent_rate"] = float(
+            blocking_counts[agent_idx] / denominator
+        )
+        metrics[f"{key_prefix}_deadlock_agent_rate"] = float(
+            deadlock_counts[agent_idx] / denominator
+        )
+    return metrics
+
+
+def format_agent_rates(metrics: Dict[str, float], key_suffix: str, n_agents: int) -> str:
+    values = [
+        metrics.get(f"agent_{agent_idx + 1}_{key_suffix}", float("nan"))
+        for agent_idx in range(n_agents)
+    ]
+    return "[" + ",".join(f"{value:.2f}" for value in values) + "]"
+
+
+def format_eval_agent_rates(
+    metrics: Dict[str, float],
+    key_suffix: str,
+    n_agents: int,
+) -> str:
+    values = [
+        metrics.get(f"eval_agent_{agent_idx + 1}_{key_suffix}", float("nan"))
+        for agent_idx in range(n_agents)
+    ]
+    return "[" + ",".join(f"{value:.2f}" for value in values) + "]"
+
+
 def finite_mean(values: Sequence[float]) -> float:
     finite_values = [float(value) for value in values if math.isfinite(float(value))]
     return float(np.mean(finite_values)) if finite_values else float("nan")
@@ -1330,6 +1427,8 @@ def optional_step_delta(
 
 def clusters_from_adjacency(adjacency: np.ndarray) -> List[List[int]]:
     adj = np.asarray(adjacency)
+    # Display weak components only; this is not directed temporal reachability.
+    adj = np.maximum(adj, adj.T)
     n_agents = int(adj.shape[0])
     seen = np.zeros(n_agents, dtype=bool)
     clusters: List[List[int]] = []
@@ -1361,6 +1460,9 @@ def set_global_seeds(seed: int) -> None:
 
 def set_env_training_edges(env: gym.Env, adjacency: np.ndarray) -> None:
     unwrapped = env.unwrapped
+    if hasattr(unwrapped, "set_training_comm_weights"):
+        unwrapped.set_training_comm_weights(adjacency)
+        return
     if not hasattr(unwrapped, "set_training_comm_edges"):
         return
     edges = []
@@ -1383,12 +1485,14 @@ def communication_adjacency(
     n_agents: int,
     mode: str = "physical",
 ) -> np.ndarray:
+    if mode == "none" or not getattr(env.unwrapped, "communication_enabled", True):
+        return np.zeros((n_agents, n_agents), dtype=np.float32)
     if mode == "complete":
         adj = np.ones((n_agents, n_agents), dtype=np.float32)
         np.fill_diagonal(adj, 0.0)
         return adj
-    if mode != "physical":
-        raise ValueError("--comm-graph-mode must be 'physical' or 'complete'")
+    if mode not in {"physical"}:
+        raise ValueError("unknown communication graph mode")
 
     unwrapped = env.unwrapped
     if hasattr(unwrapped, "get_neighbor_adjacency"):
@@ -1413,6 +1517,48 @@ def communication_adjacency(
         return adj
 
     return np.zeros((n_agents, n_agents), dtype=np.float32)
+
+
+def communication_weights(cfg, env, estimator, iteration):
+    """Eligibility before current geometry masking; frozen during each rollout."""
+    n = env.unwrapped.n_agents
+    zero = np.zeros((n, n), dtype=np.float32)
+    if not cfg.communication_enabled or cfg.graph_mode == "none" or cfg.peer_transfer_mode == "none":
+        return zero
+    if cfg.peer_transfer_mode == "pgct" and cfg.pgct_peer_loss_coef <= 0:
+        return zero
+    if cfg.peer_transfer_mode == "consensus" and (cfg.critic_consensus_tau <= 0 or cfg.consensus_interval <= 0):
+        return zero
+    if cfg.graph_mode in {"oracle", "wrong", "unrestricted"}:
+        return baseline_weight_matrix(env, n, cfg.graph_mode)
+    if cfg.peer_transfer_mode == "pgct":
+        return estimator.pgct_gate_matrix(
+            iteration >= cfg.pgct_warmup_updates, cfg.pgct_distance_threshold,
+            cfg.pgct_distance_temperature, cfg.pgct_gate_power)
+    return estimator.consensus_weight_matrix()
+
+
+def enforce_communication_config(cfg):
+    """A single off flag wins over every transfer/graph option."""
+    if not cfg.communication_enabled or cfg.graph_mode == "none" or cfg.comm_graph_mode == "none":
+        cfg.communication_enabled = False
+        cfg.graph_mode = "none"
+        cfg.comm_graph_mode = "none"
+        cfg.peer_transfer_mode = "none"
+        cfg.probe_interval = 0
+        cfg.critic_consensus_tau = 0.0
+        cfg.consensus_interval = 0
+        cfg.pgct_peer_loss_coef = 0.0
+
+
+def baseline_weight_matrix(env, n_agents, mode):
+    complete = np.ones((n_agents, n_agents), dtype=np.float32) - np.eye(n_agents, dtype=np.float32)
+    if mode == "unrestricted":
+        return complete
+    same = oracle_weight_matrix(env, n_agents)
+    if mode == "wrong":
+        return complete - same
+    return same
 
 
 def oracle_weight_matrix(env: gym.Env, n_agents: int) -> np.ndarray:
@@ -1866,11 +2012,26 @@ def sample_policy_probe_sequences(
     rollout: Rollout,
     rng: np.random.Generator,
 ) -> Tuple[torch.Tensor, Dict[str, float]]:
+    if cfg.fixed_canonical_probes:
+        if cfg.probe_source != "objective" or cfg.policy_probe_team_conditioning != "shared":
+            raise ValueError("Fixed canonical probes require objective source and shared conditioning")
+        cached = getattr(env.unwrapped, "_pgct_canonical_bank", None)
+        if cached is not None:
+            return cached[0].clone(), dict(cached[1])
+        # Dedicated seed: neither PPO shuffle nor rollout RNG is consumed.
+        rng = np.random.default_rng(cfg.seed + 9173)
     sequence_length = max(int(cfg.pgct_probe_sequence_length), 1)
     sequence_count = max(int(cfg.policy_probe_batch_size), 1)
     flat_count = sequence_count * sequence_length
     n_agents = int(getattr(env.unwrapped, "n_agents", 1))
-    if cfg.policy_probe_team_conditioning == "agent-team":
+    if cfg.fixed_canonical_probes:
+        obs_dim = int(env.observation_space[0].shape[-1])
+        flat_probes = build_objective_probe_bank(env, obs_dim, flat_count, rng)
+        if flat_probes is None:
+            raise ValueError("This environment has no external objective probe builder")
+        meta = {"objective_probe_count": float(flat_count), "rollout_probe_count": 0.0}
+        probe_axis = 0
+    elif cfg.policy_probe_team_conditioning == "agent-team":
         flat_probes, meta = sample_agent_conditioned_policy_probe_obs(
             cfg,
             env,
@@ -1920,6 +2081,8 @@ def sample_policy_probe_sequences(
             "probe_team_conditioned": float(sequences.ndim == 4),
         }
     )
+    if cfg.fixed_canonical_probes:
+        env.unwrapped._pgct_canonical_bank = (sequences.clone(), dict(meta))
     return sequences, meta
 
 
@@ -1929,7 +2092,8 @@ def policy_distance_similarity_matrices(
     probe_obs: torch.Tensor,
     device: torch.device,
     temperature: float,
-) -> Tuple[np.ndarray, np.ndarray]:
+    return_information: bool = False,
+):
     n_agents = len(agents)
     probe_sequences = _as_agent_conditioned_probe_sequences(probe_obs, n_agents).to(
         device
@@ -1949,6 +2113,15 @@ def policy_distance_similarity_matrices(
             step_probs.append(torch.softmax(logits, dim=-1))
         policy_probs.append(torch.stack(step_probs, dim=1).cpu())
 
+    # KL(pi || Uniform) = log(|A|) - H(pi). It is near zero for the
+    # uninformative random policies produced by small initial actor logits.
+    policy_information = np.asarray([
+        float((math.log(probs.shape[-1]) - (
+            -torch.sum(probs.clamp_min(1e-8) * torch.log(probs.clamp_min(1e-8)), dim=-1)
+        )).mean().item())
+        for probs in policy_probs
+    ], dtype=np.float32)
+
     distance = np.zeros((n_agents, n_agents), dtype=np.float32)
     similarity = np.eye(n_agents, dtype=np.float32)
     eps = 1e-8
@@ -1967,6 +2140,8 @@ def policy_distance_similarity_matrices(
             distance[j, i] = raw_distance
             similarity[i, j] = score
             similarity[j, i] = score
+    if return_information:
+        return distance, similarity, policy_information
     return distance, similarity
 
 
@@ -2007,6 +2182,7 @@ def collect_rollout(
     )
     logprob_buf = torch.zeros((rollout_steps, n_agents), dtype=torch.float32)
     rewards_buf = torch.zeros((rollout_steps, n_agents), dtype=torch.float32)
+    timeout_values_buf = torch.zeros_like(rewards_buf)
     dones_buf = torch.zeros((rollout_steps,), dtype=torch.float32)
     values_buf = torch.zeros((rollout_steps, n_agents), dtype=torch.float32)
     actor_h_buf = torch.zeros(
@@ -2028,6 +2204,8 @@ def collect_rollout(
     completed_carrying_at_end: List[float] = []
     completed_invalid_toggle_rates: List[float] = []
     completed_failed_forward_rates: List[float] = []
+    completed_blocking_agent_rates: List[float] = []
+    completed_deadlock_agent_rates: List[float] = []
     completed_steps_to_seen: List[float] = []
     completed_steps_to_pickup: List[float] = []
     completed_steps_pickup_to_goal: List[float] = []
@@ -2052,6 +2230,16 @@ def collect_rollout(
     agent_step_count = 0.0
     wall_state_count = 0.0
     wall_action_counts = np.zeros((action_dim,), dtype=np.float64)
+    wall_action_prob_sums = np.zeros((action_dim,), dtype=np.float64)
+    wall_action_prob_count = 0.0
+    per_agent_step_counts = np.zeros((n_agents,), dtype=np.float64)
+    per_agent_position_change_counts = np.zeros((n_agents,), dtype=np.float64)
+    per_agent_pickup_counts = np.zeros((n_agents,), dtype=np.float64)
+    per_agent_delivery_counts = np.zeros((n_agents,), dtype=np.float64)
+    per_agent_return_counts = np.zeros((n_agents,), dtype=np.float64)
+    per_agent_failed_forward_counts = np.zeros((n_agents,), dtype=np.float64)
+    per_agent_blocking_counts = np.zeros((n_agents,), dtype=np.float64)
+    per_agent_deadlock_counts = np.zeros((n_agents,), dtype=np.float64)
     return_distances: List[float] = []
 
     for step in range(rollout_steps):
@@ -2115,6 +2303,9 @@ def collect_rollout(
             action_probs_np = action_probs.squeeze(0).detach().cpu().numpy()
             action_prob_sums += action_probs_np
             action_prob_count += 1.0
+            if blocked_forward_states[agent_id]:
+                wall_action_prob_sums += action_probs_np
+                wall_action_prob_count += 1.0
             max_action_probs.append(float(np.max(action_probs_np)))
             if (
                 action_dim > int(Action.TOGGLE_LOAD.value)
@@ -2160,9 +2351,9 @@ def collect_rollout(
             if 0 <= int(action) < action_dim:
                 wall_action_counts[int(action)] += 1.0
 
-        failed_forwards = 0.0
+        masked_failed_forwards = 0.0
         if action_dim > int(Action.FORWARD.value):
-            failed_forwards = float(
+            masked_failed_forwards = float(
                 sum(
                     action == int(Action.FORWARD.value)
                     and diagnostic_action_masks[agent_id, int(Action.FORWARD.value)]
@@ -2170,16 +2361,68 @@ def collect_rollout(
                     for agent_id, action in enumerate(actions)
                 )
             )
-        forward_failure_count += failed_forwards
         next_obs, rewards, done, truncated, info = env.step(actions)
+        failed_forwards = float(
+            info.get("failed_forwards", masked_failed_forwards)
+        )
+        blocking_agents = float(info.get("blocking_agents", 0.0))
+        deadlocked_agents = float(info.get("deadlocked_agents", 0.0))
+        forward_failure_count += failed_forwards
         post_positions = rware_agent_positions(env, n_agents)
-        position_change_count += float(
-            sum(
+        moved_agents = np.asarray(
+            [
                 before != after
                 for before, after in zip(pre_positions, post_positions)
-            )
+            ],
+            dtype=np.float64,
+        )
+        position_change_count += float(np.sum(moved_agents))
+        per_agent_step_counts += 1.0
+        per_agent_position_change_counts += moved_agents
+        add_agent_event_counts(
+            info.get("pickup_events", []),
+            per_agent_pickup_counts,
+            "agent_id",
+        )
+        add_agent_event_counts(
+            info.get("delivery_events", []),
+            per_agent_delivery_counts,
+            "carrier_id",
+        )
+        add_agent_event_counts(
+            info.get("return_events", []),
+            per_agent_return_counts,
+            "carrier_id",
+        )
+        add_agent_event_counts(
+            info.get("failed_forward_events", []),
+            per_agent_failed_forward_counts,
+            "agent_id",
+        )
+        add_agent_event_counts(
+            info.get("blocking_agent_events", []),
+            per_agent_blocking_counts,
+            "agent_id",
+        )
+        add_agent_event_counts(
+            info.get("deadlock_events", []),
+            per_agent_deadlock_counts,
+            "agent_id",
         )
         terminal = bool(done or truncated)
+        if truncated and not done:
+            # Bootstrap the final observation with its pre-reset recurrent state.
+            # GAE still stops at the reset, so the next episode cannot leak in.
+            timeout_obs = torch.as_tensor(
+                flatten_multi_agent_obs(env, next_obs), dtype=torch.float32, device=device
+            )
+            with torch.no_grad():
+                for agent_id, net in enumerate(agents):
+                    timeout_value, _ = net._critic_step(
+                        timeout_obs[agent_id].unsqueeze(0),
+                        state.critic_h[agent_id].unsqueeze(0),
+                    )
+                    timeout_values_buf[step, agent_id] = float(timeout_value.item())
         rewards_array = np.asarray(rewards, dtype=np.float32)
         shaping_array = np.asarray(
             info.get("reward_shaping", np.zeros((n_agents,), dtype=np.float32)),
@@ -2215,6 +2458,8 @@ def collect_rollout(
         state.episode_invalid_toggles += invalid_toggles
         state.episode_wrong_returns += wrong_returns
         state.episode_failed_forwards += failed_forwards
+        state.episode_blocking_agents += blocking_agents
+        state.episode_deadlocked_agents += deadlocked_agents
 
         if pickups > 0.0 and state.episode_first_pickup_step is None:
             state.episode_first_pickup_step = state.episode_length
@@ -2251,6 +2496,12 @@ def collect_rollout(
             )
             completed_failed_forward_rates.append(
                 float(state.episode_failed_forwards / episode_action_count)
+            )
+            completed_blocking_agent_rates.append(
+                float(state.episode_blocking_agents / episode_action_count)
+            )
+            completed_deadlock_agent_rates.append(
+                float(state.episode_deadlocked_agents / episode_action_count)
             )
             completed_steps_to_seen.append(
                 float(state.episode_first_requested_shelf_seen_step)
@@ -2292,6 +2543,8 @@ def collect_rollout(
             state.episode_invalid_toggles = 0.0
             state.episode_wrong_returns = 0.0
             state.episode_failed_forwards = 0.0
+            state.episode_blocking_agents = 0.0
+            state.episode_deadlocked_agents = 0.0
             state.episode_requested_shelf_seen = False
             state.episode_first_requested_shelf_seen_step = None
             state.episode_first_pickup_step = None
@@ -2322,6 +2575,7 @@ def collect_rollout(
         actor_h=actor_h_buf,
         critic_h=critic_h_buf,
         last_values=last_values,
+        timeout_values=timeout_values_buf,
     )
     flat_actions = actions_buf.reshape(-1).numpy()
     action_metrics = {
@@ -2342,6 +2596,15 @@ def collect_rollout(
         f"wall_action_{action.name.lower()}_rate": (
             float(wall_action_counts[int(action.value)] / wall_state_count)
             if wall_state_count > 0.0
+            else float("nan")
+        )
+        for action in Action
+        if int(action.value) < action_dim
+    }
+    wall_action_probability_metrics = {
+        f"wall_action_{action.name.lower()}_probability": (
+            float(wall_action_prob_sums[int(action.value)] / wall_action_prob_count)
+            if wall_action_prob_count > 0.0
             else float("nan")
         )
         for action in Action
@@ -2417,6 +2680,12 @@ def collect_rollout(
         "failed_forward_rate": float(np.mean(completed_failed_forward_rates))
         if completed_failed_forward_rates
         else float("nan"),
+        "blocking_agent_rate": float(np.mean(completed_blocking_agent_rates))
+        if completed_blocking_agent_rates
+        else float("nan"),
+        "deadlock_agent_rate": float(np.mean(completed_deadlock_agent_rates))
+        if completed_deadlock_agent_rates
+        else float("nan"),
         "carrying_at_episode_end": float(np.mean(completed_carrying_at_end))
         if completed_carrying_at_end
         else float("nan"),
@@ -2477,6 +2746,19 @@ def collect_rollout(
         else float("nan"),
         **action_probability_metrics,
         **wall_action_metrics,
+        **wall_action_probability_metrics,
+        **per_agent_metrics(
+            "",
+            n_agents,
+            per_agent_step_counts,
+            per_agent_position_change_counts,
+            per_agent_pickup_counts,
+            per_agent_delivery_counts,
+            per_agent_return_counts,
+            per_agent_failed_forward_counts,
+            per_agent_blocking_counts,
+            per_agent_deadlock_counts,
+        ),
         **action_metrics,
     }
     return rollout, state, metrics
@@ -2489,6 +2771,7 @@ def compute_gae(
     last_values: torch.Tensor,
     gamma: float,
     gae_lambda: float,
+    timeout_values: Optional[torch.Tensor] = None,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     rollout_steps, n_agents = rewards.shape
     advantages = torch.zeros_like(rewards)
@@ -2500,6 +2783,8 @@ def compute_gae(
             next_value = values[step + 1]
         next_nonterminal = 1.0 - dones[step]
         delta = rewards[step] + gamma * next_value * next_nonterminal - values[step]
+        if timeout_values is not None:
+            delta = delta + gamma * timeout_values[step]
         last_gae = delta + gamma * gae_lambda * next_nonterminal * last_gae
         advantages[step] = last_gae
     returns = advantages + values
@@ -2619,10 +2904,12 @@ def update_ippo(
         rollout.last_values,
         cfg.gamma,
         cfg.gae_lambda,
+        rollout.timeout_values,
     )
 
     n_agents = len(agents)
     mean_abs_td_error = np.zeros((n_agents,), dtype=np.float64)
+    agent_diagnostics: Dict[str, float] = {}
     metrics = {
         "policy_loss": [],
         "value_loss": [],
@@ -2699,6 +2986,9 @@ def update_ippo(
             )
         )
         agent_returns = returns[:, agent_id]
+        agent_diagnostics[f"agent_{agent_id}/actor_update_skipped"] = float(skip_actor_update)
+        agent_diagnostics[f"agent_{agent_id}/positive_reward_density"] = float(positive_reward_density.item())
+        agent_diagnostics[f"agent_{agent_id}/advantage_std"] = float(adv_std.item())
         mean_abs_td_error[agent_id] = float(
             torch.mean(torch.abs(agent_returns - rollout.values[:, agent_id])).item()
         )
@@ -2844,8 +3134,11 @@ def update_ippo(
 
     graph_estimator.update_value_uncertainty(mean_abs_td_error)
     return {
-        name: float(np.mean(values)) if values else float("nan")
-        for name, values in metrics.items()
+        **agent_diagnostics,
+        **{
+            name: float(np.mean(values)) if values else float("nan")
+            for name, values in metrics.items()
+        },
     }
 
 
@@ -2888,7 +3181,8 @@ def apply_confidence_weighted_critic_consensus(
                 delta.add_(critic_snapshots[j][param_idx] - source, alpha=weight)
             param.data.add_(delta, alpha=float(tau))
 
-    return int(np.sum(active_weights > 0.0) / 2)
+    active = active_weights > 0
+    return int(np.triu(active | active.T, k=1).sum())
 
 
 @torch.no_grad()
@@ -3117,12 +3411,14 @@ def run_policy_similarity_probe_round(
     n_agents = len(agents)
     neighbor_adj = communication_adjacency(env, n_agents, mode=cfg.comm_graph_mode)
     probe_sequences, probe_meta = sample_policy_probe_sequences(cfg, env, rollout, rng)
-    distance, similarity = policy_distance_similarity_matrices(
+    distance, similarity, policy_information = policy_distance_similarity_matrices(
         agents,
         probe_sequences,
         device=device,
         temperature=cfg.policy_similarity_temperature,
+        return_information=True,
     )
+    graph_estimator.update_policy_information(policy_information)
     updates = graph_estimator.update_from_policy_similarity(similarity, neighbor_adj)
     distance_updates = graph_estimator.update_from_policy_distance(
         distance,
@@ -3134,7 +3430,7 @@ def run_policy_similarity_probe_round(
     affinity = graph_estimator.pgct_affinity_matrix(cfg.pgct_distance_temperature)
 
     upper_mask = np.triu(np.ones((n_agents, n_agents), dtype=bool), k=1)
-    upper_neighbor = upper_mask & (neighbor_adj > 0.0)
+    upper_neighbor = (~np.eye(n_agents, dtype=bool)) & (neighbor_adj > 0.0)
     upper_active = upper_mask & (weights >= cfg.edge_threshold)
     neighbor_scores = similarity[upper_neighbor]
     neighbor_distances = distance[upper_neighbor]
@@ -3155,7 +3451,7 @@ def run_policy_similarity_probe_round(
         "pgct_affinity": float(np.mean(neighbor_affinity))
         if neighbor_affinity.size
         else float("nan"),
-        "neighbor_edges": float(np.sum(upper_neighbor)),
+        "neighbor_arcs": float(np.sum(upper_neighbor)),
         "updated_edges": float(updates),
         "distance_updated_edges": float(distance_updates),
         "active_edges": float(np.sum(upper_active)),
@@ -3163,8 +3459,21 @@ def run_policy_similarity_probe_round(
         if active_weights.size
         else float("nan"),
         "probe_count": _canonical_probe_count(probe_sequences),
+        "policy_information_mean": float(np.mean(policy_information)),
+        "policy_information_min": float(np.min(policy_information)),
+        "policy_information_ready_agents": float(
+            np.sum(policy_information >= cfg.pgct_min_policy_information)
+        ),
+        "directed_probe_count_min": float(np.min(
+            graph_estimator.distance_count[~np.eye(n_agents, dtype=bool)]
+        )),
+        "directed_probe_count_max": float(np.max(
+            graph_estimator.distance_count[~np.eye(n_agents, dtype=bool)]
+        )),
         **probe_meta,
     }
+    for agent_id, information in enumerate(policy_information):
+        metrics[f"agent_{agent_id}_policy_information"] = float(information)
     metrics.update(pairwise_matrix_metrics(distance, "distance", true_clusters))
     metrics.update(
         oracle_pairwise_matrix_metrics(
@@ -3248,11 +3557,13 @@ def evaluate(
     render_mode: str = "human",
     collect_video: bool = False,
     use_action_mask: bool = True,
+    communication_gate: Optional[np.ndarray] = None,
 ) -> Tuple[Dict[str, float], Optional[np.ndarray]]:
     if episodes <= 0:
         return {}, None
     del obs_dim
     action_dim = int(agents[0].action_dim)
+    n_agents = len(agents)
     returns = []
     discounted_returns = []
     task_returns = []
@@ -3267,6 +3578,8 @@ def evaluate(
     carrying_at_end = []
     invalid_toggle_rates = []
     failed_forward_rates = []
+    blocking_agent_rates = []
+    deadlock_agent_rates = []
     steps_to_seen = []
     steps_to_pickup = []
     steps_pickup_to_goal = []
@@ -3292,6 +3605,16 @@ def evaluate(
     agent_step_count = 0.0
     wall_state_count = 0.0
     wall_action_counts = np.zeros((action_dim,), dtype=np.float64)
+    wall_action_prob_sums = np.zeros((action_dim,), dtype=np.float64)
+    wall_action_prob_count = 0.0
+    per_agent_step_counts = np.zeros((n_agents,), dtype=np.float64)
+    per_agent_position_change_counts = np.zeros((n_agents,), dtype=np.float64)
+    per_agent_pickup_counts = np.zeros((n_agents,), dtype=np.float64)
+    per_agent_delivery_counts = np.zeros((n_agents,), dtype=np.float64)
+    per_agent_return_counts = np.zeros((n_agents,), dtype=np.float64)
+    per_agent_failed_forward_counts = np.zeros((n_agents,), dtype=np.float64)
+    per_agent_blocking_counts = np.zeros((n_agents,), dtype=np.float64)
+    per_agent_deadlock_counts = np.zeros((n_agents,), dtype=np.float64)
     return_distances: List[float] = []
     video_frames: List[np.ndarray] = []
     for episode in range(episodes):
@@ -3309,7 +3632,8 @@ def evaluate(
             observation_format=observation_format,
         )
         obs, _ = env.reset(seed=seed + episode)
-        n_agents = len(agents)
+        set_env_training_edges(env, np.zeros((n_agents, n_agents), dtype=np.float32)
+                               if communication_gate is None else communication_gate)
         actor_h = torch.zeros((n_agents, recurrent_hidden_dim), device=device)
         critic_h = torch.zeros_like(actor_h)
         ep_return = np.zeros((n_agents,), dtype=np.float64)
@@ -3323,6 +3647,8 @@ def evaluate(
         ep_invalid_toggles = 0.0
         ep_wrong_returns = 0.0
         ep_failed_forwards = 0.0
+        ep_blocking_agents = 0.0
+        ep_deadlocked_agents = 0.0
         seen_requested_shelf = False
         first_seen_step: Optional[int] = None
         first_pickup_step: Optional[int] = None
@@ -3390,6 +3716,9 @@ def evaluate(
                 action_probs_np = action_probs.squeeze(0).detach().cpu().numpy()
                 action_prob_sums += action_probs_np
                 action_prob_count += 1.0
+                if blocked_forward_states[agent_id]:
+                    wall_action_prob_sums += action_probs_np
+                    wall_action_prob_count += 1.0
                 max_action_probs.append(float(np.max(action_probs_np)))
                 if (
                     action_dim > int(Action.TOGGLE_LOAD.value)
@@ -3433,8 +3762,9 @@ def evaluate(
             for action in actions:
                 if 0 <= action < action_dim:
                     action_counts[action] += 1.0
+            masked_failed_forwards = 0.0
             if action_dim > int(Action.FORWARD.value):
-                step_failed_forwards = float(
+                masked_failed_forwards = float(
                     sum(
                         action == int(Action.FORWARD.value)
                         and diagnostic_action_masks[
@@ -3445,15 +3775,56 @@ def evaluate(
                         for agent_id, action in enumerate(actions)
                     )
                 )
-                ep_failed_forwards += step_failed_forwards
-                forward_failure_count += step_failed_forwards
             obs, rewards, done, truncated, info = env.step(actions)
+            step_failed_forwards = float(
+                info.get("failed_forwards", masked_failed_forwards)
+            )
+            step_blocking_agents = float(info.get("blocking_agents", 0.0))
+            step_deadlocked_agents = float(info.get("deadlocked_agents", 0.0))
+            ep_failed_forwards += step_failed_forwards
+            ep_blocking_agents += step_blocking_agents
+            ep_deadlocked_agents += step_deadlocked_agents
+            forward_failure_count += step_failed_forwards
             post_positions = rware_agent_positions(env, n_agents)
-            position_change_count += float(
-                sum(
+            moved_agents = np.asarray(
+                [
                     before != after
                     for before, after in zip(pre_positions, post_positions)
-                )
+                ],
+                dtype=np.float64,
+            )
+            position_change_count += float(np.sum(moved_agents))
+            per_agent_step_counts += 1.0
+            per_agent_position_change_counts += moved_agents
+            add_agent_event_counts(
+                info.get("pickup_events", []),
+                per_agent_pickup_counts,
+                "agent_id",
+            )
+            add_agent_event_counts(
+                info.get("delivery_events", []),
+                per_agent_delivery_counts,
+                "carrier_id",
+            )
+            add_agent_event_counts(
+                info.get("return_events", []),
+                per_agent_return_counts,
+                "carrier_id",
+            )
+            add_agent_event_counts(
+                info.get("failed_forward_events", []),
+                per_agent_failed_forward_counts,
+                "agent_id",
+            )
+            add_agent_event_counts(
+                info.get("blocking_agent_events", []),
+                per_agent_blocking_counts,
+                "agent_id",
+            )
+            add_agent_event_counts(
+                info.get("deadlock_events", []),
+                per_agent_deadlock_counts,
+                "agent_id",
             )
             rewards_array = np.asarray(rewards, dtype=np.float64)
             shaping_array = np.asarray(
@@ -3526,6 +3897,8 @@ def evaluate(
         carrying_at_end.append(float(carrying))
         invalid_toggle_rates.append(float(ep_invalid_toggles / episode_action_count))
         failed_forward_rates.append(float(ep_failed_forwards / episode_action_count))
+        blocking_agent_rates.append(float(ep_blocking_agents / episode_action_count))
+        deadlock_agent_rates.append(float(ep_deadlocked_agents / episode_action_count))
         steps_to_seen.append(
             float(first_seen_step) if first_seen_step is not None else float("nan")
         )
@@ -3568,6 +3941,15 @@ def evaluate(
         for action in Action
         if int(action.value) < action_dim
     }
+    wall_action_probability_metrics = {
+        f"eval_wall_action_{action.name.lower()}_probability": (
+            float(wall_action_prob_sums[int(action.value)] / wall_action_prob_count)
+            if wall_action_prob_count > 0.0
+            else float("nan")
+        )
+        for action in Action
+        if int(action.value) < action_dim
+    }
     agent_step_denominator = max(agent_step_count, 1.0)
     pickup_opportunity_denominator = max(valid_pickup_opportunity_count, 1.0)
     return_opportunity_denominator = max(valid_return_opportunity_count, 1.0)
@@ -3602,6 +3984,8 @@ def evaluate(
         "eval_wrong_returns": float(np.mean(wrong_return_counts)),
         "eval_invalid_toggle_rate": float(np.mean(invalid_toggle_rates)),
         "eval_failed_forward_rate": float(np.mean(failed_forward_rates)),
+        "eval_blocking_agent_rate": float(np.mean(blocking_agent_rates)),
+        "eval_deadlock_agent_rate": float(np.mean(deadlock_agent_rates)),
         "eval_carrying_at_episode_end": float(np.mean(carrying_at_end)),
         "eval_mean_steps_to_first_requested_shelf": finite_mean(steps_to_seen),
         "eval_mean_steps_to_pickup": finite_mean(steps_to_pickup),
@@ -3660,6 +4044,19 @@ def evaluate(
         else float("nan"),
         **action_probability_metrics,
         **wall_action_metrics,
+        **wall_action_probability_metrics,
+        **per_agent_metrics(
+            "eval_",
+            n_agents,
+            per_agent_step_counts,
+            per_agent_position_change_counts,
+            per_agent_pickup_counts,
+            per_agent_delivery_counts,
+            per_agent_return_counts,
+            per_agent_failed_forward_counts,
+            per_agent_blocking_counts,
+            per_agent_deadlock_counts,
+        ),
         **action_metrics,
     }, video
 
@@ -3824,9 +4221,10 @@ def graph_metrics(
     if weights is None:
         weights = graph_estimator.weight_matrix()
     upper_mask = np.triu(np.ones_like(weights, dtype=bool), k=1)
-    upper_weights = weights[upper_mask & (weights > 0.0)]
+    upper_weights = weights[(~np.eye(len(weights), dtype=bool)) & (weights > 0.0)]
     return {
-        "graph/edges": float(np.sum(adjacency) / 2.0),
+        "graph/edges": float(np.triu((adjacency > 0) | (adjacency.T > 0), k=1).sum()),
+        "graph/arcs": float(np.sum(adjacency > 0)),
         "graph/clusters": float(len(clusters)),
         "graph/max_cluster_size": float(max(cluster_sizes) if cluster_sizes else 0),
         "graph/value_uncertainty": float(np.mean(graph_estimator.value_uncertainty)),
@@ -3862,6 +4260,18 @@ def log_to_wandb(run, payload: Dict[str, object], step: int) -> None:
     if run is None:
         return
     run.log(payload, step=step)
+
+
+def save_local_eval_video(video, path, fps):
+    import imageio.v2 as imageio
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # Preserve dimensions; yuv444p accepts odd sizes without silent resizing.
+    with imageio.get_writer(str(path), fps=fps, codec="libx264", pixelformat="yuv444p",
+                            macro_block_size=1) as writer:
+        for frame in video.transpose(0, 2, 3, 1):
+            writer.append_data(frame)
+    print(f"video={path}")
 
 
 def make_wandb_video(video: np.ndarray, fps: int):
@@ -4021,7 +4431,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--graph-mode",
         default="policy",
-        choices=["policy", "probe", "influence", "none", "oracle"],
+        choices=["policy", "probe", "influence", "none", "oracle", "wrong", "unrestricted"],
         help=(
             "policy/probe use common-probe policy similarity; influence keeps "
             "the legacy return-influence perturbation baseline; oracle is for "
@@ -4052,15 +4462,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
         choices=["shared", "agent-team"],
         help=(
             "shared compares every policy on the same canonical probe bank. "
-            "agent-team builds objective probes for each agent's inferred team, "
-            "which makes same-team and cross-team objectives more separable."
+            "agent-team uses ORACLE team IDs to build different inputs per team; "
+            "use it only as a privileged diagnostic, not blind team discovery."
         ),
     )
     parser.add_argument("--policy-similarity-temperature", type=float, default=0.25)
     parser.add_argument(
         "--comm-graph-mode",
         default="physical",
-        choices=["physical", "complete"],
+        choices=["physical", "complete", "none"],
         help="Restrict policy comparisons to physical communication neighbors.",
     )
     parser.add_argument(
@@ -4218,6 +4628,22 @@ def build_arg_parser() -> argparse.ArgumentParser:
         skip_zero_reward_actor_update=True,
         skip_no_positive_reward_actor_update=False,
     )
+    parser.add_argument(
+        "--pgct-min-policy-information",
+        type=float,
+        default=0.0,
+        help=(
+            "Optional non-ex5 ablation; zero disables this heuristic. Minimum mean KL(policy || uniform) on common probes required for "
+            "each endpoint before PGCT may open an edge."
+        ),
+    )
+    parser.add_argument("--pgct-gate-style", choices=["threshold", "soft"], default="threshold")
+    parser.add_argument("--fixed-canonical-probes", action="store_true",
+                        help="Reuse one external shared objective probe bank throughout the run.")
+    parser.add_argument("--no-communication", dest="communication_enabled", action="store_false",
+                        help="Disable ALL graph probing, peer transfer, consensus and rendered links.")
+    parser.add_argument("--save-eval-video", action="store_true",
+                        help="Save evaluation MP4 under the run's videos directory without requiring W&B.")
     return parser
 
 
@@ -4230,6 +4656,12 @@ def resolve_device(value: str) -> torch.device:
 def main() -> None:
     args = build_arg_parser().parse_args()
     cfg = TrainConfig(**vars(args))
+    train(cfg)
+
+
+def train(cfg: TrainConfig) -> None:
+    """Run one training stage from a fully specified configuration."""
+    enforce_communication_config(cfg)
     if cfg.graph_mode == "probe":
         cfg.graph_mode = "policy"
     curriculum_stages = parse_curriculum_stages(cfg.curriculum_stages)
@@ -4271,6 +4703,8 @@ def main() -> None:
         raise ValueError("--pgct-alpha-epsilon must be positive")
     if cfg.pgct_warmup_updates < 0:
         raise ValueError("--pgct-warmup-updates must be non-negative")
+    if cfg.pgct_min_policy_information < 0.0:
+        raise ValueError("--pgct-min-policy-information must be non-negative")
     if cfg.obs_encoder == "cnn" and cfg.observation_format != "semantic":
         raise ValueError("--obs-encoder cnn requires --observation-format semantic")
     if transfer_components and not cfg.init_checkpoint:
@@ -4280,6 +4714,7 @@ def main() -> None:
 
     set_global_seeds(cfg.seed)
     rng = np.random.default_rng(cfg.seed)
+    probe_rng = np.random.default_rng(cfg.seed + 9173)
     device = resolve_device(cfg.device)
     env_kwargs = parse_env_kwargs(cfg.env_kwargs_json)
     if cfg.sensor_range > 0:
@@ -4291,6 +4726,9 @@ def main() -> None:
         cfg.team_count,
         cfg.auto_scale_request_queue,
     )
+    if "rware-multiteam" in cfg.env_id:
+        env_kwargs.update(communication_enabled=cfg.communication_enabled,
+                          communication_topology=cfg.comm_graph_mode)
 
     env = make_env(
         cfg.env_id,
@@ -4359,6 +4797,8 @@ def main() -> None:
         join_threshold=graph_join_threshold,
         leave_threshold=graph_leave_threshold,
         dwell_updates=cfg.graph_dwell_updates,
+        min_policy_information=cfg.pgct_min_policy_information,
+        gate_style=cfg.pgct_gate_style,
     )
 
     actor_h = torch.zeros((n_agents, cfg.recurrent_hidden_dim), device=device)
@@ -4417,8 +4857,8 @@ def main() -> None:
         )
 
     for iteration in range(1, total_iterations + 1):
-        if cfg.graph_mode == "oracle":
-            graph_weights = oracle_weight_matrix(env, n_agents)
+        if cfg.graph_mode in {"oracle", "wrong", "unrestricted"}:
+            graph_weights = baseline_weight_matrix(env, n_agents, cfg.graph_mode)
             adj = (graph_weights >= cfg.edge_threshold).astype(np.float32)
             clusters = clusters_from_adjacency(adj)
         elif cfg.graph_mode == "none":
@@ -4429,7 +4869,7 @@ def main() -> None:
             clusters = graph_estimator.clusters()
             adj = graph_estimator.adjacency()
             graph_weights = graph_estimator.weight_matrix()
-        set_env_training_edges(env, adj)
+        set_env_training_edges(env, communication_weights(cfg, env, graph_estimator, iteration))
 
         rollout, state, rollout_metrics = collect_rollout(
             env,
@@ -4450,21 +4890,18 @@ def main() -> None:
             and cfg.probe_interval > 0
             and iteration % cfg.probe_interval == 0
         ):
-            if cfg.peer_transfer_mode == "pgct" and iteration < cfg.pgct_warmup_updates:
-                probe_metrics = {
-                    "probe_delta": float("nan"),
-                    "pgct_warmup_active": 1.0,
-                }
-            else:
-                probe_metrics, peer_probe_sequences = run_policy_similarity_probe_round(
-                    cfg,
-                    env,
-                    agents,
-                    graph_estimator,
-                    rollout,
-                    device,
-                    rng,
-                )
+            probe_metrics, peer_probe_sequences = run_policy_similarity_probe_round(
+                cfg,
+                env,
+                agents,
+                graph_estimator,
+                rollout,
+                device,
+                probe_rng,
+            )
+            probe_metrics["pgct_warmup_active"] = float(
+                iteration < cfg.pgct_warmup_updates
+            )
         elif (
             cfg.graph_mode == "influence"
             and cfg.probe_interval > 0
@@ -4487,8 +4924,8 @@ def main() -> None:
         peer_allocation: Optional[np.ndarray] = None
         if cfg.peer_transfer_mode == "pgct":
             warmup_complete = iteration >= cfg.pgct_warmup_updates
-            if cfg.graph_mode == "oracle":
-                pgct_gate = oracle_weight_matrix(env, n_agents)
+            if cfg.graph_mode in {"oracle", "wrong", "unrestricted"}:
+                pgct_gate = baseline_weight_matrix(env, n_agents, cfg.graph_mode)
             elif cfg.graph_mode == "none":
                 pgct_gate = np.zeros((n_agents, n_agents), dtype=np.float32)
             else:
@@ -4499,7 +4936,9 @@ def main() -> None:
                     gate_power=cfg.pgct_gate_power,
                 )
             unmasked_pgct_gate = pgct_gate.copy()
-            if cfg.comm_graph_mode == "physical":
+            if cfg.pgct_peer_loss_coef <= 0:
+                pgct_gate.fill(0)
+            if cfg.comm_graph_mode in {"physical", "none"}:
                 current_neighbor_adj = communication_adjacency(
                     env,
                     n_agents,
@@ -4509,12 +4948,11 @@ def main() -> None:
                     pgct_gate,
                     current_neighbor_adj,
                 )
-                probe_metrics["pgct_stale_gate_edges_suppressed"] = float(
+                probe_metrics["pgct_stale_gate_arcs_suppressed"] = float(
                     (
                         np.sum(unmasked_pgct_gate > 0.0)
                         - np.sum(pgct_gate > 0.0)
                     )
-                    / 2.0
                 )
             allocation_denom = (
                 np.sum(pgct_gate, axis=1, keepdims=True)
@@ -4528,7 +4966,7 @@ def main() -> None:
                     cfg,
                     env,
                     rollout,
-                    rng,
+                    probe_rng,
                 )
                 probe_metrics.update(
                     {
@@ -4545,7 +4983,7 @@ def main() -> None:
                 )
             probe_metrics.update(
                 {
-                    "pgct_gate_edges": float(np.sum(pgct_gate > 0.0) / 2.0),
+                    "pgct_gate_arcs": float(np.sum(pgct_gate > 0.0)),
                     "pgct_allocation_mass": float(np.sum(peer_allocation)),
                 }
             )
@@ -4559,8 +4997,8 @@ def main() -> None:
                     gap_direction="same_minus_cross",
                 )
             )
-        elif cfg.graph_mode == "oracle":
-            consensus_weights = oracle_weight_matrix(env, n_agents)
+        elif cfg.graph_mode in {"oracle", "wrong", "unrestricted"}:
+            consensus_weights = baseline_weight_matrix(env, n_agents, cfg.graph_mode)
             log_clusters = clusters_from_adjacency(
                 (consensus_weights >= cfg.edge_threshold).astype(np.float32)
             )
@@ -4572,6 +5010,17 @@ def main() -> None:
             consensus_weights = graph_estimator.consensus_weight_matrix()
             log_clusters = graph_estimator.clusters()
 
+        if not cfg.communication_enabled or cfg.peer_transfer_mode == "none":
+            consensus_weights = np.zeros((n_agents, n_agents), dtype=np.float32)
+        else:
+            consensus_weights = mask_gate_by_current_neighbors(
+                consensus_weights, communication_adjacency(env, n_agents, cfg.comm_graph_mode))
+        set_env_training_edges(env, communication_weights(cfg, env, graph_estimator, iteration))
+
+        canonical_bank = getattr(env.unwrapped, "_pgct_canonical_bank", None)
+        if canonical_bank is not None and not (save_dir / "canonical_probes.pt").exists():
+            torch.save({"sequences": canonical_bank[0].cpu(), "metadata": canonical_bank[1],
+                        "seed": cfg.seed + 9173}, save_dir / "canonical_probes.pt")
         update_metrics = update_ippo(
             agents,
             optimizers,
@@ -4601,6 +5050,27 @@ def main() -> None:
         elapsed = max(time.time() - start_time, 1e-6)
         sps = env_steps / elapsed
         log_adj = (consensus_weights > 0.0).astype(np.float32)
+        # Record actual optimization-time directed transfers independently of W&B.
+        active_transfer = consensus_weights.copy()
+        if cfg.peer_transfer_mode == "consensus" and consensus_updates == 0:
+            active_transfer.fill(0)
+        with (save_dir / "communication.jsonl").open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps({
+                "env_steps": env_steps, "matrix_convention": "receiver_sender",
+                "enabled": cfg.communication_enabled,
+                "available": communication_adjacency(env, n_agents, cfg.comm_graph_mode).tolist(),
+                "transfer_weights": active_transfer.tolist(),
+                "policy_information": graph_estimator.policy_information.tolist(),
+                "directed_probe_counts": graph_estimator.distance_count.tolist(),
+                "policy_distance_ema": graph_estimator.distance_ema.tolist(),
+                "gate_requirements": {
+                    "gate_style": cfg.pgct_gate_style,
+                    "warmup_updates": cfg.pgct_warmup_updates,
+                    "min_directed_probe_count": cfg.min_probe_count,
+                    "min_policy_information": cfg.pgct_min_policy_information,
+                    "max_policy_distance": cfg.pgct_distance_threshold,
+                },
+            }) + "\n")
         wandb_payload: Dict[str, object] = {
             "train/env_steps": float(env_steps),
             "train/sps": float(sps),
@@ -4684,10 +5154,17 @@ def main() -> None:
                 f"ret_conv={rollout_metrics['return_conversion_rate']:.2f} "
                 f"ret_dist={rollout_metrics['mean_return_home_distance']:.1f} "
                 f"move={rollout_metrics['position_change_rate']:.2f} "
+                f"agent_move={format_agent_rates(rollout_metrics, 'position_change_rate', n_agents)} "
+                f"agent_deliv={format_agent_rates(rollout_metrics, 'delivery_count', n_agents)} "
+                f"fail_fwd={rollout_metrics['failed_forward_rate']:.3f} "
+                f"block={rollout_metrics['blocking_agent_rate']:.3f} "
+                f"dead={rollout_metrics['deadlock_agent_rate']:.3f} "
+                f"wall_fwd={rollout_metrics['wall_action_forward_rate']:.2f} "
+                f"wall_pfwd={rollout_metrics['wall_action_forward_probability']:.2f} "
                 f"turn={rollout_metrics['action_left_rate'] + rollout_metrics['action_right_rate']:.2f} "
                 f"sim={probe_metrics.get('policy_similarity', float('nan')):.3f} "
                 f"delta={probe_metrics.get('probe_delta', float('nan')):.4f} "
-                f"edges={np.sum(log_adj) / 2:.0f} "
+                f"arcs={np.sum(log_adj):.0f} "
                 f"consensus_edges={consensus_updates} "
                 f"clusters={format_clusters(log_clusters)}"
             )
@@ -4712,9 +5189,12 @@ def main() -> None:
                 seed=cfg.seed + 5_000_000 + env_steps,
                 render_episodes=cfg.eval_render_episodes if cfg.render_eval else 0,
                 render_mode=cfg.eval_render_mode,
-                collect_video=collect_eval_video,
+                collect_video=collect_eval_video or cfg.save_eval_video,
                 use_action_mask=cfg.action_mask,
+                communication_gate=communication_weights(cfg, env, graph_estimator, iteration),
             )
+            if cfg.save_eval_video and eval_video is not None:
+                save_local_eval_video(eval_video, save_dir / "videos" / f"eval_{iteration:05d}.mp4", cfg.eval_render_fps)
             if eval_metrics:
                 print(
                     f"eval iter={iteration:04d} "
@@ -4733,6 +5213,13 @@ def main() -> None:
                     f"ret_conv={eval_metrics['eval_return_conversion_rate']:.2f} "
                     f"ret_dist={eval_metrics['eval_mean_return_home_distance']:.1f} "
                     f"move={eval_metrics['eval_position_change_rate']:.2f} "
+                    f"agent_move={format_eval_agent_rates(eval_metrics, 'position_change_rate', n_agents)} "
+                    f"agent_deliv={format_eval_agent_rates(eval_metrics, 'delivery_count', n_agents)} "
+                    f"fail_fwd={eval_metrics['eval_failed_forward_rate']:.3f} "
+                    f"block={eval_metrics['eval_blocking_agent_rate']:.3f} "
+                    f"dead={eval_metrics['eval_deadlock_agent_rate']:.3f} "
+                    f"wall_fwd={eval_metrics['eval_wall_action_forward_rate']:.2f} "
+                    f"wall_pfwd={eval_metrics['eval_wall_action_forward_probability']:.2f} "
                     f"turn={eval_metrics['eval_action_left_rate'] + eval_metrics['eval_action_right_rate']:.2f}"
                 )
                 eval_payload: Dict[str, object] = eval_payload_from_metrics(
@@ -4771,9 +5258,14 @@ def main() -> None:
         seed=cfg.seed + 5_000_000,
         render_episodes=cfg.eval_render_episodes if cfg.render_eval else 0,
         render_mode=cfg.eval_render_mode,
-        collect_video=cfg.track and cfg.wandb_log_eval_video,
+        collect_video=cfg.save_eval_video or (cfg.track and cfg.wandb_log_eval_video),
         use_action_mask=cfg.action_mask,
+        communication_gate=communication_weights(cfg, env, graph_estimator, total_iterations),
     )
+    if cfg.save_eval_video and eval_video is not None:
+        save_local_eval_video(eval_video, save_dir / "videos" / "final.mp4", cfg.eval_render_fps)
+    with (save_dir / "final_eval_metrics.json").open("w", encoding="utf-8") as stream:
+        json.dump(eval_metrics, stream, indent=2)
     if eval_metrics:
         print(
             f"eval_return={eval_metrics['eval_return']:.3f} "
@@ -4791,6 +5283,13 @@ def main() -> None:
             f"eval_ret_conv={eval_metrics['eval_return_conversion_rate']:.2f} "
             f"eval_ret_dist={eval_metrics['eval_mean_return_home_distance']:.1f} "
             f"eval_move={eval_metrics['eval_position_change_rate']:.2f} "
+            f"eval_agent_move={format_eval_agent_rates(eval_metrics, 'position_change_rate', n_agents)} "
+            f"eval_agent_deliv={format_eval_agent_rates(eval_metrics, 'delivery_count', n_agents)} "
+            f"eval_fail_fwd={eval_metrics['eval_failed_forward_rate']:.3f} "
+            f"eval_block={eval_metrics['eval_blocking_agent_rate']:.3f} "
+            f"eval_dead={eval_metrics['eval_deadlock_agent_rate']:.3f} "
+            f"eval_wall_fwd={eval_metrics['eval_wall_action_forward_rate']:.2f} "
+            f"eval_wall_pfwd={eval_metrics['eval_wall_action_forward_probability']:.2f} "
             f"eval_turn={eval_metrics['eval_action_left_rate'] + eval_metrics['eval_action_right_rate']:.2f}"
         )
         final_eval_payload: Dict[str, object] = eval_payload_from_metrics(
