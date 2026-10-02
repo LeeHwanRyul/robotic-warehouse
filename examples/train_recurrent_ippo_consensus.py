@@ -4656,6 +4656,11 @@ def resolve_device(value: str) -> torch.device:
 def main() -> None:
     args = build_arg_parser().parse_args()
     cfg = TrainConfig(**vars(args))
+    train(cfg)
+
+
+def train(cfg: TrainConfig) -> None:
+    """Run one training stage from a fully specified configuration."""
     enforce_communication_config(cfg)
     if cfg.graph_mode == "probe":
         cfg.graph_mode = "policy"

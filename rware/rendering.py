@@ -218,15 +218,20 @@ class Viewer(object):
 
     def _side_panel_layout_metrics(self, r):
         view_size = 2 * int(r) + 1
-        cell = self.mini_grid_size
-        block_w = view_size * cell
-        block_h = view_size * cell
-
         title_h = 24
         agent_label_h = 14
         view_label_h = 12
         view_gap = 8
         row_gap = 28
+        # Fit both local views even when a single agent block would otherwise
+        # exceed the fixed map height (e.g. tiny warehouse, sensor range 5).
+        available_grid_h = (
+            self.map_height - 2 * self.side_panel_padding - title_h
+            - agent_label_h - 2 * view_label_h - view_gap - row_gap
+        )
+        cell = max(1, min(self.mini_grid_size, available_grid_h // (2 * view_size)))
+        block_w = view_size * cell
+        block_h = view_size * cell
         agent_block_h = (
             agent_label_h
             + view_label_h
