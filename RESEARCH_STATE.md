@@ -1,8 +1,27 @@
 # PGCT 현재 연구 상태
 
 기록 작성: 2026-10-13, Codex. 최신 정량 분석 스냅샷: **2026-10-13 14:37 KST**. 진행 중인 실험은 이후 달라질 수 있다.
+갱신: 2026-10-13 저녁(정확한 시각 미기록), Claude Code — 실행 상태 재확인, 연구 주제 재정립, 실험 A 결과 추가.
 
-## 한눈에 보는 현재 판단
+## 2026-10-13 갱신 — 연구 주제 재정립과 실험 A (Claude Code)
+
+- **실행 상태(실측)**: 현재 실행 중인 학습 없음. E3 PGCT는 18:21 KST Windows 재부팅(시스템 이벤트 로그상 정상 재부팅)으로 2,855,936 step에서 중단. 마지막 checkpoint 2,764,800 step(`checkpoint_02700.pt`), 마지막 평가 2,816,000 step delivery 28.6. 매니페스트에는 여전히 `running`, E3 IPPO는 `planned`. 기존 실행기는 이어 학습을 지원하지 않는다. 재개 여부는 사용자 결정 대기.
+- **연구 주제**: 사용자 원래 목표 A(국소 행동으로 잠재 팀 추론 → 팀 내부 critic consensus)를 본 연구로 확정. 팀 무관 JS 기반 transfer(B)는 별도 가설. D17.
+- **실험 A(고정 모델, 학습 없음)**: 국소 pickup·delivery 목격 증거는 6개 모델 모두 같은/다른 팀 AUROC 1.00, 1 episode(500 step) 내 팀원 식별. 현재 canonical JS는 AUROC .375–.50, 팀원 식별률 0–.25(우연 .33). 정책 이력 JS는 E1 계열 .27–.29, E2 .81–.85.
+- **핵심 문제**: 같은 팀 critic이 더 호환된다는 전제가 이 환경에서 성립하지 않았다. E1 계열 blend gain AUROC .25–.33(같은 팀이 더 나쁨), E2는 모든 쌍의 이득이 0 근처. 관측이 자기 팀 기준이고 individual reward에서 팀원이 같은 요청을 두고 경쟁하기 때문이라는 해석은 가설이다. E11.
+- **실험 B 실행기**: oracle/all/wrong 분기 구현·smoke 완료, 장기 학습 미실행. E12.
+- **본 학습 진행 중(E17)**: 사용자가 2026-10-13 20:23:52에 `scratch_20261013_202352_stage2`(IPPO/PGCT/Oracle/All, 15M, seed1)를 시작했다. 약 7일 예상이다. 4–5M 점검은 무중단, 읽기 전용으로 한다.
+- **핵심 비교 계획(D22, E16)**
+  - IPPO/PGCT/Oracle/All from-scratch 15M, seed1, 병렬로 진행하고 4–5M에 무중단 점검한다.
+  - GPU 실제 설정에서 4 mode 초기 파라미터 일치를 확인했다.
+  - 정확한 resume은 불가능하다(트레이너에 재개 경로 없음).
+  - 본 학습은 사용자 실행/승인 대기다.
+  - 목적은 critic 공유 효과 검증이며 잠재 팀 발견 해결이 아니다. 팀 목표 대칭성을 해석에 반영한다.
+- **W&B·비교군 추가(D21, E15)**: from-scratch 파이프라인에 W&B(Step=env steps)와 MAPPO/SePS/HetDPS mode를 추가했고 smoke까지 완료했다. 기본 예산은 Stage1 4M, Stage2 15M이다. 본 학습은 사용자 승인 대기다.
+- **처음부터 학습으로 전환(D20, E14)**: 사용자는 커리큘럼 기반 기존 데이터를 신뢰하기 어렵다고 판단했다. IPPO/PGCT/oracle/all/wrong 무작위 초기화 실행기를 구현하고 smoke까지 완료했다. 권장 첫 실행은 IPPO+oracle 2M pilot이며, 사용자가 직접 실행한다. Stage03 기반 oracle(D18)은 후순위다.
+- **외부 검토 반영(D18)**: 국소 증거는 관측자 자신의 관측 채널과 100% 일치했다(E13, 2,146건). 상대 팀 ID는 미사용이고, 이웃 식별 가정이 남는다. 짧은 matched-prefix oracle 실행을 지원한다. 권장 다음 실행은 E1 oracle 1,024,000 step(약 7–8시간, 사용자 승인 대기)이다. team reward는 공통 사전학습부터 재정렬이 필요하고, 관측이 팀 기준인 한 팀별 critic 함수가 갈라지지 않을 수 있다(가설).
+
+## 한눈에 보는 현재 판단 (14:37 스냅샷 기준, Codex)
 
 **E1에서 PGCT의 평가 학습곡선 평균에 약 2.9% 이득 신호가 있지만, 최종 성능·critic 정확도·안정성 개선은 입증되지 않았다. E2의 on/off 성능은 거의 같고, E3는 대조군이 아직 없다.**
 
@@ -32,7 +51,7 @@ JS 수학 계산의 오류보다는 **어떤 probe/관측 분포에서 측정한
 | E1 11×10 IPPO seed1 | 4,000,768 | 44.65 | 43.70 | 완료 |
 | E2 16×16 PGCT seed1 | 4,000,768 | 37.85 | 36.15 | 완료 |
 | E2 16×16 IPPO seed1 | 4,000,768 | 38.20 | 36.85 | 완료 |
-| E3 20×22 PGCT seed1 | 2,252,800 | 27.25 | 25.95 | 진행 중; 평가는 2,201,600 step |
+| E3 20×22 PGCT seed1 | 2,252,800 | 27.25 | 25.95 | 14:37 기준 진행 중. **18:21 재부팅으로 2,855,936 step에서 중단**(최종 평가 2,816,000 step 28.6) |
 | E3 20×22 IPPO seed1 | — | — | — | 시작 전 |
 
 Home ratio .5, 요청 4개, LR1e-4, entropy .02. Task 평가는 공통 seeds5,000,001–5,000,020의 deterministic masked policy, 20×500이다. 구체적인 결과·분모는 `EXPERIMENTS.md`를 확인한다.
@@ -54,6 +73,8 @@ E2의 완료 로그 3,907 update에서 최대 연결 성분 크기 3이 661회(�
 공통 이동 probe의 비중이 원인이라는 가설은 아직 검증하지 않았다. 원래 팀 발견 목표와 전이 유익성 목표를 구분하고, 사후 목표 변경으로 기존 실패를 정당화하지 않는다. 근거: `output/learning_review_20261013/e2_components.json`, `DECISIONS.md` D12, `EXPERIMENTS.md` E09.
 
 ## 다음 단계와 미해결 질문
+
+- (2026-10-13 Claude Code) 사용자 결정 대기: ① E3 재개 여부(권장: 재개하지 않음), ② 실험 B를 현재 환경에서 확인용으로 실행할지(oracle+all, E1 seed1, 약 60시간), ③ 팀 소속이 value를 바꾸는 조건(예: 기존 옵션 `team_reward_mode="team"`)을 먼저 정할지. 아래 기존 항목 중 JS gate·맵 확장·seed 반복은 방향 B 검증이므로 A보다 후순위다.
 
 - 새 환경 요청 수행(2026-10-13): 원래 코드와 별도 환경ID/실행기로control·detour(기본)·bottleneck·dock4단계 장애물/배송 대기 환경을 추가했다. 관련32tests와8조건64-step CPU smoke를 완료했다. 추가4M 장기 학습은 시작하지 않았다. `examples/HARD_RWARE_EXPERIMENTS.md`, `EXPERIMENTS.md` E10, `output/hard_rware_validation_20261013/validation.json` 참고. 기존 E1/E2/E3의 정량 스냅샷과 혼합하지 않는다.
 - 방향별 전이 유익성(2026-10-13 검토): 대칭 JS와 `C(receiver←donor)`를 구분한다. 현재 allocation도 수신자별 정규화로 비대칭일 수 있으나 방향별 유익성은 측정하지 않는다. 동일 receiver 조건에서 peer 유무를 비교하는 검증 surrogate가 후속 아이디어이며 아직 실행하지 않았다.
