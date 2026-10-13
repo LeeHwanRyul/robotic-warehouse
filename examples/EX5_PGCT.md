@@ -44,12 +44,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
 
 비교군: `-Run oracle`(같은 objective), `-Run wrong`(다른 objective), `-Run unrestricted`(모든 peer), `-Run none`(독립). Oracle/Wrong만 팀 라벨을 사용하며, 학습용 PGCT는 이를 읽어 gate를 만들지 않는다. Oracle/Wrong/unrestricted는 warm-up 없이 해당 전달 관계를 사용한다. `policy-physical`은 별도의 거리 제한 ablation이다. `-Run all`은 여섯 실험을 순차 실행한다.
 
-처음에는 두 팀의 선반을 정확히 반반 공간 분리하고, 이후 소유권을 점차 섞는 실행:
-
-```powershell
-.\examples\run_semantic_cnn_mixing_curriculum.ps1 -Run policy-complete -AgentCounts 4,8,16 -ShelfHomeRatios 1.0,0.875,0.75,0.5 -TotalTimestepsPerStage 5000000 -Seed 1
-.\examples\run_semantic_cnn_mixing_curriculum.ps1 -Run none -AgentCounts 4,8,16 -ShelfHomeRatios 1.0,0.875,0.75,0.5 -TotalTimestepsPerStage 5000000 -Seed 1
-```
+선반 소유권을 점차 섞는 커리큘럼은 [PGCT_PHYSICAL_MIXING_CURRICULUM.md](PGCT_PHYSICAL_MIXING_CURRICULUM.md)의 실행기를 사용한다. 과거 일반 혼합 커리큘럼 실행기(`run_semantic_cnn_mixing_curriculum.ps1`)는 2026-10-13 사용자 요청으로 삭제했으며 git 이력에 남아 있다.
 
 각 stage는 고정 예산이며 이전 actor/critic을 가져오고 optimizer는 새로 시작한다. 성능 기준 자동 승급은 아니다. 새 bank는 stage별로 생성된다.
 

@@ -7,21 +7,16 @@
 | `train_recurrent_ippo_consensus.py` | 공통 recurrent IPPO 학습기와 PGCT probe / critic transfer 구현 |
 | `run_semantic_cnn_marl_pgct_from_scratch.ps1` | IPPO(`-Run none`), PGCT 및 oracle/wrong/unrestricted 비교군 실행; 체크포인트 초기화도 지원 |
 | `env_kwargs_stage2_pgct_success_unblock_zones_individual.json` | 현재 실행기의 기본 환경·보상 설정 |
-| `run_semantic_cnn_mixing_curriculum.ps1` | 에이전트 수와 shelf 혼합률을 지정하는 커리큘럼; `-Run none` 지원 |
 | `train_pgct_physical_mixing_curriculum.py` | 9700 모델에서 시작하는 PGCT 물리 이웃·shelf 혼합 커리큘럼 |
 | `run_pgct_09700_physical_mixing_curriculum.ps1` | 위 PGCT 커리큘럼의 PowerShell 실행기 |
-| `eval_checkpoint_generalization.py` | 학습 없이 저장된 모델의 에이전트 수, 맵 크기, shelf 혼합률 변경 평가 |
-| `run_pgct_09700_generalization.ps1` | 에이전트 수·혼합률 평가 실행기 |
-| `run_pgct_09700_map_variants.ps1` | 맵 크기 변경 평가 실행기 |
 | `train_pgct_spatial_experiments.py` / `run_pgct_spatial_experiments.ps1` | 같은 초기 모델에서 3개 맵 × PGCT/IPPO를 독립적으로 실제 학습하는 비교 실험 |
 | `train_pgct_transfer_experiments.py` / `run_pgct_transfer_experiments.ps1` | 기존 맵에서 Stage03 이후 on/off, 전달량 통제 random donor, 3–4 제거와 probe/critic 진단 |
 | `plot_pgct_probe_charts.py` | 공통 probe 행동확률·pair별 JS 색상 차트와 학습 곡선; 기존 로그도 읽기 전용으로 지원 |
 | `diagnose_pgct_rollout_compatibility.py` | 저장된 공통 observation 이력을 replay하여 recurrent policy JS와 critic 예측 차이를 추론만으로 비교 |
-| `visualize_graph_connectivity.py` | 그래프 연결 시각화 |
-| `create_probe_ppt_images.py` | Probe 설명·발표 자료용 이미지 생성 |
+| `train_hard_rware_experiments.py` / `run_hard_rware_experiments.ps1` | 장애물·배송 제약 환경의 분리 실행기 ([HARD_RWARE_EXPERIMENTS.md](HARD_RWARE_EXPERIMENTS.md)) |
 
 공통 환경, semantic 관측, canonical probe 생성 코드는 `../rware/`에 있고,
-회귀 검증은 `../tests/`에 있습니다.
+회귀 검증은 `../tests/`에 있습니다. 잠재 팀 추론·oracle consensus 검증은 `../latent_team/`에 분리돼 있습니다.
 
 ## IPPO 비교용 사전학습
 
@@ -47,20 +42,6 @@ Optimizer와 rollout 상태까지 복원하는 완전한 resume은 아닙니다.
 [PGCT_PHYSICAL_MIXING_CURRICULUM.md](PGCT_PHYSICAL_MIXING_CURRICULUM.md)에 있습니다.
 이 실행기의 단계별 기본 예산은 1M / 2M / 3M / 4M이며 학습률은 `1e-4`입니다.
 
-IPPO를 포함한 일반 혼합 커리큘럼은 아래 실행기를 사용합니다.
-
-```powershell
-.\examples\run_semantic_cnn_mixing_curriculum.ps1 `
-  -Run none -AgentCounts 4 -ShelfHomeRatios 1.0,0.875,0.75,0.5 `
-  -TotalTimestepsPerStage 5000000 -Seed 1
-```
-
-일반 혼합 커리큘럼은 첫 단계부터 새 모델을 학습하고 모든 단계에 같은 예산을 적용합니다.
-9700부터 시작한 물리 이웃 PGCT 커리큘럼과 비교할 때는 초기 모델, 단계별 예산,
-학습률 등 조건을 별도로 맞춰야 합니다.
-
-맵 크기 확장과 저장된 모델의 일반화 평가는
-[PGCT_09700_GENERALIZATION.md](PGCT_09700_GENERALIZATION.md)를 참고하세요.
 공간 확대 **학습** 비교는 [PGCT_SPATIAL_EXPERIMENTS.md](PGCT_SPATIAL_EXPERIMENTS.md)의
 `run_pgct_spatial_experiments.ps1`을 사용합니다. 기본은 stage03에서 시작하는 6개 비교 실험입니다.
 알고리즘과 문서의 대응은 [EX5_PGCT.md](EX5_PGCT.md)에 정리돼 있습니다.
@@ -89,3 +70,13 @@ $env:WANDB_DISABLE_GIT = "true"
 중복 실행기와 그 전용 설정, 루트의 임시 랜덤 실행 예제를 제거했습니다.
 공통 학습기, 환경 구현, 현재 IPPO/PGCT 실행기와 설정, 맵 평가·probe 도구,
 테스트, 기존 체크포인트와 실험 로그는 보존했습니다.
+
+2026-10-13 사용자 요청으로 다음을 추가 삭제했습니다(git 추적 파일은 이력에 남음).
+- 끝난 09700 일반화 평가 도구: `eval_checkpoint_generalization.py`와 테스트, ps1 2개, 문서
+- 일반 혼합 커리큘럼 실행기
+- 그래프 시각화·PPT 이미지 도구
+- 대체된 FoV·CNN 검토 문서
+- 미사용 `Success_checkpoint/`, 임시 프레임·영상 분석 폴더
+- 자동 생성 `generated_configs/`
+
+`runs/`의 과거 결과는 보존했습니다.

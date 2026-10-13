@@ -130,6 +130,97 @@
 - 실제 수행 범위: CPU smoke와 frozen 평가만 실행했다. 새로운4M 장기 학습은 시작하지 않았으며 기존 학습을 중단하지 않았다.
 - 근거: `examples/HARD_RWARE_EXPERIMENTS.md`, `runs/hard_smoke_20261013_final/experiment.json`, `output/hard_rware_validation_20261013/validation.json`, `frozen_difficulty_pilot_v2.json`.
 
+## D17. 연구 주제를 원래 목표 A로 재정립하고 먼저 검증한다 — 2026-10-13 Claude Code
+
+- 사용자 질문: (1) 현재 진행 중인 PGCT를 계속 돌리는 것이 맞는가? (2) 사용자가 원한 것 — 행동 유사도로 팀을 찾고 팀끼리 critic consensus — 과 assistant가 원한 것 — 다른 팀이라도 행동이 비슷하면 critic transfer — 중 무엇이 맞는가? GPT 답변(A 복귀, 실험 A·B 분리 검증)을 붙여넣었다. 지시: "현재 코드를 최대한 수정하지 않고, 새로운 파일, 폴더를 만들어서 GPT의 대답처럼 먼저 확인". 붙여넣은 답변은 참고 자료로 취급했다.
+- 판단: 연구 주제는 A다. B는 cross-team gate 결과를 해석하는 과정에서 생긴 이탈이며 별도 가설로만 둔다(D02·D12와 일치).
+- 실행 상태(실측): 실행 중인 학습이 없다. E3 PGCT는 18:21 재부팅으로 2,855,936 step에서 중단됐다. GPT의 "E3 마무리" 제안과 달리 재개하지 않을 것을 권장한다. 근거: 기존 실행기는 이어 학습을 지원하지 않고, E3는 방향 B의 JS gate 실험이며, 실험 A에서 그 신호가 팀을 구분하지 못했다. 최종 결정은 사용자에게 남겼다.
+- 코드 확인: 관측의 `requested_shelf`, `relevant_goal`, `self_carrying_requested_shelf`는 관측자 자신의 팀 기준이다. E1 목표 칸은 (4,10)/(5,10), E2는 (7,15)/(8,15)로 인접한다. home .5에서는 선반 소유가 섞이고 보상은 individual이다. 따라서 공통 입력 JS는 구조적으로 팀을 거의 구분하지 못한다는 가설을 세웠다.
+- 실험 A 결과(E11): 국소 pickup·delivery 증거는 팀을 완벽히 구분했다. canonical JS는 우연 수준 이하였다. 같은 팀 critic이 더 호환된다는 전제는 E1 계열에서 반대 방향(같은 팀이 덜 호환)이었고, E2에서는 차이가 없었다.
+- 수정된 판단: "행동으로 팀을 찾는다"는 가능하다. 다만 신호는 응답 유사성이 아니라 "누구의 요청·목표를 수행하는가"라는 결과 수준 증거여야 한다. 현재 환경에서는 팀을 정확히 찾아도 critic consensus 이점의 근거가 약하다. 팀 소속이 value를 실제로 바꾸는 조건(팀 보상 공유 등)이 필요할 수 있다. 이는 제안이며 환경·보상을 변경하지 않았다.
+- 수행 범위: 새 `latent_team/` 폴더와 테스트를 추가했다. 기존 trainer·환경·실행기·probe·gate는 변경하지 않았다. 학습 중단·재시작이나 장기 학습은 하지 않았다. 실험 B 장기 실행은 사용자 승인 대기.
+
+## D18. 외부 검토(GPT) 반영: 소규모 oracle 우선, team reward는 재정렬 후 — 2026-10-13 Claude Code
+
+- 사용자 제공: 실험 A 결과에 대한 GPT 검토를 별도 지시문 없이 붙여넣었다. 요지는 다음과 같다. E3 재개 안 함, 60시간 B 보류, 기존 환경에서 소규모 oracle/IPPO 비교, team reward의 학습 목표 변화 분석 후 공통 사전학습부터 재정렬, 국소 증거의 팀 ID 간접 사용 여부와 blend gain 정의 확인. "같은 팀"의 정의(공통 목표 팀 vs 협력적 목표 팀)도 제기했다. 참고 자료로 취급했고 학습은 시작하지 않았다.
+- 동의:
+  - 국소 증거로 팀을 구분한 것은 "정보가 존재한다"는 확인일 뿐 잠재 팀 추론 알고리즘의 성과가 아니다.
+  - 정적 blend gain만으로 학습 중 consensus의 효과를 판정할 수 없다.
+  - team reward는 Stage03에서 바로 이어가지 않는다.
+  - 출발점은 공통 목표 팀(같은 팀 보상)으로 둔다.
+- 확인 결과(E13): 국소 증거 판정 2,146건이 관측자 자신의 관측 채널과 100% 일치했다. 상대 팀 ID는 쓰지 않는다. 다만 관측의 agent는 익명이므로 이웃 식별 가정이 남는다.
+- 추가 판단(가설): 관측이 자기 팀 기준이고 두 팀 과제가 대칭이면, team reward를 써도 같은 입력에서 두 팀 critic 함수는 비슷할 수 있다. 같은 팀 consensus가 다른 팀보다 원리적으로 유리하려면 절대 기준 관측(팀 색)이나 비대칭 과제가 필요할 수 있다. 현재 env에 그런 관측 옵션은 없다.
+- 준비: 학습률 schedule이 없음을 확인했다. 이에 따라 실험 B를 짧은 예산으로 실행하면 기존 run과 matched prefix로 비교하도록 보완했다(1,024,000 step oracle 약 7–8시간). **실행은 사용자 승인 대기.**
+
+## D19. 미사용 파일 정리 — 2026-10-13 Claude Code
+
+- 사용자 요청: "examples 폴더라든가 … 기존에 사용하고 안쓴 쓸모없는 파일들이 많은데 정리좀 해줘". 참조 검색 후 세 묶음을 제시했고, 사용자가 ①임시·캐시, ②대체된 문서, ③끝난 과거 실험 도구를 모두 선택했다(archive 이동은 선택하지 않음).
+- 삭제(git 추적 파일은 이력에 남음):
+  - ① `.codex-video-frames/`(34), `tmp_video_analysis/`(3), `tmp/fov_on_video_frame.png`, `tmp/.cache/`, `examples/generated_configs/`, `__pycache__`, 빈 `.agents/`
+  - ② `examples/FOV_COMMUNICATION.md`, `examples/CNN_TRAINING_REVIEW_20260916.md`
+  - ③ `examples/eval_checkpoint_generalization.py`와 `tests/test_generalization_graph.py`, `run_pgct_09700_generalization.ps1`, `run_pgct_09700_map_variants.ps1`, `PGCT_09700_GENERALIZATION.md`, `visualize_graph_connectivity.py`, `create_probe_ppt_images.py`, `run_semantic_cnn_mixing_curriculum.ps1`, `Success_checkpoint/checkpoint_Fixed_1.pt`
+- 유지:
+  - 현재 실험·테스트·노트가 참조하는 파일 전부
+  - `tmp/pdfs`(ex4/ex5 원문 추출, 선택지에 없었음)
+  - `runs/`·`output/`의 모든 과거 결과
+  - `.pytest-tmp`·`.pytest_cache`(권한 거부로 삭제 불가)
+- 수정: `examples/README.md` 목록·정리 범위, `examples/EX5_PGCT.md`의 삭제된 실행기 명령을 안내문으로 교체했다. 전체 pytest 178 passed(삭제 전 대비 generalization 테스트 3개 제외). 커밋은 하지 않았다.
+- 범위: 이번 삭제 허가는 위 목록에 한정한다. 이후의 포괄적 삭제 허가로 해석하지 않는다.
+
+## D20. 커리큘럼 없이 처음부터 학습하는 비교로 전환 — 2026-10-13 Claude Code
+
+- 사용자 판단: 기존 실험은 커리큘럼으로 초기 학습량이 너무 많아 데이터를 믿기 어렵다. IPPO, PGCT, 기타 MARL을 처음부터 학습시켜 데이터를 얻어야 한다. 각각 커리큘럼 없이 학습하는 코드를 구현하고 실행 코드를 알려 달라. 함께 붙여넣은 GPT 답변(초기 학습 문제와 팀 구조 문제의 분리, 무작위 초기화 pilot 우선, AUC·도달 step·seed 분산, 사전학습 비용 포함)은 참고 자료다.
+- 판단: 기존 Stage03 분기 결과(E1/E2, 실험 B 계획)는 "충분히 학습한 뒤 추가하는 공유"의 조건부 효과다. 연구 질문인 학습 과정의 효율과 다르다는 데 동의한다. Stage03 기반 1M oracle 실험(D18)의 우선순위를 낮춘다.
+- 구현: `latent_team/train_from_scratch.py`, `run_from_scratch.ps1`. mode는 ippo/pgct/oracle/all/wrong이다. 같은 seed의 모든 mode가 같은 무작위 초기 가중치와 같은 probe bank를 쓰며, donor 집합만 다르다. 학습률·엔트로피는 이전 성공한 from-scratch run 설정(2e-4/.05)을 쓰고, 기본 예산은 10M이다.
+- "기타 MARL"은 현재 트레이너가 지원하는 critic 공유 변형(oracle/all/wrong)으로 구현했다. MAPPO(중앙 critic)나 parameter sharing 같은 표준 baseline은 트레이너에 없어 구현하지 않았다(추가 여부는 사용자 결정).
+- 주의(가설): 현재 환경은 팀 과제가 대칭이고 관측이 팀 기준이다. 처음부터 학습해도 oracle이 all보다 유리하다는 보장은 없다. 학습 시점의 문제와 팀 구조의 문제는 별개다.
+- 실행: smoke만 실행했다. 장기 학습은 시작하지 않았다.
+
+## D21. W&B 관리, 학습 구간 재설정, MAPPO/SePS/HetDPS 비교군 — 2026-10-13 Claude Code
+
+- 사용자 요청:
+  - W&B 기반 관리(기존 로깅 재사용, 알고리즘별 run, Step=env steps, -Detach 확인)
+  - 학습 구간 재검토(기억: pickup 2–4M, 완수 약 9M; 15–20M 필요성)
+  - SePS·HetDPS·MAPPO 추가(핵심 구조 유지, 차이·비용 기록, MAPPO는 추가 정보 비교군)
+  - 본 학습은 승인 없이 시작하지 않음
+  - 구현 순서는 MAPPO → SePS → HetDPS
+- 판단·근거(학습 구간)
+  - 로컬 W&B 기록(이전 from-scratch PGCT, home 1.0, complete graph): pickup 약 1.5M, delivery 1.7M, eval 20 이상 2.3M, 40 이상 3.3M, 6–9M에 56–60.
+  - 사용자의 기억과 다르며, 현재 home .5 조건의 기록은 없다.
+  - 2M에서 실패를 판단하지 않는다.
+  - 기본값을 Stage1 4M pilot, Stage2 15M으로 바꿨다(20M은 seed 반복 비용을 고려해 보류, 옵션으로 가능).
+  - Stage1은 초기화가 아니라 같은 mode의 앞 구간이므로 `-SkipStage1`을 제공한다.
+- 구현 판단: baseline의 학습기는 공통 recurrent PPO로 통일하고 각 알고리즘의 고유 구조를 구현했다.
+  - MAPPO: 중앙 critic·ValueNorm·Huber
+  - SePS: VAE·KMeans·선택적 공유
+  - HetDPS: BiHierarchicalVAE·W2·AP·동적 분할/병합
+  - SePS의 원 학습기 A2C, HetDPS의 MLP/MAPSNet, 병렬 env 수는 차이로 기록했다.
+  - scikit-learn/scipy가 환경에 없어 패키지를 설치하지 않고 numpy로 재구현했다.
+- 범위: 기존 IPPO/PGCT/oracle/all 코드와 trainer는 변경하지 않았다. smoke와 비용 micro-benchmark만 실행했고 본 학습은 시작하지 않았다. 상세는 `latent_team/BASELINES.md`, E15.
+
+## D22. 핵심 비교를 IPPO/PGCT/Oracle/All 4개로 한정, resume 불가 시 무중단 운영 — 2026-10-13 Claude Code
+
+- **사용자 결정**
+  - 7개 동시 본 학습은 하지 않는다. IPPO·PGCT·Oracle·All-peer from-scratch 비교부터 한다.
+  - 15M을 기본으로 하되 4–5M에 학습 가능성과 추세를 점검한다. 2M 성능으로 실패를 판단하지 않는다.
+  - MAPPO·SePS·HetDPS 구현은 보존하고, 핵심 비교 이후에 학습한다.
+- **실험 목적(사용자 강조)**: 무작위 초기화에서 critic 공유가 학습 효율을 개선하는지, 특히 정확한 팀 정보를 쓰는 Oracle이 IPPO·All-peer보다 유리한지 검증한다.
+  - 이 실험은 **critic 공유 효과의 검증이지 잠재 팀 발견 문제의 해결이 아니다.**
+  - 결과 해석에서는 현재 환경의 팀 목표 대칭성(팀 기준 관측, 인접 목표, individual reward)을 고려한다.
+- **resume 검증 결과: 정확한 재개는 불가능하다.**
+  - checkpoint에는 agents, optimizers, graph(EMA 등 통계), iteration/env_steps, config가 저장된다.
+  - 그러나 트레이너에 재개 경로가 없다. `init_checkpoint`는 network 가중치만 복사하고 optimizer와 graph 통계는 새로 시작한다(`transfer_checkpoint_to_agents` 문서).
+  - update 카운터는 1부터 다시 시작한다.
+  - Python/NumPy/Torch 전역 RNG, train() 내부의 rng/probe_rng Generator, env 상태, 진행 중 episode·hidden state는 저장되지 않는다.
+  - 트레이너를 수정하지 않는 원칙과 정확한 재현성을 위해 resume을 새로 구현하지 않는다.
+  - 따라서 4–5M 점검은 **학습을 멈추지 않고** W&B, metrics.jsonl, checkpoint를 읽기 전용으로 확인한다.
+  - 중단되면(재부팅 등) 해당 run은 처음부터 다시 실행하는 것이 원칙이다. 근사 재개는 별도 조건으로만 기록한다.
+- **실행 계획(승인 대기)**
+  - `run_scratch_pipeline.ps1 -Detach -Track -SkipStage1 -Stage2Seeds 1`
+  - 기본 Stage2 mode는 ippo/pgct/oracle/all, 15M, 병렬 4 프로세스, 스레드 4.
+  - 예상: update당 약 39초, 15M ≈ 14,649 update ≈ 약 6.6–7일. 4–5M 도달은 약 1.9–2.4일 뒤.
+  - seed 2·3 반복은 seed1 결과를 본 뒤 결정한다.
+
 ## 새 항목 작성 양식
 
 `ID / 날짜·작성 도구 / 사용자 질문·요청 / 관측 / 판단과 근거 / 수행 또는 제안 / 변경된 이전 판단 / 미해결 질문` 중 해당 내용을 적는다.
