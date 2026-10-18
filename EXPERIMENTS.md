@@ -330,6 +330,214 @@ AUROC는 같은 팀 쌍 점수가 높을수록 1이다. 팀원식별은 각 agen
   - CPU 59%, 프로세스당 RAM 약 2.1GB, 여유 RAM 10GB.
 - **해석**: 사용률 수치는 GPU가 작은 kernel을 실행 중인 시간 비율이다. 전력·온도로 보면 하드웨어 부하는 낮다. 6–7일 연속 실행의 주요 위험은 GPU 마모가 아니라 재부팅·절전·정전, 다른 GPU 작업과의 경합이다.
 
+## E17 추가 — Windows Update 재부팅으로 중단 (2026-10-15 Claude Code 실측)
+
+- 2026-10-15 00:59 KST에 MoUsoCoreWorker가, 01:01 KST에 TrustedInstaller가 "운영 체제: 업그레이드/서비스 팩" 사유로 재시작을 실행했다(System 이벤트 1074/109). 원인은 Windows Update다.
+- 마지막 metrics: ippo 2,487,296, pgct 2,502,656, oracle 2,471,936, all 2,455,552 step(00:58–00:59 기록). 마지막 checkpoint는 4개 모두 `checkpoint_02250.pt`(2,304,000 step)이고 job_status는 `running`으로 남아 있다.
+- 최근 평가 delivery(약 2.4–2.46M): IPPO 2.9, PGCT 2.2, Oracle 10.7, All 4.2. 단일 seed이고 중단된 초기 구간의 값이다.
+- 폴더와 로그는 보존했다. 정확한 재개는 불가능하다(D22).
+
+## E18. E17 중단 시점(약 2.5M) 학습 현황 분석 — 2026-10-15 Claude Code, 읽기 전용
+
+- **코드·산출물**: `output/scratch_review_20261015/`(analyze.py, analysis.json, curves.png, REPORT.md, reference_home1_pgct_eval.json).
+- **조건**: E17 seed1. 공통 평가 구간 51,200–2,406,400 step. deterministic 20×500 평가. 인접 평가 간 차이의 std는 .2–.8 delivery.
+- **평가 delivery**(마지막 3회 평균 / AUC per step)
+  - IPPO 3.10 / .41, PGCT 1.92 / .26, **Oracle 9.98 / 1.28**, All 3.45 / .69.
+  - 요청 pickup은 20.7 / 2.2 / 10.4 / 15.2, return은 1.12 / .98 / 9.43 / 1.37.
+- **onset**(3점 평균): pickup≥1은 IPPO 1.89M, PGCT 1.89M, Oracle 1.64M, All 1.79M. delivery≥1은 2.05 / 2.15 / 1.89 / 1.89M. delivery≥5는 Oracle만 2.25M.
+- 모든 mode에서 0.5–1.5M은 보상이 거의 없는 정체 구간이었다.
+- **agent별 delivery**(마지막 3회): IPPO [1.63, 1.47, 0, 0], PGCT [1.92, 0, 0, 0], Oracle [0, 9.98, 0, 0], All [0, 2.12, 1.33, 0]. 성능이 1–2명에게서만 나온다. **Oracle 우위는 Agent2 한 명의 선행 학습이며, 단일 seed로는 효과에 귀속할 수 없다.**
+- **전이**(warm-up 후 전이 update 비율 / same / cross arc-update)
+  - PGCT 77% / 3,496 / 5,590, Oracle 76% / 4,688 / 0, All 99% / 5,526 / 10,524. IPPO는 0이다.
+  - PGCT gate의 pair별 개방 횟수는 같은 팀(826, 922)과 다른 팀(500–886)이 비슷해, 초기에 팀을 구분하지 않았다.
+- **학습 지표**(1.5M 이후): entropy IPPO .83, PGCT .83, Oracle .76, All .89. value loss .002–.006. approx_kl 약 .003. 속도 job당 약 24 step/s.
+- **참고**(조건 다름): 이전 home 1.0·complete graph PGCT는 2.4M에 delivery 26.7이었다.
+- **한계**: seed 1개, 초기 구간, 중단된 run이다. 결론이 아니라 방향 관찰이다.
+
+## E19. 신규 from-scratch 재실행 발견 — 2026-10-15 11:49 KST Codex, 읽기 전용 확인
+
+- **경로:** `runs/scratch_20261015_093349_stage2/experiment.json`. 이번 작업 이전에 생성된 실행이다. 본 turn에서는 학습을 시작·중단·재시작하지 않았다.
+- **조건:** E1 11×10, home.5, individual reward, 4agents/2teams, sensor/communication range5, IPPO/PGCT/Oracle/All, training seed1, 무작위 초기화(`init_checkpoint=""`), 요청 예산15,000,000/실제 반올림15,000,576 env steps.
+- **진행 스냅샷(11:49):** IPPO200,704 / PGCT198,656 / Oracle196,608 / All199,680 env steps. `job_status.json`은 모두running이며 metrics 수정시각은11:48:58–11:49:28이다. 반복 확인에서 로그가 증가했다. CIM 프로세스 조회는 접근 제한으로 확인하지 못했다.
+- **초기화:** 4mode의 `initial_weights_sha256.txt`가 모두 `f78ec390e0fad60c9bee9ea045525a79befbd71357f41235f04d61356b91c7e3`다.
+- **평가:** 네 mode 모두 최근153,600step, delivery0.0/episode. deterministic masked, reset seeds5,000,001–5,000,020, 20×500. 초기 단계의 결과이며 실패로 판정하지 않는다.
+- **E17과의 관계:** 중단된2.5M run의 resume이 아니라 같은 seed1의 처음부터 재실행이다. 독립training seed 추가나 이전곡선의 연장으로 세지 않는다.
+- **근거:** `output/ijcai_review_20261015/live_run_snapshot.json`, 해당 run의 manifest/metrics/status/초기hash. 논문용 해석과 후속 제안은 같은 폴더REPORT 및 D23에 기록했다. 새 실험·추가 평가·tests는 실행하지 않았다.
+
+## E20. 환경·canonical probe 시각화 — 2026-10-15 Claude Code, 읽기 전용
+
+- **환경 그림**: `output/env_view_20261015/environment_seed5000001.png`. 실행 중 run의 환경 설정으로 그린 전체 맵, Agent1·2의 11×11 팀 기준 관측. 팀 목표가 (4,10)/(5,10)으로 인접한다.
+- **probe 그림**: `output/env_view_20261015/probes/`(official 렌더링 48장과 contact sheet, decoded_bank.png, probes.csv, README.md).
+- **bank 검증**: 저장소 builder로 같은 env 상태(reset seed 1)와 rng(seed+9173)로 다시 만든 bank가 run의 `canonical_bank_e1_s1.pt`와 완전히 같다.
+- **중복 구조**: 고유 입력 26/48.
+  - `dual_requested_*` 7종이 팀마다 하나의 입력으로 겹친다(8개 × 2그룹).
+  - goal_pair·goal_zone_pair·lane_choice가 팀마다 하나로 겹친다(4개 × 2그룹).
+  - neutral은 2개 × 2그룹이다.
+- **겹침 원인(추정)**: 해독한 시야에서 요청 선반이 대부분 가장자리에 1개만 보인다. 서로 다른 두 번째 선반 위치가 11×11 관측 밖이라는 추정이며, builder 코드로는 확인하지 않았다.
+- **상태 구성**: 빈 손 38, 요청 선반 적재 10(반납 단계 4). 요청되지 않은 선반을 든 상태는 0이다.
+
+## E21. runs/ 정리 — 2026-10-15 Claude Code (사용자 승인 삭제)
+
+- **승인 범위**: 사용자가 ① smoke·dry·실패 시험, ② 삭제된 09700 일반화 도구의 옛 평가 결과, ③ 중단된 `scratch_20261013_202352_stage2`의 checkpoint, ④ 큰 결과 폴더의 중간 checkpoint를 모두 선택했다. 500개 항목 27.26GB를 삭제해 runs/는 35GB에서 7.4GB가 됐다.
+- **삭제 목록**: `output/cleanup_20261015/removed_manifest.json`.
+- **위 E-항목에서 이제 존재하지 않는 경로**
+  - ①: `sp_smoke/sp_check/sp_dry_20261008*`, `tr_*_20261008*`, `hard_smoke_20261013_v1~v3`, `lt_b_smoke_20261013`, `baseline_smoke_*_20261013`, `scratch_smoke*_20261013`, `scratch_pipeline_smoke_*`, `wbsmoke_20261013_*`, `verify_realcfg_20261013`, `communication_smoke`, `ex5_smoke`, `fov_passive`, `generalization_*`, `pgct09700_curriculum_*`, `pgct_09700_graph_smoke`
+  - ②: `pgct_09700_generalization_6_8_seed12345`, `pgct_09700_maps_6_8_seed12345`
+  - 해당 항목의 수치 기록은 노트에 남아 있지만, 원본 smoke 출력은 재검사할 수 없다.
+- **유지한 것**
+  - 실행 중인 `scratch_20261015_093349_stage2` 전체(삭제 후에도 4개 run 모두 로그 갱신 확인)
+  - `sp_20261008`, 커리큘럼, `recurrent_ippo_consensus`, `hard_smoke_20261013_final`의 모든 로그와 final.pt
+  - final.pt가 없는 run의 마지막 checkpoint: E3 `checkpoint_02700`, IPPO 사전학습 `checkpoint_00900`, PGCT 9700 사전학습 `checkpoint_09700`
+  - E05가 참조하는 E1 PGCT `checkpoint_00600`
+  - 중단된 run의 metrics/transfer/spatial 로그(E18 분석 근거)
+- **영향**: 중간 시점 checkpoint를 재평가할 수 없게 됐다(예: Stage·E1/E2의 50k–3.9M 중간 모델). 전체 tests는 삭제 후 182 passed.
+
+## E22. probe bank v2 / E1-F 구현 검증 — 2026-10-15 Claude Code, 구현·smoke만
+
+- **bank**: `output/env_view_20261015/probes_v2/`(e1f·e1 각 gate 48 + transfer 64, 역할 내 중복 0, 검증 거부 0).
+  - transfer 구성: 탐색 14, 목표 보임 16, 목표 안 보임 16, 반납 16, 목표 도착 2.
+  - gate 위치는 모두 y≤4로, 어느 목표도 시야 밖이다.
+- **smoke** `runs/smoke_e1f_v2_20261015`: e1f × ippo/pgct/oracle/all 64-step 모두 complete. PGCT의 `canonical_probes.pt`는 v2 gate와 같다. PGCT/Oracle/All의 증류 입력은 64개다(`distill_probe_count`).
+- **tests**: E1-F 모서리 목표에서 적재 agent가 전진하면 delivery event가 발생함을 확인했다. 전체 183 passed.
+- **한계**: E1-F 학습 정책에서 same/cross JS 판별력, Oracle 이득은 아직 미측정이다.
+
+## E19 추가 — HANDOFF 이후 진행 상태 재확인 (2026-10-15 13:17 KST Codex)
+
+- **같은 실행의 후속 확인:** `runs/scratch_20261015_093349_stage2`, E1 11×10/home .5/individual reward/4 agents·2 teams, 무작위 초기화 training seed 1, 기존 canonical bank, 15M 목표. IPPO 321,536 / PGCT 316,416 / Oracle 314,368 / All 318,464 env steps. 로그 시각 13:16:39–13:17:05, 네 status는 running, 속도 23.49–24.04 step/s다. 최초 확인보다 로그가 증가했고 초기 hash 4개도 동일하다.
+- **최근 평가:** 네 mode 공통 307,200 step, deterministic masked 20×500, reset seeds 5,000,001–5,000,020. 요청 pickup/delivery/return 각 0.0이다. 초기 단계이며 성능 판정을 하지 않는다. 마지막 checkpoint는 모두 00250(256,000 step)이다.
+- **실행 건강 확인:** .err.log의 Traceback/Error/Exception/failed 일치 0건. Gymnasium 정밀도·reward 형식 경고와 W&B 안내가 있다. 이는 전체 학습 정확성의 독립 검증은 아니다.
+- **별도 구현 확인:** E22 seed 1의 64-step smoke 4 mode가 complete이며 PGCT/Oracle의 transfer.jsonl에서 distill_probe_count 64와 Oracle cross arc 0을 확인했다. v2 summary는 gate 48/transfer 64, 고유 입력 검증 통과다. 장기 E1-F/v2 실행은 발견되지 않았다. 183 tests 통과는 Claude 기록이고 재실행하지 않았다.
+- **산출물/범위:** `output/status_review_20261015_131716/snapshot.json`. HANDOFF·RESEARCH_STATE·대화 원문을 갱신하고 통합 사본을 재생성한다. 새 학습·추가 평가·tests·알고리즘 변경·삭제·학습 중단은 하지 않았다.
+
+## E23. 기존 E1 모델의 probe별 팀 구분 시각화 — 2026-10-15 Claude Code, 읽기 전용
+
+- **코드·산출물**: `output/probe_team_check_20261015/`(probe_team_check.py, js_matrices.png, same_vs_cross.png, results.json).
+- **모델**(고정, 실행 전후 hash 동일, CPU): Stage03 final(3.0M), Stage04 PGCT final(4.0M), sp_20261008 E1 IPPO/PGCT final(4.0M). 모두 E1 11×10이고 목표가 인접한다. Stage03 계열 seed 1이라 독립 반복이 아니다.
+- **bank**
+  - canonical 48: `sp_20261008/e1_pgct_s1/canonical_probes.pt`, 고유 26개.
+  - v2 e1 gate 48: `output/env_view_20261015/probes_v2/probe_bank_v2_e1_s1.pt`.
+  - v2 transfer 부분집합: 적재+목표 보임 18 / 적재+목표 비가시 16 / 빈손 탐색 14.
+- **조건**: 같은 입력, zero hidden, unmasked, seq 1(PGCT 규칙), 자연로그 JS. 같은 팀 = A1–A3, A2–A4.
+- **결과**
+  - 20개(모델×bank) 모두 같은 팀 평균 JS > 다른 팀 평균 JS.
+    - canonical: 같은 팀 .36–.42 / 다른 팀 .30–.36.
+    - v2 gate: 같은 팀 .24–.28 / 다른 팀 .18–.22.
+  - 쌍 단위 AUROC는 0–.62(대부분 .12–.38)다.
+  - 가장 가까운 상대가 팀원인 agent는 4명 중 0–2명이다(우연 기대치 1.33).
+  - 가장 가까운 쌍은 대부분 A3–A4(다른 팀)다.
+  - 목표 보임과 목표 비가시 부분집합 사이에 뚜렷한 차이가 없다.
+- **해석·한계**
+  - E1에서는 bank 종류와 관계없이 actor 응답 JS로 팀이 구분되지 않는다. E11의 canonical 결과와 같은 방향이다.
+  - v2 gate의 E1-F 효과는 E1-F 학습 모델이 없어 미검증이다.
+  - E1 모델의 v2 gate 같은 팀 JS(.24–.28)가 0.12를 넘는다. threshold 우려(D31)의 참고 근거다.
+
+## E23 추가 — agent별 행동 특성 (2026-10-15 Claude Code, 읽기 전용)
+
+- **산출물**: `output/probe_team_check_20261015/agent_profiles.json`.
+- **최종 평가 delivery**(A1/A2/A3/A4)
+  - Stage04: 197/168/287/293
+  - E1 IPPO: 186/162/267/278
+  - E1 PGCT: 174/170/273/270
+  - Stage03: 237/250/225/285
+- **canonical probe 응답**
+  - A3·A4는 Forward 위주다(A4 .81–.94, A3 .64–.75). A1·A2는 회전 비중이 크다(A2 Right .47–.57).
+  - argmax 일치율: A3–A4 .69–.81, A1–A2 .08–.17, 같은 팀 쌍 .40–.58.
+  - entropy는 .04–.3 nats로 정책이 거의 결정적이다.
+- **해석**: E1 정책 유사도는 팀이 아니라 성능·행동 습관 묶음({A3,A4} / {A1,A2})을 따른다. Stage03에서도 A3–A4가 가까워 성능만으로는 다 설명되지 않는다.
+- **가설(미검증)**: v2 gate에서 같은 팀원의 회전 방향 습관이 반대다(A1 Right, A3 Left). 공간 분담 가능성이며, 공간 기록은 미확인이다.
+
+## E24. 현재 from-scratch run 약 6.4M 중간 분석 — 2026-10-18 Claude Code, 읽기 전용
+
+- **대상**: `runs/scratch_20261015_093349_stage2`. E1 11×10, home .5, individual reward, seed 1, 무작위 초기화, IPPO/PGCT/Oracle/All, 각 15M 목표. 4개 모두 running이다.
+- **진행(12:23 KST)**: IPPO 6,553,600 / PGCT 6,467,584 / Oracle 6,414,336 / All 6,502,400 step. job당 약 24 step/s, 15M까지 약 4.0–4.2일 남았다. run 6.4GB, C: 여유 1.5TB.
+- **코드·산출물**: `output/scratch_review_20261018/`(analyze.py, analysis.json, overview.png). checkpoint probe JS는 CPU에서 고정 모델로 계산했다.
+- **평가**(deterministic masked 20×500, reset seeds 5,000,001–5,000,020)
+
+| mode | 배송 시작 ≥1(3점 평균) | 최근 5회 평균 delivery | 6.4M까지 AUC/step | agent별 최근 5회 delivery |
+|---|---|---|---|---|
+| IPPO | 2.05M | 24.3 | 10.4 | 12.3 / 11.9 / 0 / 0 |
+| PGCT | 1.79M | 27.9 | 11.7 | 10.5 / 12.3 / 5.1 / 0 |
+| Oracle | 1.64M | 32.3 | 13.2 | 11.0 / 11.3 / 9.9 / 0 |
+| All | 3.99M | 20.4 | 3.7 | 4.3 / 7.0 / 5.3 / 3.8 |
+
+  - 인접 평가 차이의 표준편차는 1.5–1.9다.
+  - All은 늦게 시작했지만 4명 모두 배송하며, 현재 가장 가파르게 오른다. 요청 pickup은 52로 가장 많다.
+- **실제 전이**(transfer.jsonl, warm-up 이후)
+  - Oracle: 같은 팀(1–3, 2–4)만, update의 약 78–86%에서 전이했다.
+  - All: 거의 모든 update에서 모든 쌍에 전이했다.
+  - PGCT: 0–2M에는 모든 쌍에 열렸다(전이 update 87–95%). 2–3M 55%, 3–6M 12–33%로 줄었고, 같은 팀 arc는 3M 이후 거의 0이다. 남은 연결은 3–4와 1–2이며, 6M 이후에는 1–2 위주로 66%까지 늘었다.
+- **canonical probe JS**(checkpoint 1M 간격): 3M 이후 대부분 시점·mode에서 같은 팀 평균 > 다른 팀 평균이다. Oracle 같은 팀 .29–.36이다. 2M 이후 같은 팀·다른 팀 평균이 모두 0.12를 넘는다.
+- **E17과 비교**(같은 seed·초기 가중치)
+  - IPPO는 2.46M까지 평가값이 완전히 같다.
+  - PGCT/Oracle/All은 첫 평가 차이가 1.48/1.38/1.59M에서 생긴다. 원인은 미확인이며, 전이 경로의 비결정적 연산을 추정한다.
+  - All 배송 시작이 1.79M → 3.99M으로 달라졌다. Oracle은 두 번 모두 A2가 먼저 배웠다.
+  - 단일 seed 결과의 불안정성을 보여주는 근거다.
+- **한계**: seed 1, 15M 중간 시점이다. 우열이나 효과 귀속 결론이 아니다.
+
+## E25. E1-F 실험 실행기(pilot/main)·팀 보상 옵션·팀 분화 분석 도구 — 2026-10-18 Claude Code, 구현·smoke만
+
+- **구현**
+  - `train_from_scratch.py`에 `--team-reward individual|team`을 추가했다. 기본값 individual은 이전과 동일하며, 환경의 기존 `team_reward_mode`를 쓴다. team이면 배송·반납 보상이 팀 전원에게 가고 shaping은 개인으로 남는다. job 이름에 `_teamrew`가 붙는다.
+  - `run_from_scratch.ps1`과 `run_scratch_pipeline.ps1`에 `-TeamReward`를 전달한다.
+  - 새 `run_e1f.ps1`
+    - pilot: IPPO individual/team, 5M.
+    - main: 4 mode(canonical bank) + PGCT(v2 bank), 10M.
+  - 새 `e1f_team_divergence.py`: checkpoint별로 배송 중 왼쪽 이동 비율(agent별)과 v2 gate·canonical 같은 팀/다른 팀 JS를 계산한다.
+- **검증**
+  - smoke `runs/smoke_e1f_runner_20261018_{pilot_individual,pilot_team,main_canonical,main_v2}`: 7 job 모두 complete.
+  - checkpoint의 effective_env_kwargs에 team_reward_mode와 goals [(0,10)],[(9,10)]이 들어 있다.
+  - canonical probe builder가 E1-F 목표를 사용한다.
+  - 분석 도구 검증: E1 `scratch_20261015_093349_stage2/e1_oracle_s1/checkpoint_06000`에서 2×500 rollout, left_share A1–A3 .56/.47/.51(A4는 운반 없음). 출력은 scratchpad에만 남겼다.
+  - tests 2개를 추가해 전체 185 passed.
+- **미실행**: E1-F pilot/main 본 학습은 사용자 승인 대기다.
+- **관련 관측(E24 보완, 현재 E1 run 6.4M, 읽기 전용)**
+  - 최근 5회 평가 agent별 pickup: IPPO A3·A4 0(이동 비율 .37/.40), PGCT·Oracle A4 0.
+  - 평가에서 episode당 pickup 1 이상이 된 시점: IPPO 1.89/2.05M/없음/없음, PGCT 2.46/1.43/5.27M/없음, Oracle 2.30/1.38/2.30M/없음, All 5.22/3.99/1.38/5.07M.
+
+## E24 추가 — 사용자 요청으로 6.5M에서 중지 (2026-10-18 12:43 KST Claude Code)
+
+- 사용자 지시("현재 실험은 중지하고, 다음 실험으로 run_e1f main 진행")에 따라 pipeline PowerShell(PID 21540)과 학습 4개(PID 27140/23940/2980/15160)를 종료했다. PID는 pipeline 로그 기록과 일치함을 확인했다.
+- 종료 직전 상태
+  - 마지막 env_steps: IPPO 6,579,200 / PGCT 6,498,304 / Oracle 6,444,032 / All 6,528,000.
+  - 마지막 checkpoint는 모두 `checkpoint_06250.pt`다.
+  - `final.pt`는 없고, `job_status.json`은 trainer가 쓴 running 그대로다. W&B run은 중단 상태로 남는다.
+- 중지 기록 파일: `runs/scratch_20261015_093349_stage2/STOPPED_BY_USER.txt`. 로그·checkpoint는 모두 보존했다.
+- 보완(같은 날, 사용자가 W&B running 표시 지적): 강제 종료한 학습 프로세스의 자식 wandb-core 4개와 wandb-xpu 4개가 남아 heartbeat를 보내고 있었다. 부모 PID로 확인해 종료했다. 이후 W&B에서는 crashed로 표시된다. 앞으로 학습을 중지할 때는 프로세스 트리 전체를 종료한다.
+- W&B API 확인: 마지막 heartbeat는 13:45:30–33 KST이고, 13:55:14 KST에 4개 모두 `crashed`로 바뀌었다.
+- 이 run은 15M 계획 대비 약 6.5M에서 끝난 seed 1 결과다. D36의 10M 고정 예산과도 다르므로, 이후 seed 반복 시 예산을 다시 정해야 한다.
+
+## E26. E1-F main 본 학습 — 2026-10-18 12:43 KST 시작(사용자 승인, Claude Code 실행), 진행 중
+
+- **명령**: `.\latent_team\run_e1f.ps1 -Phase main -Track`
+- **조건**
+  - E1 맵, 팀 목표 (0,10)/(9,10), home .5, individual reward, seed 1, 무작위 초기화, 10,000,384 step, W&B 프로젝트 rware-from-scratch.
+  - `runs/e1f_20261018_124343_main_canonical`: IPPO/PGCT/Oracle/All, canonical bank.
+  - `runs/e1f_20261018_124343_main_v2`: PGCT, probe bank v2.
+  - 병렬 5개 프로세스, 스레드 4.
+- **분석**(읽기 전용, 언제든): `python latent_team/e1f_team_divergence.py --run runs/e1f_20261018_124343_main_canonical`(main_v2도 동일).
+- **참고**: E1-F pilot(IPPO 개인/팀 보상)은 실행하지 않고 바로 main을 시작했다. 팀 보상 비교는 미실행이다.
+- **시작 확인(12:45)**: 5개 모두 첫 update를 기록했고 Traceback은 없다. job당 약 20–21 step/s로, 10M까지 약 5.5일(10월 24일 무렵) 예상이다. 초기 hash는 5개 모두 `f78ec390…`로 E1 seed 1과 같다.
+
+## E27. E1 run(6.4M 중단) 논문용 자료 — 2026-10-18 Claude Code, 읽기 전용
+
+- **폴더**: `output/paper_e1_20261018/`
+  - `make_paper_materials.py`
+  - `figures/`: fig1–4, figA1 (PDF+PNG)
+  - `tables/`: table1–3, tableA1 (LaTeX)
+  - `RESULTS_DRAFT.md`(영어 문단·캡션·한계), `README.md`(한국어, 주장 가능 범위), `numbers.json`
+- **조건**: `runs/scratch_20261015_093349_stage2`, seed 1, 공통 평가 구간 0–6.4M. 평가는 51,200 step 간격, deterministic 20×500, reset seeds 5,000,001–5,000,020.
+- **결과(seed 1)**
+  - 배송 시작(≥1, 3점 평균): IPPO 2.05 / PGCT 1.79 / Oracle 1.64 / All 3.99M.
+  - 학습 중 평균 배송: 10.4 / 11.7 / 13.2 / 3.7.
+  - 최근 5회 배송: 23.2±1.1 / 27.3±1.4 / 32.2±1.7 / 19.4±1.6.
+  - 배운 agent: 2 / 3 / 3 / 4.
+  - PGCT 전이 update 비율은 91% → 37% → 29%이고, 같은 팀 arc/update는 1.86 → 0.10 → 0.03이다.
+  - probe JS 같은 팀/다른 팀(6M): IPPO .27/.18, PGCT .26/.19, Oracle .29/.23, All .15/.14.
+- **정정**
+  - E17 All의 delivery 시작은 1.89M이다(E18과 동일). E24·T034에 쓴 1.79M은 pickup 기준과 혼동한 값이다.
+  - E24 표의 최근 5회 값은 각 run의 마지막 평가 기준이다. E27은 공통 구간 6.4M 기준이라 IPPO 값 등이 조금 다르다.
+- **한계**: seed 1개, 미수렴, E1의 팀 대칭성. 성능 우열·공유 범위 가설은 다중 seed 전까지 관찰로만 쓴다.
+
 ## 새 실험 기록 양식
 
 ID / 실제 실행 날짜·작성 도구 / 상태(계획·smoke·진행·완료·실패) / 초기 모델 / 환경·training seed·예산 / 평가 seed·정책·horizon / 결과 / 비교 기준·한계 / 원본 경로 / 재현 명령.

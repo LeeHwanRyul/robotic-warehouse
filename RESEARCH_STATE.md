@@ -1,5 +1,53 @@
 # PGCT 현재 연구 상태
 
+## 최신 확인 — 2026-10-18 14:30 KST, Claude Code
+
+- **새 세션 시작점**: `HANDOFF.md`(전면 갱신)를 먼저 읽는다.
+- **현재 실행**: E1-F main 5개(`runs/e1f_20261018_124343_main_canonical` 4 mode, `..._main_v2` PGCT-v2)가 running이다. 각 약 0.12M step, job당 약 19 step/s이고 10M까지 약 6일(10월 24일 무렵) 예상이다(E26).
+- **연구 방향**: PGCT는 원 기획(잠재 팀 발견 + 팀 내 critic 전이)이다(D41). E1은 팀 대칭 대조 조건, E1-F가 본 시험이다.
+- **논문**: 방법 논문 초안 v0.2 `output/ijcai_method_paper_20261018/`(D42). E1-F와 다중 seed는 TBD다.
+- **대기(사용자 승인 필요)**: E1 seed 2·3(10M), E1-F 팀 보상 pilot, 개입 실험, 비결정성 조사, baseline 3종.
+
+## 최신 확인 — 2026-10-18 12:44 KST, Claude Code
+
+- **E1 run 중지(사용자 지시)**: `scratch_20261015_093349_stage2`를 약 6.5M에서 중지했다. 마지막 checkpoint는 06250이다(E24 추가).
+- **현재 실행**: E1-F main `runs/e1f_20261018_124343_main_canonical`(IPPO/PGCT/Oracle/All, canonical)과 `..._main_v2`(PGCT, v2). individual reward, seed 1, 10M, 5 프로세스, W&B. 초기 hash는 E1 seed 1과 동일하다(E26).
+- **다음**: 2M 무렵부터 `e1f_team_divergence.py`로 팀 분화와 probe JS를 확인한다. E1 seed 2·3, 팀 보상 pilot은 미실행이다.
+
+## 최신 확인 — 2026-10-18 12:23 KST, Claude Code
+
+- **현재 실행**: `scratch_20261015_093349_stage2` 4개 running, 약 6.4–6.55M step. 15M까지 약 4일 남아 10월 22일 무렵 종료 예상이다.
+- **중간 성능(seed 1, 평가 최근 5회 delivery)**: Oracle 32.3 > PGCT 27.9 > IPPO 24.3 > All 20.4.
+  - All은 배송 시작이 3.99M으로 늦었지만, 4명 모두 배송하며 가장 가파르게 오른다.
+  - IPPO/PGCT/Oracle은 A4 배송이 0이다.
+- **PGCT 전이**: 2M 이후 같은 팀 전이가 거의 사라졌고, 다른 팀 1–2·3–4 연결만 남았다.
+- **재현성**: 같은 seed의 E17과 비교하면 IPPO는 완전히 재현됐다. 전이 mode는 1.4–1.6M에서 갈라졌고, All 시작 시점이 2M 차이 난다. 다중 seed가 필요하다(E24).
+- **대기**: 15M 완료 후 seed 2·3, E1-F IPPO 시험 등은 사용자 결정 대기다.
+
+## 최신 확인 — 2026-10-15 13:17 KST, Codex
+
+- **읽기 전용 점검:** HANDOFF와 D24–D30/E20–E22, 현재 manifest/metrics/status/초기 hash/오류 로그, E1-F/v2 smoke 산출물을 대조했다. 기존 E1/canonical, home .5, individual reward, training seed 1, from-scratch 15M 비교가 진행 중이다. IPPO 321,536 / PGCT 316,416 / Oracle 314,368 / All 318,464 env steps이며 로그가 증가한다. 속도는 23.49–24.04 step/s다.
+- **최근 평가:** 공통 307,200 step, deterministic masked, reset seeds 5,000,001–5,000,020, 20×500에서 요청 pickup/delivery/return 모두 0이다. 초기 구간으로 성공·실패나 mode 우열을 판정하지 않는다. 네 run의 마지막 checkpoint는 00250(256,000 step)이다. 오류 로그는 Gymnasium 경고/W&B 안내이며 Traceback 등 치명 오류 문자열은 발견하지 못했다.
+- **Claude 추가 작업 확인:** E1-F 목표 분리와 gate 48/transfer 64의 v2 bank 옵션, seed 1 각 64-step smoke 완료 및 실제 distill_probe_count 64를 확인했다. 전체 183 tests 통과는 Claude 기록이며 이번에 재실행하지 않았다. 현재 본 학습은 여전히 E1/canonical이다. E1-F/v2 본 학습·팀 판별력/공유 이득 검증은 미실행이다.
+- **대기/한계:** 4–5M 읽기 전용 점검, 독립 seed 추가와 E1-F/v2 및 MAPPO/SePS/HetDPS 본 학습은 기존 대기 상태다. learned-team online 모드도 미구현이다. E21 정리로 일부 과거 중간 checkpoint/smoke 출력은 없고 주요 로그/final은 보존됐다는 기록을 인계받았다. 이번 점검에서 삭제하지 않았다.
+- **근거:** `output/status_review_20261015_131716/snapshot.json`, HANDOFF 및 EXPERIMENTS E19 추가. 새 학습/평가/tests/학습 코드 변경 없이 상태·대화 기록을 갱신했다.
+
+## 최신 확인 — 2026-10-15 12:49 KST, Claude Code
+
+- **새 세션 시작점**: `HANDOFF.md`가 현재 상태·대기 항목·원칙을 요약한다. 모든 기록을 합친 사본은 `research_archive/RESEARCH_ARCHIVE.md`다(D30).
+- **현재 실행**: `scratch_20261015_093349_stage2` 4개 run running. IPPO 281,600 / PGCT 277,504 / Oracle 275,456 / All 279,552 step, job당 약 24 step/s. 4–5M 읽기 전용 점검 예정(약 10월 17일).
+- **이후 추가 구현(학습 미실행)**: E1-F 환경 변형과 probe bank v2 옵션(D29, E22). 본 학습은 사용자 승인 대기다.
+
+## 최신 확인 — 2026-10-15 11:49 KST, Codex
+
+- **현재 실행(로그 확인):** `runs/scratch_20261015_093349_stage2`의 IPPO/PGCT/Oracle/All, E1 11×10, home .5, individual reward, training seed1, 무작위 초기화, 각 15M 목표. 마지막 env steps는 각각 200,704 / 198,656 / 196,608 / 199,680이다. 상태 파일은 `running`이며 11:48–11:49 로그 갱신을 확인했다. 네 초기 actor+critic hash가 같다. 이번 Codex 작업이 시작한 학습이 아니다.
+- **평가:** 네 mode 모두 최근 153,600 step의 deterministic masked 20×500 평가(reset seeds5,000,001–5,000,020) delivery0.0이다. 초기 구간이므로 성능 판정을 하지 않는다.
+- **이전 실행과 구분:** E17은 약2.5M 중단 run이고 이번 run은 seed1의 처음부터 재실행이다. 정확한 resume이나 독립 seed 추가가 아니다. 아래 과거 항목의 ‘재실행 결정 대기’와 ‘실행 중 없음’은 최신 상태로 읽지 않는다.
+- **논문 분석(제안, 사용자 결정 아님):** 원래 목표인 국소 행동/작업 증거→잠재 팀 추론→critic 공유를 유지한다. 현재 learned-team online 모드는 미구현이고 성능 개선도 미확정이다. 기존 결과는 진단 근거로 쓰며, from-scratch 반복·Oracle/All 비교·online 방법 검증 후 주장을 확정한다.
+- **산출물:** `output/ijcai_review_20261015/REPORT.md`(MD 교차 분석, 주장/증거, IJCAI 구성, 영문 탐색적 초록, 추가 실험 제안), `live_run_snapshot.json`. E19·D23 참고. 새 학습/평가/tests, 알고리즘·환경 변경은 하지 않았다.
+
+아래는 이전 시점의 연구 스냅샷과 판단을 보존한 기록이다.
+
 기록 작성: 2026-10-13, Codex. 최신 정량 분석 스냅샷: **2026-10-13 14:37 KST**. 진행 중인 실험은 이후 달라질 수 있다.
 갱신: 2026-10-13 저녁(정확한 시각 미기록), Claude Code — 실행 상태 재확인, 연구 주제 재정립, 실험 A 결과 추가.
 
@@ -11,6 +59,12 @@
 - **핵심 문제**: 같은 팀 critic이 더 호환된다는 전제가 이 환경에서 성립하지 않았다. E1 계열 blend gain AUROC .25–.33(같은 팀이 더 나쁨), E2는 모든 쌍의 이득이 0 근처. 관측이 자기 팀 기준이고 individual reward에서 팀원이 같은 요청을 두고 경쟁하기 때문이라는 해석은 가설이다. E11.
 - **실험 B 실행기**: oracle/all/wrong 분기 구현·smoke 완료, 장기 학습 미실행. E12.
 - **본 학습 진행 중(E17)**: 사용자가 2026-10-13 20:23:52에 `scratch_20261013_202352_stage2`(IPPO/PGCT/Oracle/All, 15M, seed1)를 시작했다. 약 7일 예상이다. 4–5M 점검은 무중단, 읽기 전용으로 한다.
+- **2026-10-15 중단**: E17이 Windows Update 재부팅(01:01)으로 약 2.46–2.50M step에서 끊겼다. 재개 방식은 사용자 결정 대기다(처음부터 재시작 권장).
+- **2.5M 중단 시점 분석(E18)**
+  - 네 mode 모두 1.6–1.9M부터 학습이 시작됐다.
+  - 2.4M에서 Oracle이 delivery 약 10으로 가장 앞섰지만, 그 성능은 Agent2 한 명에게서 나왔다(seed 1, 귀속 불가).
+  - PGCT gate는 초기에 같은 팀과 다른 팀에 비슷하게 열렸다.
+  - 다음 단계로 재실행 시 seed 2·3을 병행하고, agent별 onset을 관찰할 것을 권장한다.
 - **핵심 비교 계획(D22, E16)**
   - IPPO/PGCT/Oracle/All from-scratch 15M, seed1, 병렬로 진행하고 4–5M에 무중단 점검한다.
   - GPU 실제 설정에서 4 mode 초기 파라미터 일치를 확인했다.

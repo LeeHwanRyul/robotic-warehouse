@@ -15,6 +15,9 @@ param(
   [switch] $Track,
   [string] $WandbProject = "rware-from-scratch",
   [ValidateSet("online", "offline")] [string] $WandbMode = "online",
+  [ValidateSet("e1", "e1f")] [string] $EnvVariant = "e1",
+  [ValidateSet("canonical", "v2")] [string] $ProbeBank = "canonical",
+  [ValidateSet("individual", "team")] [string] $TeamReward = "individual",
   [switch] $Detach,
   [switch] $SmokeTest,
   [string] $Python = "C:\Users\95101\anaconda3\envs\RWARE_MARL\python.exe"
@@ -31,7 +34,7 @@ if ($Detach) {
   $Command = "& '$Self' -Name '$Name' -ThreadsPerJob $ThreadsPerJob -Python '$Python'" +
     " -Stage1Modes $($Stage1Modes -join ',') -Stage1Timesteps $Stage1Timesteps -Stage1Seeds $($Stage1Seeds -join ',')" +
     " -Stage2Modes $($Stage2Modes -join ',') -Stage2Timesteps $Stage2Timesteps -Stage2Seeds $($Stage2Seeds -join ',')" +
-    " -WandbProject '$WandbProject' -WandbMode $WandbMode"
+    " -WandbProject '$WandbProject' -WandbMode $WandbMode -EnvVariant $EnvVariant -ProbeBank $ProbeBank -TeamReward $TeamReward"
   if ($SmokeTest) { $Command += " -SmokeTest" }
   if ($SkipStage1) { $Command += " -SkipStage1" }
   if ($Track) { $Command += " -Track" }
@@ -46,7 +49,8 @@ if ($Detach) {
 }
 
 $Common = @{ Parallel = $true; Wait = $true; ThreadsPerJob = $ThreadsPerJob; Python = $Python; SmokeTest = $SmokeTest;
-             Track = $Track; WandbProject = $WandbProject; WandbMode = $WandbMode }
+             Track = $Track; WandbProject = $WandbProject; WandbMode = $WandbMode; EnvVariant = $EnvVariant;
+             ProbeBank = $ProbeBank; TeamReward = $TeamReward }
 if ($SkipStage1) {
   Write-Host ("[{0}] Stage 1 skipped." -f (Get-Date -Format s))
 } else {
