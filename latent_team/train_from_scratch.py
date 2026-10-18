@@ -53,7 +53,7 @@ THRESHOLDS = [10, 20, 30, 40]
 
 def base_config(reference, map_name, *, seed, timesteps, home_ratio, learning_rate, entropy_coef,
                 save_interval, output, track, save_video, smoke, stage="single", wandb_project="rware-from-scratch",
-                wandb_mode="online", env_variant="e1"):
+                wandb_mode="online", env_variant="e1", team_reward="individual"):
     template = next((j for j in reference["jobs"] if j["map"] == map_name and j["mode"] == "pgct"), None)
     if template is None:
         raise ValueError(f"No PGCT template for map {map_name} in the reference experiment.")
@@ -61,11 +61,12 @@ def base_config(reference, map_name, *, seed, timesteps, home_ratio, learning_ra
     env = json.loads(cfg["env_kwargs_json"])
     env.update(MAPS[map_name], shelf_soft_zone_ratio=home_ratio)
     env.update(P2.ENV_VARIANTS[env_variant])  # e1f: team goals at the two bottom corners
+    env.update(team_reward_mode=team_reward)  # individual (default) or team: shared within each team
     cfg.update(init_checkpoint="", transfer_components="all", seed=seed, total_timesteps=timesteps,
                learning_rate=learning_rate, entropy_coef=entropy_coef, env_kwargs_json=json.dumps(env),
                save_dir=str(output), save_interval=save_interval, track=track, save_eval_video=save_video,
                wandb_log_eval_video=track and save_video, wandb_group=output.name, log_interval=10,
-               wandb_project=wandb_project, wandb_mode=wandb_mode, wandb_tags=f"{stage},{env_variant},seed{seed}")
+               wandb_project=wandb_project, wandb_mode=wandb_mode, wandb_tags=f"{stage},{env_variant},{team_reward},seed{seed}")
     if smoke:
         cfg.update(total_timesteps=64, rollout_steps=32, sequence_length=8, ppo_epochs=1, minibatch_chunks=4,
                    device="cpu", probe_interval=1, min_probe_count=1, pgct_warmup_updates=0,
@@ -108,6 +109,7 @@ def plan(args):
     jobs, banks = [], {}
     args.env_variant = getattr(args, "env_variant", "e1")      # older callers: defaults unchanged
     args.probe_bank = getattr(args, "probe_bank", "canonical")
+    args.team_reward = getattr(args, "team_reward", "individual")
     for map_name in args.maps:
         for seed in args.seeds:
             cfg = base_config(reference, map_name, seed=seed, timesteps=args.timesteps, home_ratio=args.home_ratio,
@@ -115,8 +117,10 @@ def plan(args):
                               save_interval=args.save_interval, output=output, track=args.track,
                               save_video=args.save_video, smoke=args.smoke_test, stage=args.stage_label,
                               wandb_project=args.wandb_project, wandb_mode=args.wandb_mode,
-                              env_variant=args.env_variant)
+                              env_variant=args.env_variant, team_reward=args.team_reward)
             label = args.env_variant if args.env_variant != "e1" else map_name
+            if args.team_reward != "individual":
+                label += f"_{args.team_reward}rew"
             bank = output / (f"canonical_bank_{label}_s{seed}.pt" if args.probe_bank == "canonical"
                              else f"probe_bank_v2_{label}_s{seed}.pt")
             banks[str(bank)] = cfg
@@ -138,7 +142,7 @@ def plan(args):
             P2.save_bank(v2, summary, Path(path))
     manifest = dict(created=datetime.now().astimezone().isoformat(timespec="seconds"),
                     initialization="random (no checkpoint, no curriculum)", home_ratio=args.home_ratio,
-                    env_variant=args.env_variant, probe_bank=args.probe_bank,
+                    env_variant=args.env_variant, probe_bank=args.probe_bank, team_reward=args.team_reward,
                     stage=args.stage_label, wandb_project=args.wandb_project if args.track else None,
                     learning_rate=args.learning_rate, entropy_coef=args.entropy_coef,
                     reference_experiment=str(args.reference_experiment.resolve()), eval_seed=args.eval_seed,
@@ -288,6 +292,8 @@ def main():
                         help="e1f: E1 map with team goals at the two bottom corners (requires --maps e1).")
     parser.add_argument("--probe-bank", choices=["canonical", "v2"], default="canonical",
                         help="v2: validated bank with separate gate (team) and critic-distillation probes.")
+    parser.add_argument("--team-reward", choices=["individual", "team"], default="individual",
+                        help="team: delivery/return rewards go to every member of the delivering team (shaping stays individual).")
     parser.add_argument("--modes", nargs="+", choices=MODES, default=["ippo", "pgct", "oracle", "all"])
     parser.add_argument("--seeds", type=int, nargs="+", default=[1])
     parser.add_argument("--timesteps", type=int, default=10000000)

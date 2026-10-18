@@ -1,5 +1,19 @@
 # PGCT 현재 연구 상태
 
+## 최신 확인 — 2026-10-18 14:30 KST, Claude Code
+
+- **새 세션 시작점**: `HANDOFF.md`(전면 갱신)를 먼저 읽는다.
+- **현재 실행**: E1-F main 5개(`runs/e1f_20261018_124343_main_canonical` 4 mode, `..._main_v2` PGCT-v2)가 running이다. 각 약 0.12M step, job당 약 19 step/s이고 10M까지 약 6일(10월 24일 무렵) 예상이다(E26).
+- **연구 방향**: PGCT는 원 기획(잠재 팀 발견 + 팀 내 critic 전이)이다(D41). E1은 팀 대칭 대조 조건, E1-F가 본 시험이다.
+- **논문**: 방법 논문 초안 v0.2 `output/ijcai_method_paper_20261018/`(D42). E1-F와 다중 seed는 TBD다.
+- **대기(사용자 승인 필요)**: E1 seed 2·3(10M), E1-F 팀 보상 pilot, 개입 실험, 비결정성 조사, baseline 3종.
+
+## 최신 확인 — 2026-10-18 12:44 KST, Claude Code
+
+- **E1 run 중지(사용자 지시)**: `scratch_20261015_093349_stage2`를 약 6.5M에서 중지했다. 마지막 checkpoint는 06250이다(E24 추가).
+- **현재 실행**: E1-F main `runs/e1f_20261018_124343_main_canonical`(IPPO/PGCT/Oracle/All, canonical)과 `..._main_v2`(PGCT, v2). individual reward, seed 1, 10M, 5 프로세스, W&B. 초기 hash는 E1 seed 1과 동일하다(E26).
+- **다음**: 2M 무렵부터 `e1f_team_divergence.py`로 팀 분화와 probe JS를 확인한다. E1 seed 2·3, 팀 보상 pilot은 미실행이다.
+
 ## 최신 확인 — 2026-10-18 12:23 KST, Claude Code
 
 - **현재 실행**: `scratch_20261015_093349_stage2` 4개 running, 약 6.4–6.55M step. 15M까지 약 4일 남아 10월 22일 무렵 종료 예상이다.

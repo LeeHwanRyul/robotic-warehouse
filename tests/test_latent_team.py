@@ -205,3 +205,43 @@ def test_probe_bank_v2_and_far_goal_variant(tmp_path):
         u._recalc_grid()
         _, _, _, _, info = env.step([1, 0, 0, 0])  # FORWARD
         assert any(e["goal"] == (gx, gy) for e in info["delivery_events"])
+
+
+@pytest.mark.skipif(not (C.REFERENCE_EXPERIMENT / "experiment.json").exists(),
+                    reason="Local reference experiment is not available.")
+def test_e1f_team_reward_plan(tmp_path):
+    import json as _json
+    from latent_team.train_from_scratch import plan
+    common = dict(reference_experiment=C.REFERENCE_EXPERIMENT, maps=["e1"], seeds=[1], modes=["ippo", "oracle"],
+                  timesteps=5000000, home_ratio=.5, learning_rate=2e-4, entropy_coef=.05, save_interval=250,
+                  track=False, save_video=False, smoke_test=False, eval_seed=5000001, stage_label="test",
+                  wandb_project="rware-from-scratch", wandb_mode="online", env_variant="e1f", probe_bank="canonical")
+    _, team = plan(SimpleNamespace(output_dir=tmp_path / "team", team_reward="team", **common))
+    _, indiv = plan(SimpleNamespace(output_dir=tmp_path / "indiv", **common))   # older callers: no team_reward
+    assert team["team_reward"] == "team" and indiv["team_reward"] == "individual"
+    assert [j["name"] for j in team["jobs"]] == ["e1f_teamrew_ippo_s1", "e1f_teamrew_oracle_s1"]
+    for manifest, reward in ((team, "team"), (indiv, "individual")):
+        for job in manifest["jobs"]:
+            env = _json.loads(job["config"]["env_kwargs_json"])
+            assert env["team_reward_mode"] == reward and env["team_goal_positions"] == [[[0, 10]], [[9, 10]]]
+    # Apart from the reward mode, names and tags, the two plans are identical.
+    for a, b in zip(team["jobs"], indiv["jobs"]):
+        ea, eb = _json.loads(a["config"]["env_kwargs_json"]), _json.loads(b["config"]["env_kwargs_json"])
+        assert {k for k in ea if ea[k] != eb[k]} == {"team_reward_mode"}
+        diff = {k for k in a["config"] if a["config"][k] != b["config"][k]}
+        assert diff <= {"env_kwargs_json", "exp_name", "wandb_name", "wandb_tags", "save_dir", "wandb_group"}
+
+
+@pytest.mark.skipif(not (C.ROOT / "runs/smoke_e1f_v2_20261015/e1f_ippo_s1/final.pt").exists(),
+                    reason="Local E1-F smoke model is not available.")
+def test_e1f_divergence_rollout_counts_moves():
+    import torch as _torch
+    from examples import train_recurrent_ippo_consensus as T
+    from examples.diagnose_pgct_rollout_compatibility import load_model
+    from latent_team import e1f_team_divergence as D
+    path = C.ROOT / "runs/smoke_e1f_v2_20261015/e1f_ippo_s1/final.pt"
+    agents, meta = load_model(path)
+    env_kwargs = dict(T._load_checkpoint(str(path), _torch.device("cpu"))["effective_env_kwargs"])
+    out = D.rollouts(agents, meta["config"]["env_id"], env_kwargs, meta["config"], episodes=1, horizon=20, seed=7)
+    assert out["team_ids"] == [0, 1, 0, 1] and out["team_goal_x"] == [0.0, 9.0]
+    assert len(out["left_share"]) == 4 and all(v >= 0 for v in out["left_moves"] + out["right_moves"])

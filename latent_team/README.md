@@ -215,6 +215,24 @@ C:\Users\95101\anaconda3\envs\RWARE_MARL\python.exe latent_team\train_from_scrat
 .\latent_team\run_scratch_pipeline.ps1 -Detach -Track -SkipStage1 -EnvVariant e1f -ProbeBank v2 -Stage2Seeds 1
 ```
 
+## E1-F 실험 실행기 (2026-10-18)
+
+E1-F에서 팀별 목표가 실제로 다를 때 행동·probe·critic 전이가 어떻게 달라지는지 본다. 두 단계로 나눠 각각 따로 시작한다(승인 후).
+
+| 단계 | 명령 | 내용 | 프로세스 |
+|---|---|---|---|
+| pilot | `.\latent_team\run_e1f.ps1 -Phase pilot -Track` | IPPO만, 개인 보상 / 팀 보상 각 1개, 기본 5M | 2 |
+| main | `.\latent_team\run_e1f.ps1 -Phase main -Track` | IPPO/PGCT/Oracle/All(canonical bank) + PGCT(v2 bank), 기본 10M | 5 |
+
+- **pilot의 질문**: 두 팀이 서로 다른 운반 방향을 배우는가? 그 차이가 probe에 보이는가? 결과를 보고 main 진행 여부와 보상 방식(`-TeamReward individual|team`)을 정한다.
+- **main의 canonical vs v2 PGCT**: 같은 E1-F 환경에서 probe bank만 다르므로, probe 효과와 환경 효과를 분리한다. canonical probe 생성기도 E1-F의 모서리 목표를 그대로 쓴다(확인함).
+- **팀 보상**: `--team-reward team`(`-TeamReward team`). 배송·반납 보상이 배송한 팀 전원에게 간다. pickup·진행 등 shaping 보상은 개인 그대로다. 환경의 기존 `team_reward_mode` 설정만 쓴다. 기본값은 지금과 같은 `individual`이다. job 이름에는 `_teamrew`가 붙는다.
+- **분석**(읽기 전용, 학습 중에도 가능): `python latent_team/e1f_team_divergence.py --run runs/<plan 폴더>`
+  - checkpoint마다 확률적 rollout(기본 5×500)을 돌려, 요청 선반을 배송하러 갈 때 왼쪽 이동 비율(`left_share`)을 agent별로 잰다. E1-F에서 팀을 아는 정책이면 빨강(왼쪽 목표)은 1, 파랑(오른쪽 목표)은 0에 가깝다. E1 모델로 재면 두 팀 모두 약 0.5다(목표가 붙어 있음).
+  - 같은 checkpoint에서 v2 gate bank와 canonical bank의 같은 팀/다른 팀 JS를 잰다.
+  - 결과는 `output/e1f_divergence_<run>/divergence.json`, `divergence.png`에 저장된다.
+- **확인한 것**: smoke `runs/smoke_e1f_runner_20261018_*`(pilot 2개, main 5개 모두 complete, 팀 보상·모서리 목표가 checkpoint 설정에 반영됨), 분석 스크립트 smoke와 E1 checkpoint 검증, 테스트 2개 추가(전체 185 passed).
+
 ## 아직 하지 않은 것
 
 - 추론된 팀(learned-team) 모드는 구현하지 않았다. 실험 A에서 쓸 만한 팀 신호가 확인된 뒤에 설계한다.

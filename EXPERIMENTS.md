@@ -474,6 +474,70 @@ AUROC는 같은 팀 쌍 점수가 높을수록 1이다. 팀원식별은 각 agen
   - 단일 seed 결과의 불안정성을 보여주는 근거다.
 - **한계**: seed 1, 15M 중간 시점이다. 우열이나 효과 귀속 결론이 아니다.
 
+## E25. E1-F 실험 실행기(pilot/main)·팀 보상 옵션·팀 분화 분석 도구 — 2026-10-18 Claude Code, 구현·smoke만
+
+- **구현**
+  - `train_from_scratch.py`에 `--team-reward individual|team`을 추가했다. 기본값 individual은 이전과 동일하며, 환경의 기존 `team_reward_mode`를 쓴다. team이면 배송·반납 보상이 팀 전원에게 가고 shaping은 개인으로 남는다. job 이름에 `_teamrew`가 붙는다.
+  - `run_from_scratch.ps1`과 `run_scratch_pipeline.ps1`에 `-TeamReward`를 전달한다.
+  - 새 `run_e1f.ps1`
+    - pilot: IPPO individual/team, 5M.
+    - main: 4 mode(canonical bank) + PGCT(v2 bank), 10M.
+  - 새 `e1f_team_divergence.py`: checkpoint별로 배송 중 왼쪽 이동 비율(agent별)과 v2 gate·canonical 같은 팀/다른 팀 JS를 계산한다.
+- **검증**
+  - smoke `runs/smoke_e1f_runner_20261018_{pilot_individual,pilot_team,main_canonical,main_v2}`: 7 job 모두 complete.
+  - checkpoint의 effective_env_kwargs에 team_reward_mode와 goals [(0,10)],[(9,10)]이 들어 있다.
+  - canonical probe builder가 E1-F 목표를 사용한다.
+  - 분석 도구 검증: E1 `scratch_20261015_093349_stage2/e1_oracle_s1/checkpoint_06000`에서 2×500 rollout, left_share A1–A3 .56/.47/.51(A4는 운반 없음). 출력은 scratchpad에만 남겼다.
+  - tests 2개를 추가해 전체 185 passed.
+- **미실행**: E1-F pilot/main 본 학습은 사용자 승인 대기다.
+- **관련 관측(E24 보완, 현재 E1 run 6.4M, 읽기 전용)**
+  - 최근 5회 평가 agent별 pickup: IPPO A3·A4 0(이동 비율 .37/.40), PGCT·Oracle A4 0.
+  - 평가에서 episode당 pickup 1 이상이 된 시점: IPPO 1.89/2.05M/없음/없음, PGCT 2.46/1.43/5.27M/없음, Oracle 2.30/1.38/2.30M/없음, All 5.22/3.99/1.38/5.07M.
+
+## E24 추가 — 사용자 요청으로 6.5M에서 중지 (2026-10-18 12:43 KST Claude Code)
+
+- 사용자 지시("현재 실험은 중지하고, 다음 실험으로 run_e1f main 진행")에 따라 pipeline PowerShell(PID 21540)과 학습 4개(PID 27140/23940/2980/15160)를 종료했다. PID는 pipeline 로그 기록과 일치함을 확인했다.
+- 종료 직전 상태
+  - 마지막 env_steps: IPPO 6,579,200 / PGCT 6,498,304 / Oracle 6,444,032 / All 6,528,000.
+  - 마지막 checkpoint는 모두 `checkpoint_06250.pt`다.
+  - `final.pt`는 없고, `job_status.json`은 trainer가 쓴 running 그대로다. W&B run은 중단 상태로 남는다.
+- 중지 기록 파일: `runs/scratch_20261015_093349_stage2/STOPPED_BY_USER.txt`. 로그·checkpoint는 모두 보존했다.
+- 보완(같은 날, 사용자가 W&B running 표시 지적): 강제 종료한 학습 프로세스의 자식 wandb-core 4개와 wandb-xpu 4개가 남아 heartbeat를 보내고 있었다. 부모 PID로 확인해 종료했다. 이후 W&B에서는 crashed로 표시된다. 앞으로 학습을 중지할 때는 프로세스 트리 전체를 종료한다.
+- W&B API 확인: 마지막 heartbeat는 13:45:30–33 KST이고, 13:55:14 KST에 4개 모두 `crashed`로 바뀌었다.
+- 이 run은 15M 계획 대비 약 6.5M에서 끝난 seed 1 결과다. D36의 10M 고정 예산과도 다르므로, 이후 seed 반복 시 예산을 다시 정해야 한다.
+
+## E26. E1-F main 본 학습 — 2026-10-18 12:43 KST 시작(사용자 승인, Claude Code 실행), 진행 중
+
+- **명령**: `.\latent_team\run_e1f.ps1 -Phase main -Track`
+- **조건**
+  - E1 맵, 팀 목표 (0,10)/(9,10), home .5, individual reward, seed 1, 무작위 초기화, 10,000,384 step, W&B 프로젝트 rware-from-scratch.
+  - `runs/e1f_20261018_124343_main_canonical`: IPPO/PGCT/Oracle/All, canonical bank.
+  - `runs/e1f_20261018_124343_main_v2`: PGCT, probe bank v2.
+  - 병렬 5개 프로세스, 스레드 4.
+- **분석**(읽기 전용, 언제든): `python latent_team/e1f_team_divergence.py --run runs/e1f_20261018_124343_main_canonical`(main_v2도 동일).
+- **참고**: E1-F pilot(IPPO 개인/팀 보상)은 실행하지 않고 바로 main을 시작했다. 팀 보상 비교는 미실행이다.
+- **시작 확인(12:45)**: 5개 모두 첫 update를 기록했고 Traceback은 없다. job당 약 20–21 step/s로, 10M까지 약 5.5일(10월 24일 무렵) 예상이다. 초기 hash는 5개 모두 `f78ec390…`로 E1 seed 1과 같다.
+
+## E27. E1 run(6.4M 중단) 논문용 자료 — 2026-10-18 Claude Code, 읽기 전용
+
+- **폴더**: `output/paper_e1_20261018/`
+  - `make_paper_materials.py`
+  - `figures/`: fig1–4, figA1 (PDF+PNG)
+  - `tables/`: table1–3, tableA1 (LaTeX)
+  - `RESULTS_DRAFT.md`(영어 문단·캡션·한계), `README.md`(한국어, 주장 가능 범위), `numbers.json`
+- **조건**: `runs/scratch_20261015_093349_stage2`, seed 1, 공통 평가 구간 0–6.4M. 평가는 51,200 step 간격, deterministic 20×500, reset seeds 5,000,001–5,000,020.
+- **결과(seed 1)**
+  - 배송 시작(≥1, 3점 평균): IPPO 2.05 / PGCT 1.79 / Oracle 1.64 / All 3.99M.
+  - 학습 중 평균 배송: 10.4 / 11.7 / 13.2 / 3.7.
+  - 최근 5회 배송: 23.2±1.1 / 27.3±1.4 / 32.2±1.7 / 19.4±1.6.
+  - 배운 agent: 2 / 3 / 3 / 4.
+  - PGCT 전이 update 비율은 91% → 37% → 29%이고, 같은 팀 arc/update는 1.86 → 0.10 → 0.03이다.
+  - probe JS 같은 팀/다른 팀(6M): IPPO .27/.18, PGCT .26/.19, Oracle .29/.23, All .15/.14.
+- **정정**
+  - E17 All의 delivery 시작은 1.89M이다(E18과 동일). E24·T034에 쓴 1.79M은 pickup 기준과 혼동한 값이다.
+  - E24 표의 최근 5회 값은 각 run의 마지막 평가 기준이다. E27은 공통 구간 6.4M 기준이라 IPPO 값 등이 조금 다르다.
+- **한계**: seed 1개, 미수렴, E1의 팀 대칭성. 성능 우열·공유 범위 가설은 다중 seed 전까지 관찰로만 쓴다.
+
 ## 새 실험 기록 양식
 
 ID / 실제 실행 날짜·작성 도구 / 상태(계획·smoke·진행·완료·실패) / 초기 모델 / 환경·training seed·예산 / 평가 seed·정책·horizon / 결과 / 비교 기준·한계 / 원본 경로 / 재현 명령.

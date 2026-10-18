@@ -1,79 +1,116 @@
 # 새 세션 인수인계 — PGCT / 잠재 팀 연구
 
-작성: 2026-10-15 12:50 KST, Claude Code. 새 세션(Codex·Claude Code)이 **가장 먼저 읽는 문서**다. 세부 근거는 각 항목의 D/E 번호로 `DECISIONS.md`·`EXPERIMENTS.md`에서 찾는다. 모든 기록을 한 파일로 합친 사본은 `research_archive/RESEARCH_ARCHIVE.md`다(생성 명령은 아래).
+**갱신: 2026-10-18 14:30 KST, Claude Code.** 새 세션(Codex·Claude Code)은 이 문서를 **가장 먼저** 읽는다. 세부 근거는 D(결정)·E(실험)·T(대화) 번호로 `DECISIONS.md`·`EXPERIMENTS.md`·`CONVERSATION_LOG.md`에서 찾는다. 모든 기록을 한 파일로 합친 읽기 전용 사본은 `research_archive/RESEARCH_ARCHIVE.md`다(원본을 고친 뒤 `python research_archive/build_archive.py`로 다시 만든다).
 
-이 문서는 작성 시점의 스냅샷이다. 실행 상태는 반드시 실제 로그로 다시 확인한다.
+이 문서는 작성 시점의 스냅샷이다. 실행 상태는 반드시 실제 로그로 다시 확인한다. 이전 버전(2026-10-15)의 내용은 E19–E24, D29–D36에 있다.
 
-**최신 재확인: 2026-10-18 12:23 KST, Claude Code.** 4개 run 약 6.4–6.55M, 정상 진행 중이며 10월 22일 무렵 15M 도달 예정이다. 최근 5회 평가 delivery: Oracle 32.3 / PGCT 27.9 / IPPO 24.3 / All 20.4(All은 늦게 시작했지만 4명 모두 배송). 같은 seed의 E17과 비교하면 전이 mode는 1.4–1.6M에서 갈라졌다. 상세는 EXPERIMENTS E24, `output/scratch_review_20261018/`.
+## 0. 30초 요약
 
-**이전 재확인: 2026-10-15 13:17 KST, Codex.** 기존 E1/canonical seed1 학습 로그가 계속 갱신된다(IPPO321,536 / PGCT316,416 / Oracle314,368 / All318,464 env steps). 네 mode의 최근307,200step 평가(delivery/pickup/return)는 모두0이며 초기 구간이라 성능 판단을 보류한다. 오류 로그에서 Traceback/Error/Exception/failed는 발견하지 못했다. E1-F/v2는64-step smoke 완료 상태이며 본 학습은 아직 확인되지 않는다. 근거: `output/status_review_20261015_131716/snapshot.json`, EXPERIMENTS E19 추가. 이번 점검은 새 학습·코드 변경 없이 수행했다. 아래12:49 수치는 과거 스냅샷으로 보존한다.
+- **연구 목표(D17, D41 재확인)**: **PGCT = 모르는 같은 팀을 probe 응답으로 찾아내고, 그 팀끼리 critic을 전이해 학습을 돕는 방법.** 사용자는 이 원래 기획을 유지한다. "전이 적합성 발견"으로 중심을 옮기지 않는다.
+- **현재 실행 중**: **E1-F main**(팀 목표를 양쪽 모서리로 분리). IPPO/PGCT/Oracle/All(canonical) + PGCT(v2), seed 1, 각 10M. 약 0.12M step(14:30), job당 약 19 step/s이며 **10월 24일 무렵 종료** 예상이다(E26).
+- **E1 결과(seed 1, 6.4M, 중단)**: PGCT가 IPPO와 All보다 낫고 Oracle의 89%다. 이득은 "뒤처진 agent 구제"에서 나왔다. E1은 팀이 색 라벨로만 다른 **팀 대칭 대조 조건**이라 팀 발견을 시험할 수 없다(D40, D41).
+- **논문**: IJCAI 2027(초록 1/4, 본문 1/11 AoE). **방법 논문 초안 v0.2**가 `output/ijcai_method_paper_20261018/`에 있다(영어+한국어, Overleaf zip). E1-F와 seed 결과 자리는 TBD다.
 
-## 1. 연구 목표
+## 1. 지금 돌고 있는 학습 — 건드리지 말 것
 
-- **본 연구(D17, D25)**: 각 agent가 국소 관측된 행동으로 **잠재 팀을 추론**하고, 추론한 팀 안에서 **critic을 전이**해 학습 효율을 높인다.
-- **검증 순서(D25)**: H1 식별 가능성 → H2 Oracle(정답 팀) 공유 이득 → 분산 추론 → 학습 개선.
-- **현재 본 학습의 목적(D22, 사용자 강조)**: critic 공유 효과 검증이다. 잠재 팀 발견 문제를 푸는 실험이 아니다.
-- **알려진 구조 문제**
-  - 관측이 팀 기준이고 두 팀 목표가 인접·대칭이다. 그래서 같은 팀 critic이 더 호환되지 않는다(E11).
-  - 기존 canonical probe 48개는 고유 입력이 26개다. "적재 중 + 목표 비가시" 상태가 0개라 원리적으로 팀 식별력이 없다(D26, E20).
-  - 그래서 E1-F(목표 분리)와 probe bank v2를 옵션으로 구현했다(D29, E22).
+| 폴더 | 내용 |
+|---|---|
+| `runs/e1f_20261018_124343_main_canonical` | e1f_ippo/pgct/oracle/all_s1, canonical bank |
+| `runs/e1f_20261018_124343_main_v2` | e1f_pgct_s1, probe bank v2(gate 48 + distill 64) |
 
-## 2. 지금 돌고 있는 학습 — 건드리지 말 것
+- 조건: E1 맵, 팀 목표 (0,10)/(9,10), home .5, individual reward, seed 1, 무작위 초기화(초기 hash `f78ec390…`, E1 seed 1과 동일), 10,000,384 step, W&B `rware-from-scratch`.
+- 시작: 2026-10-18 12:43 KST(사용자 승인, `.\latent_team\run_e1f.ps1 -Phase main -Track`).
+- 분석(읽기 전용, 언제든): `python latent_team/e1f_team_divergence.py --run runs/e1f_20261018_124343_main_canonical`(main_v2도). 2M 무렵부터 의미가 있다. 배송 중 왼쪽 이동 비율(빨강≈1, 파랑≈0이면 팀별 행동 분화)과 v2/canonical probe의 같은 팀/다른 팀 JS를 계산한다.
+- **E1-F에서 볼 것(D41 순서)**
+  - ① Oracle > All인가
+  - ② 팀원의 critic이 더 호환되는가(E11 blend gain을 E1-F checkpoint에 적용, 스크립트 확장 필요)
+  - ③ PGCT/PGCT-v2가 같은 팀을 고르는가(transfer.jsonl 같은 팀 arc 비율, probe AUROC)
+  - ④ 성능
+- **분기(D41)**
+  - Oracle>All이고 PGCT가 같은 팀을 고른다 → 원 기획 논문
+  - 같은 팀을 고르지 못한다 → v2와 비교하고 probe를 개선
+  - Oracle≈All → 팀 보상 등 조건을 추가하거나 방향을 재논의
 
-- **run**: `runs/scratch_20261015_093349_stage2`
-- **조건**: E1 11×10, home .5, individual reward, IPPO/PGCT/Oracle/All, seed 1, 무작위 초기화, 15M, W&B 프로젝트 `rware-from-scratch`. 네 초기 가중치 hash가 같다(E19).
-- **스냅샷(2026-10-15 12:49 KST)**: IPPO 281,600 / PGCT 277,504 / Oracle 275,456 / All 279,552 step. 4개 모두 running이고 job당 약 24 step/s다. 15M까지 약 7일 걸린다.
-- **다음 할 일**: 4–5M에서 읽기 전용 점검(약 2026-10-17). 15M까지 계속할지는 사용자가 결정한다.
-- **재개 불가(D22)**: trainer에 resume이 없다. 중단되면 처음부터 다시 돌린다. 이전 run E17은 Windows Update 재부팅으로 2.5M에서 끊겼고, 분석은 E18에 있다.
-- **E18 요약(seed 1, 2.4M)**: Oracle의 delivery가 약 10으로 앞섰지만 Agent2 한 명에게서 나온 값이라 효과로 귀속할 수 없다. PGCT gate는 같은 팀과 다른 팀을 구분하지 않았다.
+## 2. 끝난·중단된 학습
+
+- **E1 from-scratch**(`runs/scratch_20261015_093349_stage2`): 사용자 지시로 2026-10-18 12:43에 약 6.5M에서 중지했다(`STOPPED_BY_USER.txt`). 마지막 checkpoint는 06250이고 W&B에서는 crashed로 표시된다(E24 추가).
+  - 결과(공통 6.4M, 평가 20×500 deterministic)는 아래 표와 같다. 논문용 그림·표는 `output/paper_e1_20261018/`(E27)에 있다.
+
+| | 시작(≥1) | 학습 중 평균 | 최종(최근 5회) | 배운 agent |
+|---|---|---|---|---|
+| IPPO | 2.05M | 10.4 | 23.2±1.1 | 2/4 |
+| PGCT | 1.79M | 11.7 | 27.3±1.4 | 3/4 |
+| Oracle | 1.64M | 13.2 | 32.2±1.7 | 3/4 |
+| All | 3.99M | 3.7 | 19.4±1.6 | 4/4 |
+
+  - PGCT gate: 2M 이후 같은 팀 전이가 거의 0이고, 다른 팀(3–4, 이후 1–2)만 연결된다. E1은 팀 대칭 조건이라 예상된 결과다.
+  - **재현성**: 같은 seed의 이전 run(E17)과 비교하면 IPPO는 완전히 재현되지만, 전이 mode는 1.4–1.6M에서 갈라진다(원인 미확인). All의 배송 시작이 1.89M에서 3.99M으로 바뀌었다. **seed 반복이 필수다.**
+- 이전 기록: E17(2.5M 재부팅 중단), Stage03 연장 실험 E02(E1 PGCT AUC 45.86 vs IPPO 44.57), 고정 모델 진단 E11/E13/E20/E23.
 
 ## 3. 사용자 승인이 필요한 대기 항목
 
-- **E1-F + probe v2 본 학습**: 구현과 smoke는 완료했다. 시작하지 않았다.
-  ```powershell
-  .\latent_team\run_scratch_pipeline.ps1 -Detach -Track -SkipStage1 -EnvVariant e1f -ProbeBank v2 -Stage2Seeds 1
-  ```
-  현재 run과 동시에 돌리면 8개 프로세스가 되어 양쪽이 모두 느려진다.
-- **MAPPO/SePS/HetDPS 본 학습**: 구현과 smoke만 했다(E15, `latent_team/BASELINES.md`). 핵심 비교 이후로 미뤘다(D22).
-- **seed 2·3 반복**: seed 1 결과를 본 뒤 결정한다.
+1. **E1 seed 2·3**: 예산 10M 고정을 제안했다(D36). E1-F가 끝나는 10월 24일 이후에 하거나, 속도 저하를 감수하고 병행한다.
+2. **E1-F 팀 보상 pilot**: `.\latent_team\run_e1f.ps1 -Phase pilot -Track`(IPPO 개인/팀 보상 각 5M, E25). main을 먼저 시작했으므로 미실행이다.
+3. **개입 실험**: 뒤처진 agent의 distillation을 차단해 "구제" 메커니즘을 검증한다(미구현).
+4. **비결정성 원인 조사**: 전이 경로의 GPU 연산. 코드 확인만으로 가능하다.
+5. **MAPPO/SePS/HetDPS 본 학습**: 효과 조건을 확정한 뒤 한다(D34).
+6. **v0.3 논문용 추가 실험**: Random-gated(전이량 통제)와 budget-matched Oracle 구현·실행, checkpoint에서 실측 Δ·ρ·추론 정밀도/재현율(학습 불필요), gradient 정렬 진단(D44).
 
-## 4. 사용자가 정한 작업 원칙 (원문 취지)
+## 4. 논문 상태
 
-- "현재 코드를 최대한 수정하지 않고, 새로운 파일, 폴더를 만들어서" 진행한다. trainer(`examples/train_recurrent_ippo_consensus.py`), 환경(`rware/`), `rware/utils/probe_maps.py`는 수정하지 않았다.
-- "현재 PGCT, IPPO, Oracle, All 구현은 변경하지 않는 것을 원칙으로" 한다. 새 기능은 옵션으로만 추가하고 기본값은 바꾸지 않는다.
-- "실제 수백만 step의 본 학습은 제 승인 없이 시작하지 마세요."
-- "기존 학습 체크포인트, 실험 로그, 결과물은 보존해 주세요." 삭제 허가는 그 요청 범위에만 적용된다(D05, D19, D27).
-- 실행 중인 학습을 중단하거나 재시작하지 않는다.
-- 매 turn의 사용자 메시지와 답변을 `CONVERSATION_LOG.md`에 원문으로 기록한다(AGENTS.md).
-- 사용자에게는 한국어로 쉽게 설명한다. 수치에는 조건(seed·step·평가)을 붙인다.
+| 폴더 | 내용 | 상태 |
+|---|---|---|
+| `output/ijcai_method_paper_20261018/` | **방법 논문 v0.3(현행)** "Probe-Gated Critic Transfer: Local Teammate Inference...". 이론 절(명제 1–6, 부록 증명), 2×2 설계, Random-gated baseline(TBD). v0.1·v0.2 보존 | 외부 검토 반영(D44). 명제 3·6 가정은 교수님 검토 필요 |
+| `output/ijcai_paper_20261018/` | 진단 논문 초안 "Policy Similarity Is Not Team Membership" | 보존용(D38) |
+| `output/paper_e1_20261018/` | E1 그림 5, LaTeX 표 4, 영어 결과 초안, `make_paper_materials.py` | E27 |
+| `output/ijcai_review_20261015/REPORT.md` | Codex의 IJCAI 기획(RQ1–3, 통계, 일정) | D23 |
 
-## 5. 코드 지도
+- 로컬에 LaTeX가 없어 원고를 컴파일하지 않았다. Overleaf에 zip을 올리고 IJCAI sty와 `named.bst`를 추가해야 한다.
+- 참고문헌 HetDPS(`hu2025heterogeneity`)는 서지 정보가 TODO다.
+
+## 5. 사용자가 정한 작업 원칙
+
+- "현재 코드를 최대한 수정하지 않고, 새로운 파일, 폴더를 만들어서" 진행한다. trainer(`examples/train_recurrent_ippo_consensus.py`), 환경(`rware/`), `rware/utils/probe_maps.py`는 수정하지 않았다. 새 기능은 옵션으로만 넣고 기본값은 유지한다.
+- "실제 수백만 step의 본 학습은 제 승인 없이 시작하지 마세요." 실행 중인 학습을 임의로 중단·재시작하지 않는다.
+- "기존 학습 체크포인트, 실험 로그, 결과물은 보존해 주세요." 삭제 허가는 그 요청 범위에만 적용된다(D27).
+- 매 turn 사용자 메시지와 답변을 `CONVERSATION_LOG.md`에 원문으로 기록한다(AGENTS.md). 현재 T047까지 있다.
+- 사용자에게는 한국어로 쉽게 설명하고, 수치에는 조건(seed·step·평가)을 붙인다. 단정과 가설을 구분한다.
+
+## 6. 작업 요령(실수에서 배운 것)
+
+- **학습 중지 시** python 프로세스뿐 아니라 자식 `wandb-core`/`wandb-xpu`까지 종료해야 W&B가 running에서 벗어난다. 서버 반영에 약 10분 걸린다. PID는 pipeline 로그와 `Win32_Process`의 ParentProcessId로 확인한다(E24 추가).
+- **Bash 도구는 heredoc 안의 `\\`를 `\`로 바꾸고, `\r`·`\t` 같은 조합이 제어 문자로 들어갈 수 있다.** 백슬래시가 들어가는 내용(LaTeX, 정규식, Windows 경로)은 Write 도구로 파일에 쓰고, Python 스크립트도 파일로 저장해 실행한다(T043).
+- **pytest**는 `--basetemp <scratchpad>`를 줘야 권한 오류가 없다(전체 185 passed, 2026-10-18).
+- 기록 파일의 줄 끝: `CONVERSATION_LOG.md`는 CRLF, `DECISIONS.md`·`EXPERIMENTS.md`·`RESEARCH_STATE.md`는 LF다.
+- 속도: E1 run(4개 동시)은 job당 약 24 step/s, E1-F(5개 동시)는 약 19 step/s다.
+
+## 7. 코드 지도
 
 | 위치 | 내용 |
 |---|---|
-| `latent_team/train_from_scratch.py` | from-scratch 실행기. MODES = ippo, pgct, oracle, all, wrong, mappo, seps, hetdps. `--env-variant {e1,e1f}`, `--probe-bank {canonical,v2}`, `--track` |
-| `latent_team/run_from_scratch.ps1`, `run_scratch_pipeline.ps1` | 병렬 실행 / Stage1→Stage2 파이프라인(`-Detach`이면 UTF-8 로그) |
-| `latent_team/exp_b_oracle_consensus.py` | `matched_transfer`: trainer 함수를 프로세스 안에서만 감싸 oracle/all/wrong 분기, transfer.jsonl 기록 |
-| `latent_team/marl_baselines.py` | MAPPO / SePS / HetDPS (numpy로 다시 구현한 clustering) |
-| `latent_team/probes_v2.py` | E1-F 환경 변형, probe bank v2(gate 48 + transfer 64) |
-| `latent_team/exp_a_team_identifiability.py`, `verify_evidence_observability.py` | 실험 A(E11), 증거 관측 가능성(E13) |
-| `tests/test_latent_team.py` | 전체 183 passed (2026-10-15) |
-| `output/` | 분석 보고서. scratch_review_20261015(E18), env_view_20261015(E20, probes_v2), ijcai_review_20261015(D23), cleanup_20261015(E21 삭제 목록) |
+| `latent_team/train_from_scratch.py` | from-scratch 실행기. modes ippo/pgct/oracle/all/wrong/mappo/seps/hetdps, `--env-variant e1/e1f`, `--probe-bank canonical/v2`, `--team-reward individual/team`, `--track` |
+| `latent_team/run_e1f.ps1` | E1-F 실행기. `-Phase pilot`(IPPO 개인/팀 보상), `-Phase main`(4 mode canonical + PGCT v2) |
+| `latent_team/run_from_scratch.ps1`, `run_scratch_pipeline.ps1` | 병렬 실행과 2단계 파이프라인(`-TeamReward` 전달) |
+| `latent_team/exp_b_oracle_consensus.py` | trainer 함수를 프로세스 안에서만 감싸 oracle/all/wrong 분기, transfer.jsonl 기록 |
+| `latent_team/probes_v2.py` | E1-F 변형, probe bank v2 |
+| `latent_team/e1f_team_divergence.py` | E1-F 팀 분화와 probe JS 분석(읽기 전용) |
+| `latent_team/exp_a_team_identifiability.py` | 실험 A(E11): 식별 AUROC, blend gain |
+| `latent_team/marl_baselines.py` | MAPPO/SePS/HetDPS(smoke만) |
+| `output/scratch_review_20261018/analyze.py` | 학습 중간 분석(E24) |
+| `output/paper_e1_20261018/make_paper_materials.py` | 논문 그림·표 생성(E27) |
+| `tests/test_latent_team.py` | 전체 185 passed |
 
 Python: `C:\Users\95101\anaconda3\envs\RWARE_MARL\python.exe`. 브랜치는 `feature/PGCT_Change`이고 커밋하지 않은 변경이 많다(사용자 요청 시에만 커밋).
 
-## 6. 기록 파일 역할
+## 8. 핵심 결정 색인 (최근)
 
-| 파일 | 역할 |
-|---|---|
-| `HANDOFF.md` | 이 문서. 새 세션 시작점 |
-| `RESEARCH_STATE.md` | 현재 상태 스냅샷(위쪽이 최신). 2026-10-15 오후 Claude 작업(E20–E22)은 이 HANDOFF에 반영됨 |
-| `DECISIONS.md` | D01–D29 질문·결론·판단 |
-| `EXPERIMENTS.md` | E00–E22 실험 기록 |
-| `CONVERSATION_LOG.md` | L01–L12 과거 요약, T001–T028 원문(Codex·Claude 공용) |
-| `research_archive/RESEARCH_ARCHIVE.md` | 위 모든 파일과 output 보고서, 실행기 문서를 합친 읽기 전용 사본 + 날짜순 통합 타임라인 |
-
-통합본 다시 만들기(원본을 바꾼 뒤):
-```powershell
-C:\Users\95101\anaconda3\envs\RWARE_MARL\python.exe research_archive\build_archive.py
-```
+- D33 A3–A4 연결은 "원정 담당" 역할 짝이다(팀 아님).
+- D36 E1을 15M 대신 10M 고정 예산으로 제안
+- D37 공유 범위와 배운 agent 수의 관계(가설)
+- D38 진단 논문 초안
+- D39 사용자는 방법 논문 초판을 원함
+- D40 E1은 색 라벨만 다른 대칭 환경
+- **D41 PGCT의 정체성은 원 기획(잠재 팀 발견)이다. E1-F 결과로 분기한다.**
+- D42 방법 논문 v0.2(원 기획 서사)와 인수인계 갱신
+- D43 이론 보강 방향과 교수님 JS convexity 질문(ex5.pdf 참고)
+- **D44 방법 논문 v0.3: 외부 검토 반영, 이론 절 신설, Random-gated baseline 추가(TBD)**
