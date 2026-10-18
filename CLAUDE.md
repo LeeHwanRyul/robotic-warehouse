@@ -4,7 +4,7 @@
 
 이 프로젝트의 공통 작업 지침은 `AGENTS.md`다. 위 import가 적용되지 않는 환경에서도 이 파일을 직접 읽는다.
 
-작업 전에 `RESEARCH_STATE.md`, `DECISIONS.md`, `EXPERIMENTS.md`를 읽고, 과거 대화가 필요하면 `CONVERSATION_LOG.md`를 확인한다. 작업 종료 시 공통 지침에 따라 해당 기록을 갱신한다.
+새 세션은 `HANDOFF.md`부터 읽는다. 작업 전에 `RESEARCH_STATE.md`, `DECISIONS.md`, `EXPERIMENTS.md`를 읽고, 과거 대화가 필요하면 `CONVERSATION_LOG.md`를 확인한다. 작업 종료 시 공통 지침에 따라 해당 기록을 갱신한다.
 
 공용 노트에 있는 실험 계획은 실행 완료나 새 실행 허가가 아니다. 기존 학습·로그·체크포인트를 보존하고 사용자의 현재 요청 범위를 따른다.
 

@@ -196,6 +196,25 @@ C:\Users\95101\anaconda3\envs\RWARE_MARL\python.exe latent_team\train_from_scrat
   -Stage2Modes ippo,pgct,oracle,all,mappo,seps,hetdps -Stage2Seeds 1
 ```
 
+## E1-F 환경과 probe bank v2 (2026-10-15 추가, 옵션)
+
+- **`--env-variant e1f`**(PowerShell `-EnvVariant e1f`): E1 맵에서 팀 목표만 두 아래 모서리로 옮긴다(빨강 (0,10), 파랑 (9,10)).
+  - 관측(팀 기준), 보상, 선반 배치는 그대로다.
+  - 환경의 기존 `team_goal_positions` 설정만 쓰며, 환경 코드는 바꾸지 않았다.
+- **`--probe-bank v2`**(`-ProbeBank v2`): `probes_v2.py`가 만드는 새 bank.
+  - 학습 env 설정 그대로 상태를 배치하고 실제 관측 함수로 probe를 뽑는다. 역할별 고유 입력만 남기고, 시나리오가 선언한 조건(적재·반납·목표 가시성)을 관측이 위반하면 거부한다.
+  - **gate**(PGCT JS용, 48개): 요청 선반 적재 + **어느 팀 목표도 안 보이는** 상태. 같은 입력이 두 팀 모두에게 유효하며, 목표가 분리된 E1-F에서만 팀에 따라 정답 방향이 달라진다.
+  - **transfer**(critic 증류용, 64개): 탐색 14, 적재·목표 보임 16, 적재·목표 안 보임 16, 반납 16, 목표 도착 2.
+  - Oracle·All·PGCT 모두 증류는 transfer bank로 한다(`transfer.jsonl`의 `distill_probe_count`=64).
+  - 모든 agent가 같은 결정적 규칙으로 생성하므로 관측 교환은 없다.
+- **기본값**은 지금과 같다(`e1`, `canonical`). 실행 중인 `scratch_20261015_093349` run에는 영향이 없다.
+- **확인한 것**: `output/env_view_20261015/probes_v2/`(그림·요약), smoke `runs/smoke_e1f_v2_20261015`, `tests/test_latent_team.py`의 v2/E1-F 테스트(모서리 목표에서 실제 배송 확인 포함), 전체 183 passed.
+
+```powershell
+# E1-F + v2 probe, 4개 비교군, 15M (승인 후 실행)
+.\latent_team\run_scratch_pipeline.ps1 -Detach -Track -SkipStage1 -EnvVariant e1f -ProbeBank v2 -Stage2Seeds 1
+```
+
 ## 아직 하지 않은 것
 
 - 추론된 팀(learned-team) 모드는 구현하지 않았다. 실험 A에서 쓸 만한 팀 신호가 확인된 뒤에 설계한다.

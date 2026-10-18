@@ -168,3 +168,40 @@ def test_value_norm_and_wasserstein_formulas():
     assert float(mean) == pytest.approx(2.0, abs=1e-4) and float(var) == pytest.approx(1.0, abs=1e-3)
     mus = torch.tensor([[[0., 0], [3, 4]]]); log_vars = torch.zeros(1, 2, 2)
     assert float(B.gaussian_w2(mus, log_vars)[0, 0, 1]) == pytest.approx(5.0)
+
+
+@pytest.mark.skipif(not (C.REFERENCE_EXPERIMENT / "experiment.json").exists(),
+                    reason="Local reference experiment is not available.")
+def test_probe_bank_v2_and_far_goal_variant(tmp_path):
+    import json as _json
+    from examples import train_recurrent_ippo_consensus as T
+    from latent_team import probes_v2 as P2
+    from rware.utils.semantic_observation import SEMANTIC_SPATIAL_CHANNELS
+    from rware.warehouse import Direction
+    job = next(j for j in _json.loads((C.REFERENCE_EXPERIMENT / "experiment.json").read_text(encoding="utf-8"))["jobs"]
+               if j["mode"] == "pgct" and j["map"] == "e1")
+    kwargs = _json.loads(job["config"]["env_kwargs_json"])
+    kwargs.update(P2.ENV_VARIANTS["e1f"])
+    bank, summary = P2.build_bank(job["config"]["env_id"], kwargs, seed=1)
+    gate, transfer = bank["gate"]["sequences"][:, 0].numpy(), bank["transfer"]["sequences"][:, 0].numpy()
+    for seqs in (gate, transfer):
+        assert len(np.unique(seqs, axis=0)) == len(seqs)            # no hidden duplicate weights
+    goal = SEMANTIC_SPATIAL_CHANNELS.index("goal")
+    spatial = gate[:, 20:].reshape(len(gate), len(SEMANTIC_SPATIAL_CHANNELS), 11, 11)
+    assert not spatial[:, goal].any()                               # no goal of any team visible at gate probes
+    assert {s["phase"] for s in bank["transfer"]["scenarios"]} >= {"search", "carry_goal_hidden", "carry_goal_visible", "return"}
+    # Far goals are reachable delivery cells: a loaded agent stepping onto its own corner goal delivers.
+    with T.make_env(job["config"]["env_id"], kwargs, "semantic") as env:
+        env.reset(seed=1)
+        u = env.unwrapped
+        assert u.goals_by_team == [[(0, 10)], [(9, 10)]]
+        agent, team = u.agents[0], int(u.agent_team_ids[0])
+        gx, gy = u.goals_by_team[team][0]
+        shelf = u.team_request_queues[team][0]
+        for a in u.agents[1:]:
+            a.x, a.y = (4 + a.id, 0)
+        agent.x, agent.y, agent.dir, agent.carrying_shelf = gx, gy - 1, Direction.DOWN, shelf
+        shelf.x, shelf.y = agent.x, agent.y
+        u._recalc_grid()
+        _, _, _, _, info = env.step([1, 0, 0, 0])  # FORWARD
+        assert any(e["goal"] == (gx, gy) for e in info["delivery_events"])

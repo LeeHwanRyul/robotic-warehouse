@@ -4,6 +4,7 @@ Codex와 Claude Code가 같은 작업 폴더에서 사용하는 공통 지침이
 
 ## 작업 시작
 
+0. 새 세션이면 `HANDOFF.md`(인수인계 요약)를 먼저 읽는다. 모든 기록을 합친 읽기 전용 사본은 `research_archive/RESEARCH_ARCHIVE.md`이며, 원본을 고친 뒤 `research_archive/build_archive.py`로 다시 만든다. 편집은 원본 파일에 한다.
 1. `RESEARCH_STATE.md`에서 현재 상태와 미해결 질문을 읽는다.
 2. `DECISIONS.md`에서 관련 질문·결론·설계 판단을 확인한다.
 3. 실험을 제안하거나 실행하기 전에 `EXPERIMENTS.md`에서 기존 결과·실행기·계획을 확인한다.

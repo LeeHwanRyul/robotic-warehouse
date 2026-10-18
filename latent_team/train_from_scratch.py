@@ -35,10 +35,12 @@ try:
     from . import common as C
     from .exp_b_oracle_consensus import matched_transfer, transfer_summary
     from . import marl_baselines as B
+    from . import probes_v2 as P2
 except ImportError:
     import common as C
     from exp_b_oracle_consensus import matched_transfer, transfer_summary
     import marl_baselines as B
+    import probes_v2 as P2
 
 from examples import train_recurrent_ippo_consensus as T
 from examples.train_pgct_spatial_experiments import MAPS, experiment_logging
@@ -51,18 +53,19 @@ THRESHOLDS = [10, 20, 30, 40]
 
 def base_config(reference, map_name, *, seed, timesteps, home_ratio, learning_rate, entropy_coef,
                 save_interval, output, track, save_video, smoke, stage="single", wandb_project="rware-from-scratch",
-                wandb_mode="online"):
+                wandb_mode="online", env_variant="e1"):
     template = next((j for j in reference["jobs"] if j["map"] == map_name and j["mode"] == "pgct"), None)
     if template is None:
         raise ValueError(f"No PGCT template for map {map_name} in the reference experiment.")
     cfg = copy.deepcopy(template["config"])
     env = json.loads(cfg["env_kwargs_json"])
     env.update(MAPS[map_name], shelf_soft_zone_ratio=home_ratio)
+    env.update(P2.ENV_VARIANTS[env_variant])  # e1f: team goals at the two bottom corners
     cfg.update(init_checkpoint="", transfer_components="all", seed=seed, total_timesteps=timesteps,
                learning_rate=learning_rate, entropy_coef=entropy_coef, env_kwargs_json=json.dumps(env),
                save_dir=str(output), save_interval=save_interval, track=track, save_eval_video=save_video,
                wandb_log_eval_video=track and save_video, wandb_group=output.name, log_interval=10,
-               wandb_project=wandb_project, wandb_mode=wandb_mode, wandb_tags=f"{stage},{map_name},seed{seed}")
+               wandb_project=wandb_project, wandb_mode=wandb_mode, wandb_tags=f"{stage},{env_variant},seed{seed}")
     if smoke:
         cfg.update(total_timesteps=64, rollout_steps=32, sequence_length=8, ppo_epochs=1, minibatch_chunks=4,
                    device="cpu", probe_interval=1, min_probe_count=1, pgct_warmup_updates=0,
@@ -103,18 +106,23 @@ def plan(args):
     if output.exists():
         raise ValueError(f"Output already exists: {output}")
     jobs, banks = [], {}
+    args.env_variant = getattr(args, "env_variant", "e1")      # older callers: defaults unchanged
+    args.probe_bank = getattr(args, "probe_bank", "canonical")
     for map_name in args.maps:
         for seed in args.seeds:
             cfg = base_config(reference, map_name, seed=seed, timesteps=args.timesteps, home_ratio=args.home_ratio,
                               learning_rate=args.learning_rate, entropy_coef=args.entropy_coef,
                               save_interval=args.save_interval, output=output, track=args.track,
                               save_video=args.save_video, smoke=args.smoke_test, stage=args.stage_label,
-                              wandb_project=args.wandb_project, wandb_mode=args.wandb_mode)
-            bank = output / f"canonical_bank_{map_name}_s{seed}.pt"
+                              wandb_project=args.wandb_project, wandb_mode=args.wandb_mode,
+                              env_variant=args.env_variant)
+            label = args.env_variant if args.env_variant != "e1" else map_name
+            bank = output / (f"canonical_bank_{label}_s{seed}.pt" if args.probe_bank == "canonical"
+                             else f"probe_bank_v2_{label}_s{seed}.pt")
             banks[str(bank)] = cfg
             warmup = 0 if args.smoke_test else cfg["pgct_warmup_updates"]
             for mode in args.modes:
-                name = f"{map_name}_{mode}_s{seed}"
+                name = f"{label}_{mode}_s{seed}"
                 config = mode_config(cfg, mode, name)
                 jobs.append(dict(name=name, map=map_name, mode=mode, seed=seed, config=config,
                                  canonical_bank=None if mode == "ippo" or mode in B.ALGORITHMS else str(bank),
@@ -123,9 +131,14 @@ def plan(args):
                                  * config["rollout_steps"]))
     output.mkdir(parents=True)
     for path, cfg in banks.items():
-        build_bank(cfg, Path(path))
+        if args.probe_bank == "canonical":
+            build_bank(cfg, Path(path))
+        else:
+            v2, summary = P2.build_bank(cfg["env_id"], json.loads(cfg["env_kwargs_json"]), seed=cfg["seed"])
+            P2.save_bank(v2, summary, Path(path))
     manifest = dict(created=datetime.now().astimezone().isoformat(timespec="seconds"),
                     initialization="random (no checkpoint, no curriculum)", home_ratio=args.home_ratio,
+                    env_variant=args.env_variant, probe_bank=args.probe_bank,
                     stage=args.stage_label, wandb_project=args.wandb_project if args.track else None,
                     learning_rate=args.learning_rate, entropy_coef=args.entropy_coef,
                     reference_experiment=str(args.reference_experiment.resolve()), eval_seed=args.eval_seed,
@@ -271,6 +284,10 @@ def compare(output):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--maps", nargs="+", choices=list(MAPS), default=["e1"])
+    parser.add_argument("--env-variant", choices=list(P2.ENV_VARIANTS), default="e1",
+                        help="e1f: E1 map with team goals at the two bottom corners (requires --maps e1).")
+    parser.add_argument("--probe-bank", choices=["canonical", "v2"], default="canonical",
+                        help="v2: validated bank with separate gate (team) and critic-distillation probes.")
     parser.add_argument("--modes", nargs="+", choices=MODES, default=["ippo", "pgct", "oracle", "all"])
     parser.add_argument("--seeds", type=int, nargs="+", default=[1])
     parser.add_argument("--timesteps", type=int, default=10000000)
@@ -309,6 +326,8 @@ def main():
         return
     if len(set(args.modes)) != len(args.modes) or len(set(args.seeds)) != len(args.seeds):
         parser.error("Modes and seeds must be unique.")
+    if args.env_variant != "e1" and args.maps != ["e1"]:
+        parser.error("--env-variant e1f applies to the E1 map only.")
     if not .5 <= args.home_ratio <= 1 or args.timesteps <= 0 or args.save_interval < 0:
         parser.error("Home ratio must be in [.5, 1]; timesteps positive; save interval nonnegative.")
     try:

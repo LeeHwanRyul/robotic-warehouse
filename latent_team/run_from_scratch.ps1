@@ -15,6 +15,8 @@ param(
   [string] $WandbProject = "rware-from-scratch",
   [ValidateSet("online", "offline")] [string] $WandbMode = "online",
   [string] $StageLabel = "single",
+  [ValidateSet("e1", "e1f")] [string] $EnvVariant = "e1",
+  [ValidateSet("canonical", "v2")] [string] $ProbeBank = "canonical",
   [switch] $SaveVideo,
   [switch] $PlanOnly,
   [switch] $SmokeTest,
@@ -30,7 +32,7 @@ $PlanArgs = @("latent_team/train_from_scratch.py", "--timesteps", "$TotalTimeste
   "--home-ratio", $HomeRatio.ToString($Inv), "--learning-rate", $LearningRate.ToString($Inv),
   "--entropy-coef", $EntropyCoef.ToString($Inv), "--save-interval", "$SaveInterval",
   "--output-dir", $OutputDir, "--stage-label", $StageLabel, "--wandb-project", $WandbProject,
-  "--wandb-mode", $WandbMode, "--maps")
+  "--wandb-mode", $WandbMode, "--env-variant", $EnvVariant, "--probe-bank", $ProbeBank, "--maps")
 $PlanArgs += @($Maps | ForEach-Object { $_.ToLowerInvariant() })
 $PlanArgs += "--modes"
 $PlanArgs += @($Modes | ForEach-Object { $_.ToLowerInvariant() })

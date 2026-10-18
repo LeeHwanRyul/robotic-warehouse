@@ -111,10 +111,13 @@ def build_matched_jobs(args, output):
 @contextmanager
 def matched_transfer(cfg, run_dir, mode, *, bank_path, warmup_updates):
     """Preload the reference bank, hold transfers during warm-up and log actual allocations."""
-    bank = None
+    bank, distill = None, None
     if bank_path:
         saved = torch.load(bank_path, map_location="cpu", weights_only=False)
         bank = (saved["sequences"].clone(), dict(saved["metadata"]))
+        # Probe bank v2 keeps a separate critic-distillation set; the gate (JS) set stays the cached bank.
+        if saved.get("transfer_sequences") is not None:
+            distill = saved["transfer_sequences"].clone()
     originals = {name: getattr(T, name) for name in ("make_env", "collect_rollout", "update_ippo")}
     state = dict(update=0, env=None)
     clock = time.perf_counter()
@@ -150,10 +153,14 @@ def matched_transfer(cfg, run_dir, mode, *, bank_path, warmup_updates):
                                       trainer_allocation=gate.tolist(), actual_allocation=actual.tolist(),
                                       physical_candidates=neighbors.tolist(),
                                       same_team_arcs=int(np.sum((actual > 0) & same)),
-                                      cross_team_arcs=int(np.sum((actual > 0) & ~same)))) + "\n")
+                                      cross_team_arcs=int(np.sum((actual > 0) & ~same)),
+                                      distill_probe_count=None if distill is None or peer_probe_sequences is None
+                                      else int(len(distill)))) + "\n")
             metrics = originals["update_ippo"](agents, optimizers, rollout, config, graph_estimator, device, rng,
                                                 peer_allocation=None if peer_allocation is None else actual,
-                                                peer_probe_sequences=peer_probe_sequences)
+                                                peer_probe_sequences=(distill.clone() if distill is not None
+                                                                      and peer_probe_sequences is not None
+                                                                      else peer_probe_sequences))
             candidate_arcs = int(neighbors.sum())
             metrics.update(same_team_arcs=float(np.sum((actual > 0) & same)),
                            cross_team_arcs=float(np.sum((actual > 0) & ~same)),
