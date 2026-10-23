@@ -538,6 +538,606 @@ AUROC는 같은 팀 쌍 점수가 높을수록 1이다. 팀원식별은 각 agen
   - E24 표의 최근 5회 값은 각 run의 마지막 평가 기준이다. E27은 공통 구간 6.4M 기준이라 IPPO 값 등이 조금 다르다.
 - **한계**: seed 1개, 미수렴, E1의 팀 대칭성. 성능 우열·공유 범위 가설은 다중 seed 전까지 관찰로만 쓴다.
 
+## E28. 발견 시점과 발견 이후 속도 분석 + checkpoint 렌더링 영상 — 2026-10-19 Claude Code, 읽기 전용
+
+- **E1-F 진행(10:48 KST)**: 5개 프로세스 running, 약 1.52–1.55M step, job당 약 19 step/s. 평가(20×500 deterministic)의 delivery는 IPPO가 1.48M에 0.05 한 번, 나머지는 0이다. 같은 0.25M 구간 학습 delivery(1.25–1.5M)는 E1 Oracle 0.46, PGCT 0.20에 비해 E1-F는 IPPO 0.06, 나머지 0이다. E1-F가 더 늦게 시작한다.
+- **E1-F gate(0–1.5M)**: PGCT canonical은 update당 같은 팀 arc 1.5–2.3/4, 다른 팀 3.5–3.7/8이다(비율 약 0.4 대 0.44). v2는 1.1–1.4/4, 1.9–2.8/8이다(약 0.27 대 0.27). 아직 같은 팀을 고르지 않는다.
+- **발견 정의**: train metric에서 agent 자신의 delivery/episode를 20 iteration 이동평균한 값이 0.3M 이후 처음 0.2 이상이 되는 시점이다. 임계값은 임의로 정했다.
+- **첫 발견 시점(seed 1, 같은 초기화)**: E17(`runs/scratch_20261013_202352_stage2`) / E24(`runs/scratch_20261015_093349_stage2`) 순서로 IPPO 1.68/1.68M, PGCT 1.63/1.13M, Oracle 1.51/1.32M, All 1.54/3.61M이다. 전이 mode는 비결정성만으로도 0.2–2.1M씩 흔들린다.
+- **agent별 발견(E24)**: IPPO [1.68, 1.84, -, -], PGCT [1.53, 1.13, 5.2, 5.38], Oracle [2.14, 1.32, 3.12, -], All [4.9, 3.91, 3.61, 4.88](M).
+- **첫 발견 이후 팀 delivery/episode(학습, 20 iteration 평균)**: E24 기준 +0.5M/+1M/+2M에서 IPPO 5.4/8.35/23.25, PGCT 2.35/3.55/17.5, Oracle 2.4/10.6/23.15, All 5.4/9.05/21.45였다. E17의 +0.5M은 IPPO 5.4, PGCT 2.45, Oracle 3.3, All 4.55다. 발견 직후 PGCT가 IPPO보다 느리고, 이는 두 run에서 모두 같다.
+- **영상**: `latent_team/render_checkpoint_videos.py`(새 파일, 읽기 전용 평가)를 썼다. trainer evaluate()로 deterministic masked 1 episode, 500 step, reset seed 5,000,001, 10 fps다. 출력은 `output/videos_20261019/{e1f,e1f_v2,e1}/`이다. E1-F는 그 시점의 최신 checkpoint를 썼으므로 job마다 1.28M 또는 1.54M으로 step이 다르다. PGCT는 `e1f_1.54M/`에 1.54M 영상을 추가했다. E1은 06250(6.40M)이고, episode 1개의 delivery는 IPPO 15, PGCT 37, Oracle 35, All 25다. E1-F 영상은 모두 0이다. 렌더링의 "PGCT accepted links" 표시는 고정 평가에서 gate를 0으로 두므로 항상 0이다.
+- **한계**: seed 1뿐이다. E17과 E24는 독립 seed가 아니라 같은 seed의 비결정적 반복이다. train delivery는 확률 정책이므로 잡음이 있다.
+- **재현**: scratchpad의 `discovery.py`는 보존하지 않았다. 위 정의를 그대로 따르면 된다.
+- **추가(2026-10-19, 평가 기반 ΔT_k)**
+  - 정의: onset은 평가 delivery가 3회 연속 1 이상이 되는 첫 시점이다. T_k는 평가 3회 이동평균이 처음 k 이상이 되는 시점이다. ΔT_k = T_k − onset.
+  - E24 결과(onset, ΔT5/ΔT10/ΔT20)
+    - IPPO: 2.05M, 0.82/1.13/3.02
+    - PGCT: 1.74M, 0.77/1.54/2.41
+    - Oracle: 1.59M, 0.72/1.38/3.07(ΔT30 4.25)
+    - All: 3.94M, 0.87/1.38/2.51
+  - E17 onset은 IPPO 2.05, PGCT 2.10, Oracle 1.89, All 1.79M이다.
+  - 전이 비율 재계산(E24 PGCT): 전이가 있었던 update의 비율은 0–1M 0.95, 1–2M 0.87, 2–3M 0.55, 3–4M 0.19, 4–5M 0.12, 5–7M 0.44다. 같은 팀 arc는 2–3M 0.18, 3M 이후 약 0이다. 첫 전이는 0.1M이다. 기존 E24 기록, GPT 인용과 일치한다.
+
+## E29. probe 팀 식별의 신뢰성(시간 변화 대 팀 신호)과 W&B probe 컬러맵 도구 — 2026-10-19 Claude Code, 읽기 전용
+
+- **gate EMA(`communication.jsonl` policy_distance_ema)**: 같은 팀 쌍이 다른 팀 쌍보다 가까운지 record별 AUROC를 계산했다(1이면 같은 팀이 더 가깝다).
+  - E1 PGCT(E24): 0–6.5M 구간별 0.28–0.49.
+  - E1-F canonical PGCT: 0–1.5M 0.33–0.61.
+  - E1-F v2 PGCT: 0.25–0.52.
+  - 모든 쌍의 거리가 학습과 함께 커진다. E1 PGCT 같은 팀 거리는 0.026에서 0.242로, 다른 팀 거리는 0.022에서 0.201로 늘었다. 고정 τ=0.12 때문에 초기에는 거의 모두 연결되고 이후 끊긴다. E1의 전이 비율이 95%에서 12%로 줄어든 것과 같은 방향이다.
+- **checkpoint 기준 자기 변화와 팀 신호**: gate와 같은 규칙(zero hidden, unmasked, ln JS, probe 평균)을 썼다.
+  - E1-F의 0.256M 간격 자기 변화(agent 평균)는 canonical PGCT 0.012–0.106, v2 PGCT 0.030–0.048, IPPO(v2 bank) 0.037–0.061이다.
+  - 같은 시점의 팀 신호(다른 팀 − 같은 팀 JS)는 −0.077~+0.029다.
+  - E1 PGCT의 1M 간격 자기 변화는 0.076–0.127, 팀 신호는 −0.072~+0.006이다.
+  - agent가 0.25M 동안 스스로 변하는 양이 팀 간 차이보다 크거나 비슷하다.
+- **E1-F v2 1.54M 컬러맵**: A1·A2는 FWD 위주, A3·A4는 LEFT 위주다. 가장 가까운 쌍은 1–2(0.045)와 3–4(0.036)로 둘 다 다른 팀이다. 같은 팀은 1–3 0.128, 2–4 0.229다. 행동 습관 묶음이 팀보다 우세하다(E1의 D33·E23과 같은 패턴). 단, E1-F는 아직 배송을 배우기 전이다.
+- **도구**: `latent_team/probe_wandb_viz.py`(새 파일). checkpoint별 agent×probe×action 확률 컬러맵, 4×4 평균 JS와 쌍별 per-probe JS, 이전 checkpoint 대비 drift 맵을 만든다. 스칼라는 js_same/js_cross/auroc/pairs_below_tau/drift_mean이다. job마다 별도 W&B run(`<job>-probes`, group=plan 폴더, job_type=probe_viz)에 올리고 학습 run에는 쓰지 않는다. `--watch`로 새 checkpoint를 따라간다.
+- **검증**: v2 run 2개 checkpoint로 offline smoke를 했다(`tmp/pv_smoke`). 처음에는 Windows 경로 길이 초과로 wandb init이 실패해 run id와 dir을 줄였다. 온라인 업로드와 watch는 아직 시작하지 않았다.
+- **한계**: seed 1뿐이다. E1-F는 1.5M까지만 봤다. 팀별 목표 방향 행동은 배송을 배운 뒤에 나타날 수 있으므로, E1-F 판정은 2M 이후로 미룬다.
+
+## E30. E1 이전 학습 모델에서 probe가 팀을 연결하는가 + 연결 규칙(hard/sigmoid/softmax) 비교 — 2026-10-19 Claude Code, 읽기 전용
+
+- **코드·산출물**: `output/probe_connect_20261019/`(analyze.py, results.json, probe_connect.png).
+- **모델**(final, 고정, hash 불변): 커리큘럼 Stage01(home 1.0)·Stage02(.875)·Stage03(.75)·Stage04 PGCT(.5), sp_20261008 E1 IPPO/PGCT, E2 IPPO/PGCT. E3는 final이 없어 제외했다. 모두 seed 1이고 커리큘럼 계열이다.
+- **bank**
+  - canonical: 모델 자신의 bank. IPPO는 같은 맵 PGCT bank를 썼다.
+  - ablated: canonical에서 팀 상대 입력을 0으로 만든 것. requested_shelf·relevant_goal 채널과 ego carrying_requested/return_phase/shelf_home_*를 지웠다.
+  - v2_gate(E1), v2_gate_ablated.
+  - E11 국소 증거: Beta(1,1) 사후평균, 20 episode. E11 쌍 순서를 반영했다.
+- **규칙**
+  - hard: 1[D≤0.12].
+  - sigmoid: σ((0.12−D)/0.03).
+  - softmax: exp(−D/T), T는 비대각 D의 중앙값.
+  - 지표는 팀원 가중치 비율(우연 1/3)과 AUROC다.
+- **결과(canonical AUROC / ablated AUROC / hard 같은 팀·다른 팀 arc)**
+  - Stage01: 1.00 / 1.00 / 4·0. 팀을 정확히 연결한다.
+  - Stage02: .62 / 1.00 / 0·0.
+  - Stage03: .50 / .75 / 0·0.
+  - Stage04: .50 / .38 / 0·0.
+  - E1 IPPO: .38 / .62 / 0·0. v2_gate_ablated는 .75.
+  - E1 PGCT: .38 / .25 / 0·2.
+  - E2 IPPO: .38 / .50 / 2·4.
+  - E2 PGCT: .50 / .75 / 2·4.
+  - 국소 증거는 6개 모델 모두 AUROC 1.00이고, 4명 모두 가장 가까운 상대가 팀원이었다.
+- **연결 규칙**
+  - JS 신호(canonical)에서 sigmoid 팀원 비율은 Stage03 이후 0.08–0.35, softmax는 0.30–0.34다. 우연 수준이거나 그 아래다.
+  - 신호가 있는 경우(Stage01, Stage02 ablated)에는 sigmoid가 0.97–1.00이다.
+  - 학습이 끝난 모델 대부분에서 모든 쌍의 JS가 0.12를 넘어 hard gate는 아무것도 연결하지 않았다.
+- **해석**
+  - 팀별로 공간을 나눠 쓰면(home 1.0) probe가 팀을 가른다.
+  - 공간이 섞일수록(home .875→.5) 같은 입력에 대한 정책이 수렴해 팀 신호가 사라진다(명제 6, D32와 같은 방향).
+  - 팀 상대 입력을 지우면 Stage02–03, E1 IPPO, E2 PGCT에서 신호가 일부 살아난다. 하지만 학습 분포 밖 입력이고, Stage04·E1 PGCT에서는 실패한다.
+  - 실제 행동 증거는 신호가 강하다.
+- **한계**: seed 1, 쌍 6개(같은 팀 2)라 AUROC 해상도가 거칠다. 국소 증거는 관측자가 자기 팀 목표를 안다는 점과 이웃 귀속(익명 agent) 가정에 의존한다(E13). 학습 초기에 증거가 있는지는 확인하지 않았다.
+
+## E31. 보상 probe 오프라인 검증(학습된 보상 예측기, counterfactual 상한, 보상 기록, 보상 가중치) — 2026-10-19 Claude Code, 읽기 전용
+
+- **코드·산출물**: `output/reward_probe_20261019/`(reward_probe.py, results/results.json, 조건별 npz, run.log). agent 학습은 하지 않았다. 정책은 데이터 생성에만 썼고 가중치 hash는 불변이다.
+- **조건**: E1-F 무작위·IPPO 0.26/0.77/1.54M, E1 무작위·IPPO 1.54/6.40M(E24). 조건마다 30 episode×500 step, 확률 정책(masked), reset seed 7,100,001부터.
+- **예측기**: agent별 MLP(obs+행동 one-hot → 보상), 자기 데이터만, init seed 3개, 25 epoch.
+- **probe**: v2 gate 48 상태×5 행동 = 240 query. 거리는 평균 |r̂_i − r̂_j|다.
+- **counterfactual 상한**: ProbeRealiser로 각 팀 agent를 probe의 물리 상태에 두고 행동을 실행했다. AUROC는 항상 1.00이다. 하지만 팀에 따라 실제 보상이 다른 query는 **E1-F 18/240, E1 5/240뿐**이다.
+- **학습된 보상 probe AUROC**
+  - E1-F: 무작위 .38, 0.26M .50, 0.77M .62, 1.54M .50.
+  - E1: 무작위 .25, 1.54M .50, 6.40M .25.
+  - 예측기와 실제 보상의 상관(자기 팀/다른 팀): .35/.34, .45/.39, .20/.25, .10/.23(E1-F). 자기 팀 보상 구조를 따로 배우지 못한다.
+  - label로 판별 query만 골라도(oracle 가중) .25–.75다.
+  - 검증 R²는 .13–.65, 희소 사건(|r|≥0.1) MAE는 .13–.35다.
+  - 학습된 정책은 "요청 선반 운반" 상태를 거의 방문하지 않는다(E1-F 0.26–1.54M에서 agent별 0–866 샘플). 무작위 정책은 507–953 샘플을 모으지만 진척 보상(0.005)이 잡음에 묻힌다.
+- **보상 기록(예측기 없음)**: AUROC .12–.50.
+- **보상 가중치**: reward_magnitude, action_sensitivity, SNR 가중치가 판별 query에 주는 비중은 2–10%로, 균등 가중치(2–7%)와 비슷하다.
+- **결론**: 학습된 보상 예측기 probe는 현재 데이터 범위에서 팀을 가르지 못한다. GPT의 지적(예측기 ≠ 보상 함수, 외삽, 초기 데이터 부족)과 일치한다.
+
+## E32. probe별 팀 분리 능력 Δ_m과 probe 가중치(정책 probe) — 2026-10-19 Claude Code, 읽기 전용
+
+- **코드·산출물**: `output/probe_weight_20261019/`(delta_m.py, results.json, delta_m.png).
+- **정의**: Δ_m = 다른 팀 JS − 같은 팀 JS(probe m별, PGCT 규칙).
+- **가중치**: uniform / 보상 크기 / 팀 보상 차이(env counterfactual, 설계자 사전지식) / agent 분산(label 없음) / oracle held-out / oracle in-sample.
+  - oracle held-out은 E1 계열에서는 다른 모델들의 Δ_m(leave-one-model-out), E1-F에서는 같은 job의 이전 checkpoint Δ_m으로 정했다.
+  - oracle in-sample은 같은 데이터로 고른 것이라 낙관적이다.
+- **E1 계열(Stage01–04, sp E1 IPPO/PGCT, 공통 v2 E1 bank)**
+  - uniform AUROC: v2 .12–.62, ablated .38–1.00.
+  - oracle held-out: v2 .62–.88, ablated .75–1.00. 다른 모델에서 고른 판별 probe가 이 모델에도 통한다.
+  - 팀 보상 차이 가중치: ablated에서 6개 모두 .88–1.00(v2에서는 .12–.75).
+  - 보상 크기 가중치는 uniform과 거의 같다.
+  - Spearman(Δ_m, |r|)은 −.33~+.12다. 보상 크기는 팀 판별력을 따르지 않는다.
+- **E1-F(5개 job × 0.51/1.02/1.54M, 공통 v2 E1-F bank)**
+  - uniform .25–1.00(대부분 .25–.62).
+  - 이전 checkpoint로 정한 held-out 가중치는 .25–1.00(대부분 .25–.50).
+  - Δ>0인 probe 비율은 0–69%로 시점마다 바뀐다.
+- **한계**
+  - 쌍이 6개라 AUROC 해상도가 1/8이다.
+  - E1 계열은 같은 커리큘럼 계보라 leave-one-model-out이 독립 검증이 아니다.
+  - seed 1뿐이다.
+  - 팀 보상 차이 가중치는 팀 목적을 아는 설계자 사전지식이라, 잠재 팀 추론의 공정한 비교가 아니다.
+
+## E33. 팀 판별 probe의 상태 분석과 설계 규칙 시험 bank — 2026-10-19 Claude Code, 읽기 전용
+
+- **코드·산출물**: `output/probe_redesign_20261019/`(inspect_probes.py, probe_table.json, junction_bank.py, junction_results.json, far_band_check.py, far_band_results.json).
+- **판별 probe의 공통점**
+  - ablated에서 6개 모델 모두 Δ>0인 probe는 #2 (4,1) RIGHT, #26 (4,1) UP, #33 (4,1) RIGHT, #42 (7,0) UP, #38이다.
+  - 모두 맵 위쪽 통로(y 0–1, 목표 행에서 9–10칸)에서 선반을 든 채 오른쪽이나 위를 보고 있다.
+  - 팀 차이는 회전 선택에서 나온다. 빨강은 LEFT(서쪽 길), 파랑은 RIGHT/FWD(동쪽 길)다. 예: #26 빨강 LEFT .85 / 파랑 RIGHT .88, #42 빨강 LEFT .93 / 파랑 RIGHT .84.
+  - 방향별 평균 Δ(ablated)는 RIGHT +.117, UP +.094, LEFT −.067, DOWN −.012다. x 4–5 구간이 +.125로 가장 크다.
+  - 원 v2(입력 그대로)에서 일관된 probe는 #6·12·15로 적고, 팀 차이는 주로 RIGHT 회전 확률이다.
+- **해석**: E1에서 남은 팀 신호는 목표 방향이 아니라 팀별 경로 습관(서쪽/동쪽 길)이다. 커리큘럼에서 팀별 홈 구역이 있었던 영향(팀 = 구역 혼동)일 가능성이 크다(가설). 팀 상대 입력(특히 운반 선반의 home dx/dy, requested 표시)이 있으면 두 팀이 같은 단서를 따라가 이 습관이 가려진다.
+- **설계 규칙 시험(균등 가중치, label 미사용)**
+  - 규칙 A: 분기 ≥3인 통로 칸, 목표 비가시, 모든 방향, 팀 상대 입력 중립. E1에서 80개다.
+  - 규칙 B: A에 "목표 행에서 9칸 이상 먼 띠"를 더한 것. 32개다. E1 probe를 본 뒤 정했으므로 E1에서는 in-sample이다.
+  - AUROC 평균(≥.75인 모델 수)
+
+| bank | E1 계열 6개 | E1-F 15개(0.51/1.02/1.54M) |
+|---|---|---|
+| v2 (현행) | .42 (0) | .49 (1) |
+| v2 ablated | .67 (3) | .48 (2) |
+| 규칙 A, 입력 그대로 | .48 (0) | .47 (1) |
+| 규칙 A, 중립 | .56 (1) | .53 (4) |
+| 규칙 B, 중립 | .67 (4) | .53 (4) |
+
+- **결론**: 규칙 B는 E1 계열에서 v2 ablated와 같은 평균에 ≥.75 모델이 더 많다. 하지만 in-sample이고, E1-F 초기(배송 학습 전)에서는 어떤 bank도 우연 수준이다. 규칙의 일반성은 E1-F 2M 이후에 미리 정한 그대로 평가해야 한다.
+- **한계**: seed 1, 쌍 6개, E1 계열 계보 공유. "중립" 입력은 "보상 대상이 아닌 선반을 들고 home을 모르는" 상태로 해석되며, 실제로 방문하는 상태이지만 빈도는 확인하지 않았다.
+
+## E34. GPT 검토 대응: 중복 probe, E1-F Δ_m(t) 일관성, 독립 계보 E1 검증 — 2026-10-19 Claude Code, 읽기 전용
+
+- **코드·산출물**: `output/probe_redesign_20261019/gpt_checks.py`, `gpt_checks.json`.
+- **중복**: E1 v2, E1 v2 ablated, E1-F v2, E1-F v2 ablated(각 48개), 규칙 B 중립(32개)은 모두 입력이 고유하다. E32·E33의 결과는 중복 투표로 설명되지 않는다. 중복 문제(고유 26/48, E04)는 canonical bank에만 해당한다.
+- **E1-F Δ_m(t) 순위 일관성**(Spearman)
+  - 같은 job의 연속 checkpoint(0.51→1.02→1.54M): 평균 +.23(−.14~+.65).
+  - 1.54M에서 job 간 평균: −.07.
+  - 5개 job 모두에서 Δ>0인 probe는 없다.
+  - 배송 학습 전 단계에서는 판별 probe가 시간과 job에 따라 일관되지 않다(GPT의 "부호가 바뀌는 신호" 유형).
+- **독립 계보 검증**: from-scratch E1(E24, 커리큘럼 없음) IPPO/PGCT/Oracle/All checkpoint_06250(6.4M). 이 모델들은 규칙을 정할 때 보지 않았다.
+  - AUROC: v2 .38–.50, v2 ablated .25–.50, 규칙 B 중립 .25–.62.
+  - 커리큘럼 계열에서 찾은 판별 probe와 규칙 B는 독립 계보로 일반화되지 않는다.
+  - E33의 E1 신호가 커리큘럼 홈 구역 습관이라는 가설과 맞는다.
+
+## E35. Random-gated 대조군 구현 — 2026-10-19 Claude Code, 구현·smoke만
+
+- **코드**
+  - 새 파일 `latent_team/random_gated.py`.
+  - `latent_team/exp_b_oracle_consensus.py`: `matched_transfer`에 `allocation_override` 인자를 추가했다(기본 None이면 기존 동작 그대로). `check_allocation`에 random을 허용했다.
+  - `latent_team/train_from_scratch.py`: `random` mode와 `--random-reference` 옵션을 추가했다.
+  - 테스트 3개를 추가했다. trainer·환경·probe 파일은 수정하지 않았다.
+  - 실행 중인 E1-F 프로세스는 시작 시 모듈을 이미 읽었으므로 영향이 없다.
+- **규칙**
+  - update마다 참조 PGCT `transfer.jsonl`의 실제 arc 수를 목표로, 현재 물리 이웃 arc 중 균등 무작위로 고른다. receiver별 합은 1이다.
+  - 부족분은 이월한다(최대 12). 별도 난수기는 seed+7,340,033이다.
+  - plan 단계에서 참조의 mode, update 연속성, rollout 길이, 예산 이상의 길이를 검사한다(smoke는 길이 검사 제외).
+- **검증**
+  - `tests` 전체 188 passed(기존 185 + 3).
+  - 실제 E1-F PGCT 기록(1,650 update, 1.69M)을 그 기록의 물리 후보로 재생하면 목표 8,686 arc를 모두 사용한다(이월·미충족 0).
+  - 같은 팀 arc 비율은 PGCT .329, Random .362다. 0–1.69M 구간의 PGCT는 무작위보다 같은 팀을 더 고르지 않는다.
+  - smoke `runs/smoke_random_gated_20261019`(e1f, v2 bank, All·Random 각 64 step). 참조는 PGCT update 101–140을 1부터 다시 번호 매긴 scratch 파일이다.
+    - Random update 1: 목표 4 / 후보 12 / 사용 4.
+    - Random update 2: 목표 8 / 후보 6 / 사용 6 / 이월 2.
+    - receiver별 합은 1이고 distill probe는 64개다. peer loss는 .0117/.0089이고, 초기 hash는 All과 같다(baaa10bf…).
+- **본 학습은 실행하지 않았다.** 참조가 예산 이상을 덮어야 하므로 E1-F main PGCT(10M)가 끝난 뒤 가능하다.
+- **한계**: arc 수만 맞춘다. donor가 있는 receiver 비율(`update/pgct_peer_weight`)은 PGCT와 다를 수 있다.
+
+## E36. 잘 학습된 커리큘럼 모델(Stage03·Stage04)로 보상 probe 재시험 — 2026-10-19 Claude Code, 읽기 전용
+
+- **사용자 지적**: E1 이전에 잘 학습된 50:50 모델이 있었다. Stage04 PGCT는 home .5, 4.0M, 평가 delivery 47.25이고, Stage03은 home .75, 3.0M, 49.85다.
+- **방법**: E31과 같다(`output/reward_probe_20261019/reward_probe.py --only "Stage03 3.0M" "Stage04 PGCT 4.0M" --results-dir results_stage`, 결과 `results_stage/`). 각 모델의 자기 환경(E1 맵, 인접 목표)에서 30×500 롤아웃을 했고, v2 E1 gate bank 240 query를 썼다. agent 학습은 없다.
+- **결과**
+  - **데이터 문제는 해결됐다.** 예측기 검증 R²는 .94/.92, 희소 사건 MAE는 .086/.096, 요청 선반 운반 샘플은 agent별 3,136–5,165개다. E31(R² .13–.65, 0–953개)보다 훨씬 좋다.
+  - 그래도 **보상 probe AUROC는 .62(Stage03), .38(Stage04)**다. 판별 query만 쓰는 oracle 가중도 .00/.25이고, 보상 기록 기준선은 .12/.25다.
+  - 정책 probe는 .50/.25다.
+  - counterfactual 상한에서 팀마다 실제 보상이 다른 query는 **5/240(2%)**뿐이다. 예측기와 실제 보상의 상관(자기 팀/다른 팀)은 −.09/−.09, −.10/−.09로 두 팀이 같다.
+- **해석**: E1에서 보상은 "팀 기준 관측"의 함수로 보면 두 팀이 사실상 같다. 내 팀 목표·요청 표시를 따라가면 보상을 받고, 두 목표가 붙어 있기 때문이다. 예측기가 r(o,a)를 정확히 배워도 두 팀의 r(o,a)가 같으므로, 같은 입력 probe로는 원리적으로 팀을 가를 수 없다(명제 6의 보상판). E1-F는 목표가 양 끝이라 팀마다 보상이 다른 query가 18/240(7.5%)이므로 결론이 다를 수 있다. 다만 지금 E1-F에는 충분히 학습된 모델이 없다.
+- **한계**: seed 1, 쌍 6개, 같은 커리큘럼 계보다.
+
+## E37. 궤적(시퀀스) probe — 정책·보상, 길이 1과 비교 — 2026-10-19 Claude Code, 읽기 전용
+
+- **코드·산출물**: `output/trajectory_probe_20261019/`(trajectory_probe.py, results/results_both.json, results/summary_both.md, run.log). agent 학습은 없고 가중치 hash는 불변이다.
+- **공통 궤적**: 고정 source 정책 Stage04 PGCT를 각 환경(E1: Stage04 자기 환경, E1-F: E1-F env)에서 40×500 롤아웃했다. 길이 12 창을 source agent 4명에게 균등하게 뽑았다(팀 label 미사용).
+  - carry_memory: 요청 선반 운반 + 처음 3 step 안에 목표가 보였다가 마지막 4 step에는 안 보임.
+  - carry: 운반만.
+  - random.
+  - 창 수: E1은 6/64/64(carry_memory 6개뿐), E1-F는 64/64/64.
+- **(a) 정책**: hidden을 이어 가며 step별 JS를 평균한 traj_all·traj_late와, 같은 프레임을 하나씩 hidden 0으로 넣은 len1을 비교했다. 15개 모델이다.
+- **(b) 보상**: 평가 모델 자신의 20×500 롤아웃으로 agent별 MLP(len1)와 GRU(traj_step, traj_sum)를 학습하고, 창에 기록된 행동으로 질의했다. 5개 모델이다.
+- **결과(AUROC 평균, 1이면 같은 팀이 더 가깝다)**
+
+| | 창 | len1 | 궤적 |
+|---|---|---|---|
+| 정책, E1 커리큘럼 6개 | carry / random | .56 / .60 | .58 / .56 (late .54 / .54) |
+| 정책, E1 처음부터 4개 | carry / carry_memory | .56 / .69 | .41 / .69 |
+| 정책, E1-F 1.54M 5개 | carry / carry_memory / random | .38 / .38 / .40 | .35 / .42 / .45 (late .35 / .47 / .53) |
+| 보상, Stage03·04(R² .85–.93) | carry / random / carry_memory | 1.00 / 1.00 / .38 | step 1.00 / 1.00 / .25, sum .94 / .50 / .25 |
+| 보상, 처음부터 E1 IPPO(R² .50/.37) | carry / carry_memory / random | .62 / .75 / .50 | step .38 / .25 / .50, sum .25 / .25 / .25 |
+| 보상, E1-F IPPO·PGCT(R² ≤ .07) | carry / carry_memory / random | .50 / .56 / .50 | step .69 / .75 / .75, sum .75 / .81 / .81 |
+
+- **해석**
+  - 정책 궤적 probe는 어느 계열에서도 길이 1보다 일관되게 낫지 않다.
+  - 보상 probe는 실제 롤아웃 창(학습 분포 안, 기록된 행동)으로 질의하면 커리큘럼 모델 2개에서 길이 1부터 AUROC 1.00이다. E36의 v2 gate 상태(.62/.38)와 다르다. 질의 집합이 결과를 좌우한다.
+  - 하지만 처음부터 학습한 E1 모델에서는 .25–.75로 재현되지 않는다. 커리큘럼 계보의 방문 분포(팀별 구역 습관)가 예측기에 남은 것일 수 있다(가설, E34와 같은 혼동).
+  - 궤적은 보상 쪽에서도 길이 1보다 나아지지 않는다.
+  - E1-F의 보상 궤적 값(.69–.81)은 예측기 R²가 0 근처라 해석하지 않는다.
+- **한계**
+  - seed 1, 쌍 6개다.
+  - 보상 부분은 5개 모델뿐이다.
+  - E1 carry_memory 창은 6개라 평가하기 어렵다.
+  - source 정책이 Stage04 하나이고, Stage04는 평가 대상이기도 하다(그 모델에 유리할 수 있다).
+
+## E38. probe 창 생성 정책 교체(source swap) + 같은 GRU의 길이 1·12 비교 — 2026-10-19 Claude Code, 읽기 전용
+
+- **코드·산출물**: `output/trajectory_probe_20261019/source_swap.py`, `results_swap/`(results.json, summary.md), `run_swap.log`. agent 학습은 없고 가중치 hash는 불변이다.
+- **설계(D58)**
+  - 평가 모델은 E1 10개로 고정했다(커리큘럼 Stage01–04, sp E1 IPPO/PGCT, 처음부터 학습한 E1 IPPO/PGCT/Oracle/All 6.4M).
+  - 창을 만드는 정책만 바꿨다. Stage04(커리큘럼)와 처음부터 학습한 All 6.4M(4명 모두 배송)이다. 각자 자기 E1 환경에서 60×500 롤아웃하고, 길이 12 창을 agent 균등으로 뽑았다.
+  - 창 수(기억/운반/무작위): Stage04 8/64/64, 처음부터 All 53/64/64.
+  - 두 source 모델은 점수에서 뺐다. 표의 "8개"는 어느 쪽 source도 아닌 모델이다.
+  - 정책 지표는 len1, traj_all/late/last/last2다.
+  - 보상은 agent별 GRU 하나를 len1(프레임 단독)과 traj(hidden 유지), last(마지막 step)로 질의했다. MLP len1도 함께 봤다.
+  - 예측기 R²: 커리큘럼 .80–.93, 처음부터 학습 .33–.55.
+- **결과(AUROC 평균)**
+
+| | 창 생성 | 운반 창 | 무작위 창 |
+|---|---|---|---|
+| 정책 len1, 커리큘럼 5개 | Stage04 / 처음부터 | .65 / .55 | .70 / .75 |
+| 정책 len1, 처음부터 3개 | Stage04 / 처음부터 | .46 / .42 | .38 / .42 |
+| 보상 MLP len1, 커리큘럼 5개 | Stage04 / 처음부터 | **1.00 / .97** | .95 / .93 |
+| 보상 MLP len1, 처음부터 3개 | Stage04 / 처음부터 | **.79 / .71** | .71 / .62 |
+| 보상 GRU len1 → traj → last, 커리큘럼 운반 | Stage04 / 처음부터 | .90→.90→1.00 / .85→.95→1.00 | |
+| 보상 GRU len1 → traj → last, 처음부터 운반 | Stage04 / 처음부터 | .50→.67→.71 / .50→.54→.71 | |
+
+- **해석**
+  - **source 편향 우려는 대체로 해소된다.** 보상 probe의 높은 AUROC는 창을 처음부터 학습한 정책이 만들어도 유지된다(커리큘럼 .93–.97).
+  - **처음부터 학습한 계보에서도 보상 probe는 우연 이상이다.** 운반 창 MLP len1이 .71–.79로, 같은 모델의 정책 probe(.42–.46)보다 높다. 이 계보의 IPPO는 배송을 배운 agent(A1, A2)가 서로 다른 팀이라, "실력 묶음"이면 AUROC가 낮아져야 한다. 그런데 반대로 나왔다.
+  - **같은 GRU 안에서는 궤적과 마지막 step이 len1보다 낫다**(처음부터 운반 .50→.71). 다만 단일 프레임 성능은 MLP len1이 GRU len1보다 높아, 최선의 len1(MLP) 대비 순이득은 없다.
+  - 정책 궤적 probe는 여전히 이득이 없다. 처음부터 계보에서 .33–.54다.
+- **한계**
+  - seed 1, 모델당 쌍 6개다. 처음부터 계보는 3개 모델이고, 같은 초기화(f78ec390…)다.
+  - 실제 롤아웃 창에서 팀별 실제 보상 차이(counterfactual)는 계산하지 않았다. 그래서 예측기 차이가 "보상 함수 차이"인지 "agent별 방문 상태 차이"인지 분리하지 못했다.
+  - 기억 창은 Stage04 source에서 8개뿐이다.
+
+## E39. 보상 probe의 counterfactual 분리(Q_diff/Q_same)와 예측기-실제 보상 상관 — 2026-10-19 Claude Code, 읽기 전용
+
+- **코드·산출물**: `output/trajectory_probe_20261019/counterfactual_split.py`, `results_cf/`(results.json, summary.md), `run_cf.log`. agent 학습은 없고 가중치 hash는 불변이다.
+- **방법**
+  - E38과 같은 창을 썼다(source Stage04·처음부터 All, seed 8,300,001, 60×500).
+  - query(창의 각 step: source agent의 관측과 기록된 행동)마다 source episode를 reset seed와 기록된 joint action으로 재생했다.
+  - 그 step에서 base env를 deepcopy하고, source agent의 팀 id만 빨강/파랑으로 바꿔 같은 joint action을 실행해 그 agent의 개인 보상 r_red, r_blue를 얻었다.
+  - 재생 검증: 원래 팀의 보상이 기록된 보상과 3,804개 query 모두 일치했다(불일치 0).
+  - 평가는 E38의 10개 E1 모델, agent별 MLP 길이 1 예측기(자기 롤아웃 20×500)다.
+- **Q_diff 비율(실제 보상이 팀마다 다른 query)**
+  - 운반 창: 604/768(Stage04 창), 392/768(처음부터 창).
+  - 무작위 창: 480/768, 276/768.
+  - 기억 창: 37/96, 243/636.
+  - 평균 |r_red − r_blue|는 .002–.051로, 주로 shaping(요청 선반 진척·pickup) 차이다.
+  - 인위적 gate 상태의 2%(E36)와 달리, 실제 상태에서는 팀별 보상 차이가 흔하다.
+- **결과(AUROC 평균, 두 source 모델 제외)**
+
+| 계열 | 창 생성 | 창 | AUROC 전체 / Q_diff / Q_same | 상관 자기 팀 / 다른 팀(Q_diff) |
+|---|---|---|---|---|
+| 커리큘럼 5 | Stage04 | 운반 | 1.00 / 1.00 / .95 | .77 / .02 |
+| 커리큘럼 5 | 처음부터 | 운반 | .97 / 1.00 / .95 | .33 / .06 |
+| 처음부터 3 | Stage04 | 운반 | .79 / .79 / .67 | .54 / −.03 |
+| 처음부터 3 | 처음부터 | 운반 | .71 / .79 / .58 | .46 / .02 |
+| 처음부터 3 | 처음부터 | 무작위 | .62 / .67 / .50 | .52 / .10 |
+| 8개 전체 | 두 source | 기억 창 | .41–.55 | 약 0 |
+
+- **해석**
+  - **가설 A(보상 함수 차이)를 지지한다.** Q_diff에서 각 예측기는 자기 팀의 실제 보상과 상관이 .33–.77이고, 다른 팀 보상과는 −.03–.10(운반 창)이다. 두 계보 모두 같다.
+  - 팀 판별 신호는 Q_diff에서 더 강하다. 처음부터 계보에서 Q_diff는 .67–.79, Q_same은 .50–.67이다.
+  - 커리큘럼 계보에서는 Q_same에서도 .88–.95라, 보상 차이 외의 추가 신호(방문 분포 등, 가설 B)도 함께 있다.
+  - 기억 창은 팀 보상 차이 자체가 작아(.002) 신호가 없다.
+- **한계**
+  - seed 1, 모델당 쌍 6개다. 처음부터 계보는 3개이고 초기화가 같다.
+  - Q_diff와 Q_same은 query 수와 상태 종류가 달라 직접 비교에 주의해야 한다.
+  - 팀 보상 차이는 주로 작은 shaping 항이다(설계된 shaping에 의존할 수 있다).
+  - E1만 시험했다.
+
+## E26 추가 — E1-F main 5개 외부 종료 (2026-10-19 13:07–13:08 KST, Claude Code 확인)
+
+- **관측**
+  - 5개 job(canonical IPPO/PGCT/Oracle/All, v2 PGCT)이 13:07:17–13:08:09 사이에 동시에 기록을 멈췄다. 마지막 metrics는 1.67–1.70M step이다.
+  - err.log에 Python traceback이 없다. W&B debug-internal.log도 종료 처리 없이 13:08:05–13:08:09에 끊겼다. 프로세스는 남아 있지 않았고 재부팅도 없었다(마지막 부팅 10-15).
+- **원인**
+  - Windows 이벤트 로그 13:08:12에 Claude 데스크톱 앱 패키지 업데이트가 있었다. Claude 서비스가 중지·재시작됐고 AppX 배포 기록이 남았다(Service Control Manager 7040/7045, CoworkVMService, AppXDeploymentServer 2562).
+  - 학습은 Claude Code 세션이 실행했으므로(E26, `run_e1f.ps1 -Track`) 앱 프로세스 트리의 하위였다. 앱이 업데이트로 재시작되면서 함께 종료된 것으로 판단한다. 코드 오류나 메모리 부족 흔적은 없다.
+- **남은 것**
+  - 각 job의 마지막 checkpoint는 `checkpoint_01500.pt`(1,536,000 step)다. actor·critic·optimizer·graph 상태가 들어 있다. 이후 약 0.15M step은 checkpoint가 없다.
+  - final.pt는 없다. job_status.json은 "running" 그대로 두었다.
+  - 각 plan 폴더에 `STOPPED_EXTERNALLY.txt`를 추가했다.
+- **재시작은 사용자 승인 대기다.** 선택지:
+  - (a) 같은 설정으로 처음부터 다시 실행한다.
+  - (b) checkpoint_01500에서 이어 학습한다. 현재 `--init-checkpoint`는 optimizer·graph를 초기화하므로, 완전한 이어 하기에는 새 wrapper가 필요하다. 난수 상태도 저장되지 않아 끊기지 않은 run과 같지 않다.
+  - 어느 쪽이든 Claude 앱과 독립된 터미널이나 작업 스케줄러로 실행해야 같은 일을 막을 수 있다.
+
+## E40. E1-F 대체 후보 환경 3개 정의와 smoke — 2026-10-19 Claude Code, 구현·smoke만
+
+- **사용자 요청**: 팀 보상을 포함해 후보 환경 2–3개(E1-F + 팀 보상, 8 agent/2팀, 맵 확대 + 센서 축소)를 정의하고 smoke까지만 하라. 학습은 하지 않는다.
+- **코드**
+  - 새 파일 `latent_team/env_candidates.py`.
+  - `train_from_scratch.py`: `--env-variant` 후보, 후보별 trainer 설정, n-agent 모니터 적용.
+  - `exp_b_oracle_consensus.py`, `random_gated.py`: 인원수 일반화.
+  - 테스트 1개 추가.
+  - trainer·환경·`examples/` 파일은 수정하지 않았다.
+- **후보**(모두 목표 양 모서리, 팀 보상, 짝수 seed 좌우 교체. 좌우 교체는 seed 간 강건성 시험일 뿐이고 방향과 팀을 분리하지 않는다. D63 정정)
+  - c1: E1 11×10, 4명.
+  - c2: 11×16, 8명, 요청/팀 4.
+  - c3: 20×16, 4명, 센서·통신 3.
+- **smoke 과정에서 발견해 고친 것**
+  - trainer가 `cfg.sensor_range`/`cfg.agent_count`로 환경 인자를 덮어써서, 처음에는 C2가 4명으로 돌고(20261019 폴더) C3는 bank 크기 오류가 났다.
+  - 8명에서는 `SpatialMonitor`의 4×4 고정 때문에 실패했다(20261019b). 실행 중에만 n-agent 모니터로 바꿔 해결했다.
+- **최종 smoke**(64 step, 각 complete)
+  - c1·c3: `runs/smoke_candidates_20261019b/`.
+  - c2: `runs/smoke_candidates_20261019c/`.
+  - 확인 항목: agent 수, 센서·통신, 요청/팀, 목표 좌표, 팀 보상, bank 크기(c3 657차원), allocation 크기.
+  - c2 Oracle은 같은 팀 16 arc / 다른 팀 0이다.
+  - c3 Oracle은 마지막 update에 같은 팀 이웃이 없어 0 arc였다. 국소성이 실제로 생긴다.
+  - Random은 이월이 동작했다.
+- **검증**: pytest 189 passed.
+- **학습은 하지 않았다.** 다음은 후보별 IPPO 2M pilot이고(승인 필요), "학습 시작 여부"만으로 고른다(D62).
+
+## E41. 후보 A/B/C 재정의, 통신 범위 수정, 연결률·보상 상관 기준선 — 2026-10-19 Claude Code, 구현·smoke만
+
+- **사용자 요청**: 후보를 A/B/C로 재정의하고, wrapper 이웃 후보를 통신 범위 기준으로 고치고, 연결률 진단과 보상 상관 기준선을 추가해 smoke까지 하라. 학습은 하지 않는다.
+- **후보**(`env_candidates.py`, 모두 팀 보상, 목표 양 모서리, 짝수 seed 좌우 교체 = 강건성 시험)
+  - A `a_e1f4_team`: 11×10, 4명, 센서·통신 5.
+  - B `b_e1f6_comm3`: 11×10, 6명(3+3), 센서 5·통신 3, 요청/팀 3.
+  - C `c_e1f6_wide_comm3`: 11×16(shelf_columns 5), 6명, 통신 3. shelf 열은 홀수만 가능해 13×12는 만들 수 없다.
+  - 기존 c1/c2/c3는 기록용으로 남겼다.
+- **wrapper 수정**: `matched_transfer`의 물리 후보와 검사가 `cfg.sensor_range` 대신 환경의 `communication_range`를 쓴다(`communication_range()`). 두 값이 같은 기존 실행에서는 동작이 같다.
+  - smoke 검증: A·B·C의 All에서 trainer allocation 지지 집합이 wrapper 통신 후보와 모든 update에서 일치했다. Random arc는 모두 통신 범위 안이었다.
+- **연결률 진단**(`latent_team/connectivity_check.py`, trainer와 같은 env 구성, 5×500)
+
+| 환경 | 정책 | 이웃 수/agent | 고립 비율 | 완전 연결 | 팀원 가용 | 같은 팀/다른 팀 쌍 범위 안 |
+|---|---|---|---|---|---|---|
+| E1-F(기존, 통신 5) | 무작위 | 1.49 | .10 | .07 | .52 | .52/.48 |
+| E1-F | IPPO 1.54M | 1.57 | .14 | .06 | .53 | .53/.52 |
+| A | 무작위 | 1.49 | .10 | .07 | .52 | .52/.48 |
+| B | 무작위 | 1.36 | .23 | .00 | .44 | .27/.28 |
+| C | 무작위 | .97 | .37 | .00 | .32 | .18/.21 |
+| c3(옛 후보, 20×16, 3) | 무작위 | .27 | .74 | .00 | .10 | .10/.08 |
+
+  - E1-F 학습 기록에서도 update 끝 물리 후보 arc는 평균 6.4/12이고, 완전 그래프는 6.1%다.
+  - **D62의 "E1-F는 물리 제약이 사실상 없다"는 틀렸다.** E1-F도 쌍의 약 절반만 범위 안이다.
+  - B는 고립 23%, 팀원 가용 44%로 "대부분 연결"도 "대부분 고립"도 아니다.
+- **보상 상관 기준선**(`latent_team/reward_correlation_baseline.py`): 보상 시계열 상관, 큰 보상 사건(|r|≥0.5) 상관, 사건 동시 발생(Jaccard)으로 팀을 가르는 기준선이다.
+  - 6/8명 checkpoint를 읽도록 자체 loader를 두었다.
+  - smoke 결과: B smoke 모델(학습 전)은 사건이 없어 정의되지 않는다. Stage04(개인 보상, 4.0M)는 세 지표 모두 AUROC .12다. 개인 보상에서는 보상 동시성이 팀 신호가 아니다. 팀 보상 학습 모델에서는 아직 측정하지 못했다.
+- **smoke**: `runs/smoke_candidates_abc_20261019/`(A·B·C × IPPO/PGCT/Oracle/All/Random, B v2 PGCT), 모두 complete다.
+- **pilot 실행기 갱신**: `run_candidate_pilot.ps1` 기본값을 B·A × seed 1·2(4 job)로 바꿨다. 계획 생성 확인용 `runs/plancheck2_*`가 있다.
+- **검증**: pytest 191 passed(+2).
+- **학습은 하지 않았다.**
+
+## E42. 보상 상관 기준선 AUROC 0.12(Stage04) 재확인 — 2026-10-19 Claude Code, 읽기 전용
+
+- **계기**: 사용자가 붙여넣은 외부 검토(T084). "AUROC가 0.5보다 크게 낮으면 점수 방향을 뒤집으면 약 0.88이므로, 같은 팀 상관이 더 낮은 구조적 신호일 수 있다. 실제 점수 분포를 보라."
+- **방법**: `latent_team/reward_correlation_baseline.py`의 `rollouts`·`pair_scores`·`score`를 그대로 import해(scratchpad 스크립트), Stage04 PGCT final(개인 보상, 4.0M, `runs/pgct09700_physical_mixing_20260929_155338_079437/stage04_4ag_physical_home0.500/final.pt`)을 확률 정책으로 rollout했다. reset seed 7,800,001부터, 3 episode(E41 smoke와 같음)와 20 episode, 500 step, 사건 임계 0.5. 가중치 hash 불변(스크립트 assert). 학습 없음.
+- **산출물**: `output/reward_corr_check_20261019/stage04_pair_scores.json`(쌍별 점수, episode별 cooccur AUROC).
+- **결과**
+  - 3 episode: E41 재현(세 지표 모두 0.125).
+  - 20 episode(10,000 step, 큰 보상 사건 agent별 365/336/545/576): corr_all AUROC 0.0, corr_events 0.0, cooccur 0.125.
+  - 쌍별 corr_all: 1–3(같은 팀) −0.0145, 2–4(같은 팀) −0.0067, 다른 팀 −0.0028~+0.0147. 모든 쌍 |r| ≤ 0.015로, 10,000 step 상관의 표준오차(약 0.01)와 같은 크기다.
+  - episode별 cooccur AUROC는 0.0~1.0으로 흔들리고 평균 0.44다.
+- **해석**: 집계 순서는 일관되게 "같은 팀이 약간 낮음"이지만, 크기가 잡음 수준이고 episode별로는 우연 수준이다. 방향을 뒤집어 쓸 수 있는 신호라고 볼 근거는 없다. 맞는 기술은 "개인 보상에서는 쌍별 보상 동시성이 거의 0"이다. E41의 "AUROC .12 → 보상 동시성이 팀 신호가 아니다"는 결론은 같지만 근거를 AUROC 대신 상관 크기로 바꿔야 한다. 같은 팀이 약간 음수인 것은 팀원이 같은 요청 선반을 두고 경쟁하기 때문일 수 있다(가설, 미검증).
+- **한계**: 모델 1개, seed 1, 쌍 6개(같은 팀 2). episode 단위 bootstrap 같은 통계 검정은 하지 않았다.
+- **pilot 상태(같은 시각, 읽기 전용)**: 19:00 KST에 A s1/s2 약 84k, B s1/s2 약 56k step. 1시간 기준 A 약 23, B 약 16 step/s다. 평가 배송은 0이다.
+
+## E43. 후보 환경 IPPO pilot 결과(A·B × seed 1·2, 2M) — 2026-10-21 Claude Code 분석, 실행은 사용자
+
+- **실행**: 사용자가 10-19 18:00 KST에 앱 밖 PowerShell에서 `run_candidate_pilot.ps1 -Track`으로 시작했다. 4개 job 모두 complete(2,000,896 step)다. 폴더는 `runs/pilot_20261019_180044_{a_e1f4_team,b_e1f6_comm3}`다.
+  - 설정: IPPO, 무작위 초기화, 팀 보상(env `team_reward_mode=team`; manifest의 `team_reward: individual`은 명령줄 기본값이 남은 표기), 목표 양 모서리(seed 2는 좌우 반대), lr 2e-4, entropy .05.
+  - 속도: A 약 23.7, B 약 16.3 step/s.
+- **분석**: `output/env_candidates_20261019/pilot_analysis.json`(scratchpad 스크립트, 읽기 전용). 평가는 trainer 기본 20×500 deterministic, 학습 지표는 구간 평균이다.
+
+| run | 평가 배송 첫 >0 | 지속 배송(3회 연속 ≥1) | 최근 5회 평가 배송 | 배송 agent | 학습 배송/ep (1.5–2M) |
+|---|---|---|---|---|---|
+| A s1 | 없음 | 없음 | 0 | 0명 | 0.00 |
+| A s2 | 1.89M | 없음 | 0, 0, .65, .6, .7 | A2 1명 | 0.20 |
+| B s1 | 0.97M | 1.13M | 2.25–4.2 | A3 1명 | 2.05 |
+| B s2 | 없음 | 없음 | 0 | 0명 | 0.02 |
+| (비교) E1-F IPPO 개인 보상 | 1.48M | 없음(1.70M 중단) | 0.05–0.85 | A3 1명 | 0.64 |
+| (비교) E1 IPPO 개인 보상 | 1.69M | 없음(2M까지) | 0–0.95 | A1·A2 | 0.38 |
+
+- **공통 패턴(모든 run, 시점은 E44에서 정정: 정체는 0.1–0.2M에 시작)**: 0–0.5M에는 무작위 pickup이 있다(pickup 성공률 .31–.65). 0.5–1.5M에는 pickup을 거의 하지 않는다(요청 선반 pickup .002–.05/ep, pickup 성공률 .02–.10, 에피소드 끝 운반 .02–.15). 그 뒤 한 agent가 다시 발견하면 그 agent만 배운다.
+- **해석**
+  - 팀 보상(A)이 개인 보상(E1-F)보다 빠르지 않다. A s1은 2M까지 배송이 없었다.
+  - B는 seed에 따라 1.13M 시작과 무배송으로 갈렸다. seed 2개로는 A와 B를 가를 수 없다.
+  - 모든 성공 run에서 한 agent만 배운다. 팀 보상으로 팀원도 보상을 받지만, 행동은 따라오지 않는다.
+  - 가설: 초반 무작위 pickup이 shaping 감점(비요청 pickup −.02, 다른 팀 요청 −.05, 조기 내려놓기 −.02 등)을 받아 정책이 pickup 자체를 피하게 되고, 이것이 긴 정체 구간과 "발견 운"을 만든다.
+- **한계**: seed 2개, 2M까지만 봤다. 가설은 감점 항목별 분해로 검증하지 않았다.
+
+## E44. pickup 회피 정체의 원인 분해 — 2026-10-21 Claude Code, 읽기 전용
+
+- **코드·산출물**: `output/pickup_stall_20261021/`(pickup_stall.py, results.json, action_values.py, action_values.json). 학습은 하지 않았다. checkpoint 가중치 hash는 불변이다.
+- **로그에는 감점 항목별 값이 없다.** shaping 합계와 toggle 통계만 있다. 그래서 (1) 로그의 toggle 시계열과 (2) 고정 정책·무작위 정책 롤아웃의 항목별 보상 귀속(pickup 보상 함수 래핑 + 이벤트 × 계수 + 잔차)으로 분해했다.
+- **(1) 시점: 정체는 0.5M이 아니라 0.1–0.2M에 시작한다.** episode당 TOGGLE 수는 다음과 같다(0–0.1M → 0.1–0.2M → 0.4–0.5M). 요청 선반 pickup도 0.24–1.1/ep에서 0.0–0.02/ep로 떨어진다.
+  - A s1: 17.6 → 0.86 → 0.13
+  - A s2: 18.1 → 1.4 → 0.12
+  - B s1: 31.1 → 9.0 → 0.52
+  - B s2: 37.9 → 2.9 → 0.36
+  - E1-F: 14.6 → 0.88 → 0.10
+  - E1: 15.7 → 0.99 → 0.13
+  - 고정 정책 롤아웃에서 0.25M checkpoint의 pickup 구간은 agent-episode당 0.08–0.29개다. 무작위 정책은 8.8–10.1개다.
+- **(2) 무작위 정책(초기 탐색) 아래 행동별 즉시 보상**(A 환경, 20×500, 4 agent)
+  - FORWARD −.0002, LEFT/RIGHT −.0022, NOOP −.0053, **TOGGLE −.0183**. TOGGLE이 가장 손해인 행동이다.
+  - TOGGLE 결과 비율: 요청되지 않은 선반 pickup 45%(−.02), 내려놓기 48%(−.02, 조기 내려놓기 감점), 다른 팀 요청 pickup 4%(−.05), 자기 팀 요청 pickup 3.6%(평균 +.064; 같은 선반을 다시 집으면 0).
+  - pickup 이후 손에서 놓을 때까지의 보상 합(carry 구간):
+    - 요청되지 않은 선반: −.074(15 step).
+    - 다른 팀 요청 선반: −.082.
+    - **자기 팀 요청 선반: +.002**. +.15 보너스가 이후 감점으로 거의 상쇄되고, 무작위 이동으로는 배송에 도달하지 못한다.
+    - episode 끝까지 들고 다닌 구간: −0.80 ~ −1.14(약 270–430 step).
+  - E1-F(개인 보상) 환경도 같은 값이다. 첫 배송 전에는 팀 보상과 개인 보상의 차이가 보상에 나타나지 않는다. 그래서 A가 E1-F보다 빠르지 않은 것과 일치한다.
+- **해석(인과 검증 전)**
+  - 초기 탐색에서 TOGGLE의 기대 즉시 보상이 음수이고, pickup 이후 구간도 자기 팀 요청 선반조차 0 근처이거나 음수다. 그래서 PPO가 0.1–0.2M 안에 TOGGLE을 거의 버린다.
+  - 그 뒤로는 요청 선반을 집는 경험 자체가 거의 생기지 않는다. 정체가 길어지고, 엔트로피로 남은 드문 TOGGLE이 우연히 요청 선반에 맞은 agent만 배운다. 이것이 "한 agent만 배움"과 "발견 운"의 기전이다.
+  - 주된 감점은 요청되지 않은 pickup(−.02)과 조기 내려놓기(−.02)다. 둘이 TOGGLE 결과의 93%에 걸린다.
+- **한계**
+  - 관찰과 기대값 계산일 뿐이다. 감점을 바꾼 pilot으로 인과를 확인해야 한다.
+  - 무작위 정책 기준이다. 실제 초기 정책도 거의 균등해(초기 entropy .91–.92) 근사로 본다.
+  - 롤아웃은 run당 6 episode다.
+
+## E45. pickup 감점 제거 pilot 준비(A·B _nopen, IPPO 1M × seed 2) — 2026-10-21 Claude Code, 구현·smoke만
+
+- **사용자 요청**: `unrequested_shelf_pickup_penalty`와 `premature_drop_penalty`를 0으로 두는 후보 환경 옵션을 추가하고, IPPO 1M × seed 2 pilot을 smoke까지 준비하라. 실행 명령도 정리하라. 학습은 하지 않는다.
+- **코드**
+  - `env_candidates.py`에 `a_e1f4_team_nopen`, `b_e1f6_comm3_nopen`을 추가했다(기존 A·B와 두 감점만 0).
+  - `run_candidate_pilot.ps1`의 후보 목록에 두 변형을 넣었다.
+  - 테스트에 감점 값 확인을 추가했다. pytest 191 passed.
+  - 환경·trainer 파일은 수정하지 않았다.
+- **검증**
+  - smoke `runs/smoke_nopen_20261021/`(두 변형 × seed 1·2, IPPO, 64 step)가 모두 complete다. checkpoint의 env에서 두 감점이 0이고, 다른 팀 요청 감점 .05와 요청 pickup 보상 .15는 그대로다.
+  - 본 실행 계획(`runs/plancheck_nopen_*`, 학습 없음)을 기존 pilot(`runs/pilot_20261019_180044_*`)과 비교했다. config 차이는 이름·저장 경로·W&B 표기·`total_timesteps`(1M 대 2M), 환경 차이는 두 감점(.02 → 0)뿐이다.
+  - trainer에 학습률 일정이 없으므로(E12 추가), 기존 2M pilot의 첫 1M과 같은 step에서 바로 비교할 수 있다.
+  - 초기 가중치 hash는 smoke(CPU 설정)와 본 실행이 원래 다르다. 기존 pilot A s1의 초기 hash가 E1·E1-F seed 1과 같은 f78ec390…이었으므로, 본 실행도 기존 pilot과 같은 초기화일 것으로 예상한다. 실행 후 `initial_weights_sha256.txt`로 확인한다.
+- **실행 명령**(Claude 앱 밖 PowerShell, 프로젝트 폴더에서):
+  `powershell -ExecutionPolicy Bypass -File .\latent_team\run_candidate_pilot.ps1 -Candidates b_e1f6_comm3_nopen,a_e1f4_team_nopen -TotalTimesteps 1000000 -Track`
+  - 4개 job이다. B만 돌리려면 `-Candidates b_e1f6_comm3_nopen`.
+- **판정 지표(사전 등록)**: 기존 pilot의 같은 seed·같은 step과 비교한다.
+  1. 0.1M 구간별 TOGGLE/ep(0.2M 이후 유지 여부)
+  2. 요청 선반 pickup/ep
+  3. 첫 평가 배송과 지속 배송 시점
+  4. 배송 agent 수
+  5. 다른 팀 선반을 옮기는 부작용(다른 팀 요청 pickup, 잘못된 반납)
+- **학습은 하지 않았다.**
+
+## E46. pickup 감점 제거 pilot 결과(A·B _nopen, IPPO 1M × seed 1·2) — 2026-10-22 Claude Code 분석, 실행은 사용자
+
+- 실행: 사용자가 Claude 앱 밖 PowerShell에서 2026-10-21 13:36 KST 시작(`runs/pilot_20261021_133652_{a_e1f4_team,b_e1f6_comm3}_nopen/`, job 4개 모두 complete, 1,000,448 step). W&B project `rware-from-scratch`.
+- 초기 가중치 sha256: 4개 모두 기존 pilot(`runs/pilot_20261019_180044_*`) 같은 seed와 일치.
+- 비교: 기존 pilot(E43)의 같은 seed 첫 1M. 지표는 T089/E45에서 미리 정한 다섯 가지. 평가는 결정적 정책, 20 episode, 500 step.
+- 결과(0.1M 구간 평균, 학습 로그는 확률적 정책):
+  1. TOGGLE/episode: 기존은 0.1–0.2M부터 0.03–9로 붕괴. nopen은 1M 내내 A 100–230, B 180–310 유지. P(TOGGLE | pickup 가능) 기존 0.000 → nopen 0.11–0.28.
+  2. 요청 선반 pickup/episode: 기존 0.2M 이후 0–0.5 → nopen A 1.4–3.8, B 3.9–18.2.
+  3. 평가 배송: 네 run 모두 1M 안에 평가 배송 ≥1에 도달하지 않음(기존도 없음). B s1 nopen 마지막 평가 5회 평균 0.37(기존 0.05), 0.87M부터 0.55. 학습 중 배송/episode B s1 nopen 0.42→1.32(마지막 0.1M), 기존 0.23. A nopen은 0.12–0.30에서 정체.
+  4. 배송하는 agent: 학습 중 0.9–1M 최다 agent 비율 A nopen 0.40/0.40, B s1 0.59, B s2 0.32(기존은 배송이 있으면 1.0). 평가에서는 B s1 nopen agent 6이 76%.
+  5. 부작용: 요청되지 않은 선반 pickup/episode A 52–113, B 88–151(기존 0.03–3). 잘못된 반납 A 0.01–0.19, B 0.12–0.99(기존 0).
+- 판정: 1·2 통과, 3 실패, 4 학습 중에는 통과에 가까우나 평가에서는 B s1이 여전히 한 agent 위주, 5 실패.
+- 해석: 두 감점이 초기 pickup 붕괴의 원인이라는 E44의 기대값 분석은 인과적으로 확인됨. 그러나 감점이 없으면 아무 선반이나 집고 내려놓는 비용이 0이라 TOGGLE 남발이 생기고, 1M 안에 결정적 정책의 배송으로는 이어지지 않음.
+- 한계: seed 2개, 1M. 학습 로그 per-agent 배송 수는 합계와 단위가 달라 비율로만 해석. 평가 per-agent 수는 20 episode 합이라 20으로 나눔.
+- 근거: `output/nopen_pilot_20261022/compare.py`, `results.json`. 재현: `python output/nopen_pilot_20261022/compare.py`(RWARE_MARL env).
+
+## E47. pickup 감점 크기 sweep(무작위 정책 즉시 보상) — 2026-10-22 Claude Code, 읽기 전용
+
+- 요청: 감점 0, .005, .01, .015에서 무작위 정책의 행동별 즉시 보상 계산, 학습 없음. 비교용으로 .02(기존)도 포함.
+- 방법: E44 `action_values.py`의 `run`을 그대로 쓰고 `unrequested_shelf_pickup_penalty`와 `premature_drop_penalty`만 p로 바꿈. 유효 행동 균등 무작위 정책, 20 episode × 500 step, seed 8100001부터. 무작위 정책은 보상에 영향받지 않으므로 모든 p가 같은 궤적을 본다. 환경: 기존 pilot A s1·B s1 checkpoint_00250의 env kwargs.
+- 결과(평균 즉시 보상): FORWARD −0.0002, LEFT/RIGHT −0.002, NOOP −0.005(A −0.0053, B −0.0050)는 p와 무관. TOGGLE은 p=0 +0.0002, .005 −0.0044/−0.0043, .01 −0.0090/−0.0088, .015 −0.0137/−0.0132, .02 −0.0183/−0.0177(A/B). 대략 TOGGLE ≈ 0.0002 − 0.93p.
+- TOGGLE이 가장 손해인 행동이 아니게 되는 경계: NOOP과 교차하는 p ≈ .0056(B)–.0059(A). 격자에서는 p ≤ .005.
+- 해석: p=0에서는 TOGGLE이 FORWARD와 같은 최상위가 되어 E46의 TOGGLE 남발과 맞는다. p=.005는 TOGGLE이 최하위는 아니지만 여전히 평균보다 낮아, PPO가 TOGGLE을 줄이는 압력이 .02의 약 1/4로 남는다. 즉 남발 억제와 정체 회피 사이의 중간값 후보다.
+- 한계: 즉시 보상만 본 것이고 이후 step의 결과(운반 구간 합계)는 참고용이다. "최하위가 아님" 기준은 사전에 정한 단순 기준이며 학습 결과를 보장하지 않는다. .005는 교차점 바로 아래라 여유가 작다.
+- 근거: `output/penalty_sweep_20261022/penalty_sweep.py`, `results.json`.
+
+## E48. 감점 .005 pilot 준비(B _pen005, IPPO 1M × seed 2) — 2026-10-22 Claude Code, 구현·smoke만
+
+- 요청: p=.005로 후보 B 변형 추가, IPPO 1M × seed 2 pilot을 smoke test까지만, 실행 명령 정리, 학습 없음.
+- 구현: `latent_team/env_candidates.py`에 `b_e1f6_comm3_pen005`(`SMALL_PICKUP_PENALTY`: `unrequested_shelf_pickup_penalty`=`premature_drop_penalty`=.005)를 추가했다. `run_candidate_pilot.ps1`의 ValidateSet과 `tests/test_latent_team.py`의 후보 계획 테스트(감점 값 .02/0/.005 확인)도 확장했다. 기존 후보와 기본값은 그대로다.
+- 검증:
+  - 테스트 191개 중 190개 통과. `tests/test_env.py::test_inactivity_1`이 한 번 실패했지만, 단독으로 3회 다시 돌리면 모두 통과했다. `rware/` 변경은 없다(무작위성에 따른 흔들림으로 판단).
+  - smoke `runs/smoke_pen005_20261022_b_e1f6_comm3_pen005/`: seed 1·2 모두 complete. checkpoint의 두 감점 .005, 다른 팀 선반 감점 .05, 6 agent, 통신 3, 팀 보상 확인.
+  - 계획 확인 `runs/plancheck_pen005_b_e1f6_comm3_pen005/`(학습 없음): 기존 B pilot과는 두 감점(.02→.005)과 학습 길이(2M→1M)만 다르다. B nopen과는 두 감점(0→.005)만 다르다.
+- 알려진 표시 문제: W&B tag와 `experiment.json`에 `individual`로 남는다(CLI 기본값). 실제 env는 `team_reward_mode=team`이다.
+- 학습은 하지 않았다.
+
+## E49. 보상 결합 probe 대 정책 probe 팀 AUROC(B nopen) — 2026-10-22 Claude Code, 읽기 전용
+
+- 요청(T100 직전): B nopen 1M checkpoint 롤아웃으로 보상 결합 probe와 정책 probe의 팀 AUROC 비교, 학습 없음.
+- 모델: `runs/pilot_20261021_133652_b_e1f6_comm3_nopen/b_e1f6_comm3_nopen_ippo_s{1,2}/{checkpoint_00750,final}.pt` (0.77M, 1.00M). 팀 보상, 6 agent(3+3), goal (0,10)/(9,10). 가중치 hash 전후 동일. agent 학습 없음. 보상 모델은 평균 테이블이라 경사 학습도 없음.
+- 롤아웃: 자기 학습 환경, 확률적 masked 정책, 80 episode × 500 step, reset seed 9,100,001부터.
+- 신호
+  - 보상 결합 probe: 지도에서 정한 공통 사건 "goal 칸 g에서 배송". agent i가 시야(Chebyshev ≤ 5) 안에서 남의 그 사건을 본 step의 자기 보상 평균 − 기저 보상. 자기 배송·반납 step은 제외. 쌍 거리 = 둘 다 3회 이상 본 probe의 |차| 평균. 팀 필드(team_id, rewarded_agents)는 읽지 않음.
+  - 비교용: 같은 probe의 전역 관측판(상한), 직접 결합 증거(j의 사건 → i의 보상, D48 유보), 정책 probe(PGCT gate 규칙: zero hidden, unmasked, mean JS; run의 canonical 48개, E1-F v2 gate 48개, 롤아웃 방문 상태 256개).
+- 결과(AUROC, 쌍 15개)
+  - 보상 결합 probe: 1.00 / 1.00 / 1.00(13쌍) / 1.00. episode bootstrap 200회 95% 구간 1.00–1.00. 응답은 거의 정확히 1(자기 팀 goal) 또는 0.
+  - 직접 결합: 1.00 / 1.00 / 0.97 / 1.00(10–12쌍). 전역판은 s1 0.77M에서 0.83(carrier와 보상받는 팀이 다른 배송 때문).
+  - 정책 canonical .78 / .67 / .74 / .59. v2 gate .56 / .76 / .76 / .41. 방문 상태 .78 / .44 / .74 / .56. (순서: s1 0.77M, s1 1M, s2 0.77M, s2 1M)
+  - 관측 수: agent당 시야 안 배송 0.77M 1–12회, 1M 3–37회(80 episode). 반납 0–7회.
+- 해석: 팀 보상이 즉시·무잡음으로 팀 전원에 들어가고 goal 칸이 팀에 1:1이라, 이 신호는 거의 팀의 정의다. 식별 가능성 조건 (나)의 기준 사례로는 의미가 있지만, 방법으로는 자명하다는 비판을 받기 쉽다. 교환값이 사실상 목표 정보라 Du et al.과의 차이가 좁다. 사건을 보기 전에는 신호가 없다.
+- 한계: 환경 하나(B nopen), seed 2개, checkpoint 2개, 쌍 15개(AUROC 단위 1/54). 확률적 정책 롤아웃. 시점별 식별 속도는 재지 않았다.
+- 근거: `output/reward_coupling_20261022/reward_coupling.py`, `results.json`, `stdout.txt`.
+
+## E50. 보상 결합 probe의 온라인 식별 시점(B nopen) — 2026-10-22 Claude Code, 읽기 전용
+
+- 요청(T102): 식별 시점 측정. 학습 없음.
+- 방법: `output/reward_coupling_20261022/identification_time.py`. B nopen s1·s2, 무작위 정책(유효 행동 균등, 학습 시작 대용)과 checkpoint 0.26/0.51/0.77/1.00M(확률적 정책). reset seed 9,200,001부터 80 episode를 순서대로 진행하며 온라인 갱신. 쌍 판정은 통신 범위(Chebyshev ≤ 3) 안에서 만났고 둘 다 같은 goal 배송 사건을 K번 이상 봤을 때만 한다(|응답 차| < 0.5 → 같은 팀). 판정 전에는 전이 없음. 가중치 hash 불변.
+- 결과(15쌍 모두 맞힌 env step; K=1 / K=3)
+  - s1: 무작위 15,283 / 4만 안에 미달(10/15). 0.26M 36,472 / 미달(11/15). 0.51M 12,944 / 32,785. 0.77M 19,551 / 35,624. 1M 11,034 / 22,200.
+  - s2: 무작위 미달(10/15) / 미달(6/15). 0.26M 10,987 / 19,289. 0.51M 6,106 / 33,749. 0.77M 9,922 / 미달(13/15). 1M 20,501 / 미달(14/15).
+  - 잘못된 판정: 20개 조건 × K 2개 중 s2 1M K=1에서 1쌍(30,623 step)뿐. K=3은 0.
+  - 사건 수(80 episode): 무작위 20–21, checkpoint 29–144.
+- 해석: K=1이면 대개 1–4만 step(1M 학습의 1–4%)에 팀을 다 찾는다. 무작위 정책도 가끔 배송해 s1에서는 1.5만 step에 끝났다. E49 답변의 "초기 발견에는 쓸 수 없다"는 과하게 비관적이었다.
+- 한계: nopen은 TOGGLE 남발로 우연한 배송이 잦다. 감점 환경(.02, pen005)에서는 사건이 더 드물 수 있다. 무작위 정책은 실제 0 step 정책과 다르다. 쌍 15개, seed 2개.
+- 근거: `identification_time.json`, `identification_stdout.txt`.
+
+## E51. 2×2 새 칸 3개, 대기열 launcher, 감시·판정 스크립트 준비 — 2026-10-22 Claude Code, 구현·smoke만
+
+- 요청(T106): (a) 감시·판정·보고 스크립트, (b) 대기열 launcher, (c) 같은 기반의 새 칸 3개. smoke와 설정 대조까지, 학습 없음.
+- 구현
+  - `latent_team/env_candidates.py`: `b6_corner_indiv_pen005`, `b6_adjacent_team_pen005`, `b6_adjacent_indiv_pen005`와 `LAYOUT`(goal 배치·보상)을 추가했다. `env_overrides`가 LAYOUT을 읽고, 목록에 없는 후보는 기존대로 모서리·팀이다. 인접 goal은 (width/2−1, 아래), (width/2, 아래)이고 짝수 seed에서 바뀐다.
+  - `latent_team/run_queue.ps1`: 후보별 계획을 만들고, `train_from_scratch.py --run-job` 프로세스 수(외부 실행 포함)가 MaxConcurrent 미만일 때만 다음 job을 띄운다. 출력 폴더가 이미 있는 job은 건너뛴다.
+  - `latent_team/pilot_verdict.py`: job이 모두 complete가 될 때까지 기다렸다가 다섯 기준을 판정하고 `output/pilot_verdicts/<plan>/`에 쓴다. 학습은 시작하지 않는다. 4번은 마지막 0.1M 배송 20건 미만이면 보류.
+  - `run_candidate_pilot.ps1` ValidateSet, `tests/test_latent_team.py`(보상·goal 기대값), README 갱신.
+- 검증
+  - 테스트 `tests/test_latent_team.py` 20개 통과.
+  - smoke `runs/smoke_queue_20261022_*` 6개 complete. checkpoint 확인: 보상 individual/team, goal (4,10)/(5,10) 또는 (0,10)/(9,10)(짝수 seed 반대), 6 agent, 통신 3, 감점 .005.
+  - 대기열: 최대 2개 + 외부 2개 실행 중이면 45초 동안 새 job을 띄우지 않음(`smoke_queue_limit_20261022`, 계획만 남김). 같은 이름 재실행은 계획 단계에서 중단(기존 폴더 보호).
+  - 설정 대조 `runs/plancheck_2x2_*`(학습 없음): B pen005 대비 config 차이 없음. env 차이는 `team_reward_mode`와(또는) `team_goal_positions`뿐이다.
+  - 판정 스크립트: nopen에 `--once` → overall fail(3번 실패), E46과 일치. 진행 중인 pen005에 `--once`로 시험한 0.2M 시점 보고서는 의미 없음(밤에 덮어써질 예정).
+- 학습은 하지 않았다.
+
+## E52. pen005(모서리·팀)와 모서리·개인 칸 1M 분석 — 2026-10-23 Claude Code, 읽기 전용
+
+- 대상: `runs/pilot_20261022_112521_b_e1f6_comm3_pen005/`(사용자 실행, 10-23 03:00 complete), `runs/queue_20261022_140114_b6_corner_indiv_pen005/`(대기열, 10-23 07:20–07:28 complete). 초기 가중치는 기존 B pilot과 같음(E48 확인).
+- 판정(`latent_team/pilot_verdict.py`): 두 칸 모두 overall fail, 4번(배송 분산)만 실패. 모서리·팀은 1·2·3·5 통과. 모서리·개인은 5번 skipped.
+- 학습(1M, 0.9–1M 구간): 학습 배송/episode 팀 1.17/1.01, 개인 1.16/1.35(기존 .02 B 0.23/0.005). 평가 마지막 5회 팀 0.81/0.38, 개인 0.99/0.83. 개인 s1 평가 onset 0.87M. 최다 agent 비율 팀 0.91/0.82, 개인 0.99/0.97.
+- 독주 패턴: 0.5–0.6M까지 여섯 agent가 고르게 배송(최다 0.2–0.5), 0.6M 무렵 한 agent가 치고 나감. 독주 agent의 팀만 배송, 다른 팀 거의 0. 비독주 agent는 팀 보상에서는 pickup은 하지만 배송 실패(예: 팀 s2 agent 1 pickup 14.6/ep), 개인 보상에서는 pickup 자체가 거의 없음(≤ 1.7/ep). 잘못된 반납이 마지막 구간 0.3–1.2/ep로 증가.
+- 팀 식별(학습 없음, `output/pen005_analysis_20261023/probes_pen005.py`, E49·E50 스크립트 재사용):
+  - 보상 결합 probe AUROC: 팀 1.00(네 checkpoint). 개인 0.83/0.38(s1), 0.62/0.88(s2).
+  - 정책 probe AUROC: 팀 0.46–0.74, 개인 0.43–0.69.
+  - 온라인 식별(K=1): 팀은 대부분 12,122–36,458 step에 15쌍 정답, 오판정 0(s1 1M은 4만 step에 14/15). 개인은 15쌍 중 5–9쌍 오판정(반응이 모두 0 근처 → 거리 작음 → '같은 팀').
+- 해석: pickup 정체는 해결, 남은 병목은 한 agent 독주. 정책 probe 실패는 비독주 agent의 정책이 goal 지향이 아니어서 조건 (가)의 반박으로 보기 어렵다. 보상 결합은 개인 보상에서 판정 보류 규칙이 없으면 오판정을 낸다.
+- 한계: seed 2개, 1M, 칸 2개. 인접 칸 2개는 진행 중.
+- 근거: `output/pen005_analysis_20261023/results.json`, `results_corner_indiv.json`, `stdout*.txt`, `output/pilot_verdicts/`.
+- 메인 1단계 계획 확인 `runs/plancheck_main_corner_team_b_e1f6_comm3_pen005/`(12 job, 학습 없음).
+
+## E53. 독주 원인 진단, 배운 agent 간 정책 probe, 절대 배송 수 — 2026-10-23 Claude Code, 읽기 전용
+
+- 요청(T118 후속): D76의 학습 없는 진단 세 가지.
+- 방법: `output/pen005_analysis_20261023/dominance_diag.py`. 대상은 모서리·팀(pen005) s1·s2, 모서리·개인 s1·s2의 1M checkpoint. 가중치 hash 불변.
+  1. 제거 평가: 20 episode × 500 step, reset seed 9,300,001부터, 결정적(trainer 평가와 같은 `net.act(deterministic=True)`)·확률적. 조건은 정상 / 독주 agent 항상 NOOP / reset 직후 독주 agent를 위쪽 모서리 칸으로 옮긴 뒤 NOOP. 위치 이동은 평가용 사본에서 `_recalc_grid`로만 했고, 환경 코드 변경은 없다. 배송은 carrier별로 셌다.
+  2. 배운 agent 간 정책 probe: 각 run의 독주 agent 4명(goal (9,10)×3, (0,10)×1). v2 gate bank와 네 run의 canonical bank, PGCT gate 규칙.
+  3. 학습 로그의 0.1M 구간별 agent 배송 수 = 학습 배송/episode × 200 × agent 비율.
+- 결과
+  1. 정상일 때 독주 agent는 0.85–1.55/ep, 나머지는 0–0.15. 독주 agent를 NOOP으로 두든 옮기든 나머지는 0–0.3/ep(결정적 평가는 모두 0)이다. NOOP과 이동의 결과가 같아 통로 차단 효과도 없다. → 경쟁·차단이 아니라 나머지 agent가 배우지 못한 것이다.
+  2. 같은 goal 쌍과 다른 goal 쌍의 평균 JS: v2 0.095 대 0.091, canonical 0.110–0.111 대 0.119–0.121. AUROC 0.56. 가장 가까운 쌍은 goal이 반대인 모서리·팀 s1과 모서리·개인 s1이었다(v2 JS 0.047, argmax 불일치 2%). 24개 agent 전체 평균 JS는 같은 run 0.149, 같은 seed 0.146, 다른 seed 0.141로, seed 계보 구조가 없다.
+  3. 0–0.1M에는 agent마다 구간당 9–25건을 배송한다. 이후 독주 agent 외에는 늘지 않거나 줄어든다(예: 개인 s1은 0.6M 이후 0–9건). 팀 s2의 agent 1·2·4는 0.9M에도 11–14건이지만 결정적 평가에서는 0이다.
+- 해석: Oracle-team 실험의 전제(학습 신호 문제)가 맞다. 배운 정책끼리도 goal로 갈리지 않는다. 가설: 팀 기준 'my goal' 채널과 GRU 기억 때문에 goal 위치가 가중치에 남지 않고, h=0·goal 비가시 probe에는 팀 차이가 나타나지 않는다. 이 가설이 맞다면 정책 probe의 실패는 학습 부족이 아니라 구조적 문제다.
+- 한계: 배운 agent 4명(쌍 6개), 20 episode. 0.26M 비교는 라벨 오류로 계산되지 않았다.
+- 근거: `output/pen005_analysis_20261023/dominance_diag.json`, `dominance_stdout.txt`.
+
+## E54. 원리상 팀을 가르는 gate probe 13개로 정책 probe 재측정, goal 방향 축 통계 — 2026-10-23 Claude Code, 읽기 전용
+
+- 요청(T126): 최적 행동이 goal 쪽에 따라 다른 gate probe 13개만으로 정책 probe AUROC를 기존 checkpoint에서 다시 잰다. 학습 없음.
+- probe 선택: E1-F v2 gate bank 48개 중, 지도 BFS(운반 중 선반 칸 진입 불가)로 계산한 왼쪽 goal(0,10)·오른쪽 goal(9,10)의 최단 경로 첫 행동 집합이 겹치지 않는 13개 [1,5,6,12,15,16,23,25,27,37,41,42,47]. 인접 goal에서는 3개뿐.
+- 대상: 모서리 goal checkpoint 28개. pen005 팀·개인(s1·s2 × 0.51/0.77/1M), nopen(s1·s2 × 0.77/1M), B .02(s1·s2 × 1M/2M), A .02(s1·s2 × 1M/2M), E1-F 1.54M(ippo/pgct/oracle/all). 가중치 hash 불변.
+- 결과 1 (JS): 평균 팀 AUROC 48개 0.512, 13개 0.493, 35개 0.524. 13개가 나은 경우 6개, 나쁜 경우 12개. 개선 없음.
+- 결과 2 (goal 방향 축): agent마다 s_i = 13개 평균 [p(왼쪽 최적 행동) − p(오른쪽 최적 행동)]. s가 자기 goal 쪽을 가리키는 정도(AUROC): pen005 팀 0.89, pen005 개인 0.96, nopen 0.89, B .02 0.92, A 0.44, E1-F 0.56. 쌍 AUROC |s_i−s_j|: 0.70/0.73/0.72/0.57/0.53/0.41(같은 13개의 JS는 0.53/0.52/0.54/0.47/0.31/0.56). 부호 규칙(부호가 같으면 팀원) 정확도: 0.76/0.83/0.83/0.57/0.58/0.33. 28개 중 축 > JS13이 21개.
+- 해석: 6-agent B 칸의 정책은 goal 방향을 담고 있다. 이는 seed 1·2에서 goal 쪽이 바뀌어도 유지된다. 그러나 다섯 행동 전체의 JS에서는 무관한 차이에 묻힌다. 보상 결합이 실패하는 개인 보상 칸에서 처음으로 쓸 만한 팀 신호(부호 규칙 0.83)가 나왔다. 4-agent run에서는 나타나지 않았다(배송이 거의 없어 덜 학습되었을 가능성, 미검증).
+- 한계: checkpoint 28개, 6-agent는 seed 2개. goal 후보 칸(지도)을 안다고 가정하고, 두 팀·두 goal 기준이다.
+- 근거: `output/probe_discriminative_20261023/discriminative_probes.py`, `goal_axis_gate.py`, `results.json`, `goal_axis_results.json`, `stdout.txt`, `goal_axis_stdout.txt`.
+
+## E55. 팀당 요청 수(3/6/9)에 따른 초기 탐색 신호(무작위 정책) — 2026-10-23 Claude Code, 읽기 전용
+
+- 계기(T130): 사용자 의견 '개인 보상의 팀원 경쟁은 요청 선반이 너무 적어서 생긴 문제 아닌가, 물량이 많은 편이 낫다'.
+- 방법: `output/request_sweep_20261023/request_sweep.py`. E44 `action_values.run`을 재사용했다. 모서리·개인 칸(6 agent, 감점 .005, corner_indiv s1 checkpoint_00250의 env kwargs)에서 `request_queue_size_per_team`(3/6/9)과 `request_queue_size`(2배)만 바꿨다. 유효 행동 균등 무작위 정책, 20 episode × 500 step.
+- 결과: agent당 자기 팀 요청 선반 pickup/episode 1.02 / 1.96 / 2.73. TOGGLE 중 자기 팀 요청 비율 5.0% / 9.7% / 13.5%. TOGGLE 평균 즉시 보상 −0.0043 / −0.0020 / −0.0013(NOOP −0.0053).
+- 해석: 요청을 늘리면 초기 정책이 보상받는 pickup을 2–3배 자주 경험하고 팀원 간 경쟁도 줄어든다. E53의 '나머지가 배울 기회가 부족했다'와도 맞는다. 팀당 6개(전체 12, agent 6)는 RWARE의 easy 난이도 비율(요청 = 2 × agent 수)과 같다.
+- 한계: 무작위 정책 계산이며, 학습에서 독주가 풀리는지는 미검증. 쉬워지면 IPPO도 잘 배워 전이의 여지가 줄 수 있다.
+
 ## 새 실험 기록 양식
 
 ID / 실제 실행 날짜·작성 도구 / 상태(계획·smoke·진행·완료·실패) / 초기 모델 / 환경·training seed·예산 / 평가 seed·정책·horizon / 결과 / 비교 기준·한계 / 원본 경로 / 재현 명령.
+
+## 2026-10-23 Codex — A+C 구현 검증 (본 실험 아님)
+
+- 상태: 코드 검증 완료, PPO/신경망 학습 미실행. 초기 학습 모델/checkpoint 없음. runner 통합 검사는 PPO update를 stub으로 바꾼다.
+- 조건: tests/test_reward_probe_ac.py 11개 + tests/test_latent_team.py 20개. 실제 환경 검사는 기존 reference manifest의 환경 설정을 읽고 seed 1, 개인 보상, goal (0,10)/(9,10), semantic 관측으로 제어된 1-step 사건을 구성했다. training seed 실험이나 평가 episode 성능 수치가 아니다.
+- 결과: 31 passed. 가상 local NOOP/turn/가능한 FORWARD의 public post-observation이 실제 환경과 일치. 두 팀 운반자를 같은 물리 배송에 오프라인으로 배치하면 shaping을 제외한 배송 성분은 [[1,0],[0,1]]. 숨은 상태 사용은 이 정답 검사에만 있다.
+- 합성 충분 경험에서는 같은 보상 벡터 agent만 donor로 선택하며, 미지/모호/모두 0/범위 밖은 보류. 개인 보상 벡터를 합산하지 않는지, 평가 경험을 메모리에 넣지 않는지, checkpoint와 actual_allocation 연결도 확인.
+- 명령: C:\Users\95101\anaconda3\envs\RWARE_MARL\python.exe -m pytest tests/test_reward_probe_ac.py tests/test_latent_team.py -q -p no:cacheprovider --basetemp output/ac_validation_20261023_saved_state_tmp
+- 근거: tests/test_reward_probe_ac.py, tests/test_latent_team.py, output/ac_validation_20261023_saved_state_tmp/, output/ac_verification_20261023/summary.json. 표준 gym Box 정밀도 및 multi-agent list reward 경고가 있었고 실패는 없다.
+- 한계: 경험 조건부 평균 예측기이며 CNN 일반화는 구현하지 않았다. 실제 학습된 정책으로 수집한 배송 경험에서의 보상 예측 정확도/AUROC/전이 향상은 미검증. 기존 결과와 로그는 보존.

@@ -47,13 +47,17 @@ def team_matrix(team_ids):
     return same
 
 
+def communication_range(env, cfg):
+    return int(getattr(env.unwrapped, "communication_range", cfg.sensor_range))
+
+
 def allowed_donors(mode, team_ids, neighbors):
     """receiver x donor support permitted for a mode inside the current physical range."""
     same = team_matrix(team_ids)
     cross = ~same
     np.fill_diagonal(cross, False)
     allowed = {"oracle": same, "all": same | cross, "wrong": cross, "pgct": same | cross,
-               "ippo": np.zeros_like(same)}[mode]
+               "random": same | cross, "ippo": np.zeros_like(same)}[mode]
     return allowed & np.asarray(neighbors, dtype=bool)
 
 
@@ -109,8 +113,11 @@ def build_matched_jobs(args, output):
 
 
 @contextmanager
-def matched_transfer(cfg, run_dir, mode, *, bank_path, warmup_updates):
-    """Preload the reference bank, hold transfers during warm-up and log actual allocations."""
+def matched_transfer(cfg, run_dir, mode, *, bank_path, warmup_updates, allocation_override=None):
+    """Preload the reference bank, hold transfers during warm-up and log actual allocations.
+
+    allocation_override(update, neighbors, active) -> (allocation, log_fields) replaces the trainer's
+    donor set (random-gated control); None keeps every existing mode unchanged."""
     bank, distill = None, None
     if bank_path:
         saved = torch.load(bank_path, map_location="cpu", weights_only=False)
@@ -140,12 +147,20 @@ def matched_transfer(cfg, run_dir, mode, *, bank_path, warmup_updates):
             if state["update"] == 1:
                 # Collecting a rollout does not change weights: this is the initial model.
                 (run_dir / "initial_weights_sha256.txt").write_text(model_hash(agents) + "\n", encoding="utf-8")
-            gate = np.zeros((4, 4), dtype=np.float32) if peer_allocation is None else np.asarray(peer_allocation)
+            n_agents = len(state["env"].unwrapped.agents)
+            gate = np.zeros((n_agents, n_agents), dtype=np.float32) if peer_allocation is None                 else np.asarray(peer_allocation)
             held = state["update"] <= warmup_updates
             actual = np.zeros_like(gate) if held else gate.copy()
             env = state["env"]
             team_ids = env.unwrapped.get_oracle_team_assignments()
-            neighbors = geometric_adjacency(env, cfg.sensor_range)
+            # The trainer's peer graph uses the environment's communication range (equal to the sensor range
+            # unless set separately); donors are audited, and random-gated drawn, within the same range.
+            neighbors = geometric_adjacency(env, communication_range(env, cfg))
+            extra = {}
+            if allocation_override is not None:
+                actual, extra = allocation_override(state["update"], neighbors,
+                                                    active=not held and peer_allocation is not None)
+                actual = np.asarray(actual, dtype=gate.dtype)
             check_allocation(mode, actual, team_ids, neighbors)
             same = team_matrix(team_ids)
             log.write(json.dumps(dict(env_steps=state["update"] * cfg.rollout_steps, update=state["update"],
@@ -155,7 +170,7 @@ def matched_transfer(cfg, run_dir, mode, *, bank_path, warmup_updates):
                                       same_team_arcs=int(np.sum((actual > 0) & same)),
                                       cross_team_arcs=int(np.sum((actual > 0) & ~same)),
                                       distill_probe_count=None if distill is None or peer_probe_sequences is None
-                                      else int(len(distill)))) + "\n")
+                                      else int(len(distill)), **extra)) + "\n")
             metrics = originals["update_ippo"](agents, optimizers, rollout, config, graph_estimator, device, rng,
                                                 peer_allocation=None if peer_allocation is None else actual,
                                                 peer_probe_sequences=(distill.clone() if distill is not None
@@ -187,11 +202,13 @@ def transfer_summary(run_dir):
     if rows:
         support = np.asarray([r["actual_allocation"] for r in rows]) > 0
         candidates = np.asarray([r["physical_candidates"] for r in rows], dtype=bool)
+        n = support.shape[-1]
+        pairs = list(zip(C.PAIR_LABELS, C.PAIRS)) if n == 4 else             [(f"{i + 1}-{j + 1}", (i, j)) for i in range(n) for j in range(i + 1, n)]
         summary.update(directed_transfer_update_counts=support.sum(0).tolist(),
                        undirected_pair_updates={label: int((support[:, i, j] | support[:, j, i]).sum())
-                                                for label, (i, j) in zip(C.PAIR_LABELS, C.PAIRS)},
+                                                for label, (i, j) in pairs},
                        physical_candidate_pair_updates={label: int(candidates[:, i, j].sum())
-                                                        for label, (i, j) in zip(C.PAIR_LABELS, C.PAIRS)})
+                                                        for label, (i, j) in pairs})
     return summary
 
 
