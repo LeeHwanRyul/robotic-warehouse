@@ -1,5 +1,7 @@
 # 새 세션 인수인계 — PGCT / 잠재 팀 연구
 
+> **2026-10-23 안내(Claude Code)**: 최신 인수인계는 `docs/SESSION_HANDOFF.md`다. 연구 맥락과 실험 이력은 `docs/RESEARCH_CONTEXT.md`, `docs/EXPERIMENT_HISTORY.md`에 있다. 아래 본문은 10-18 시점의 기록이며, E1-F 실행 상태 등은 지금과 다르다.
+
 **갱신: 2026-10-18 14:30 KST, Claude Code.** 새 세션(Codex·Claude Code)은 이 문서를 **가장 먼저** 읽는다. 세부 근거는 D(결정)·E(실험)·T(대화) 번호로 `DECISIONS.md`·`EXPERIMENTS.md`·`CONVERSATION_LOG.md`에서 찾는다. 모든 기록을 한 파일로 합친 읽기 전용 사본은 `research_archive/RESEARCH_ARCHIVE.md`다(원본을 고친 뒤 `python research_archive/build_archive.py`로 다시 만든다).
 
 이 문서는 작성 시점의 스냅샷이다. 실행 상태는 반드시 실제 로그로 다시 확인한다. 이전 버전(2026-10-15)의 내용은 E19–E24, D29–D36에 있다.
@@ -7,7 +9,8 @@
 ## 0. 30초 요약
 
 - **연구 목표(D17, D41 재확인)**: **PGCT = 모르는 같은 팀을 probe 응답으로 찾아내고, 그 팀끼리 critic을 전이해 학습을 돕는 방법.** 사용자는 이 원래 기획을 유지한다. "전이 적합성 발견"으로 중심을 옮기지 않는다.
-- **현재 실행 중**: **E1-F main**(팀 목표를 양쪽 모서리로 분리). IPPO/PGCT/Oracle/All(canonical) + PGCT(v2), seed 1, 각 10M. 약 0.12M step(14:30), job당 약 19 step/s이며 **10월 24일 무렵 종료** 예상이다(E26).
+- **⚠ 2026-10-19 갱신: E1-F main은 실행 중이 아니다.** 10-19 13:08 KST Claude 데스크톱 앱 업데이트 때 앱 프로세스 트리와 함께 종료됐다(약 1.67–1.70M step, 마지막 checkpoint 01500 = 1.536M). 재시작은 사용자 승인 대기다(E26 추가). 아래 1절의 "건드리지 말 것"은 과거 기록이다.
+- **(과거 기록) 현재 실행 중**: **E1-F main**(팀 목표를 양쪽 모서리로 분리). IPPO/PGCT/Oracle/All(canonical) + PGCT(v2), seed 1, 각 10M. 약 0.12M step(14:30), job당 약 19 step/s이며 **10월 24일 무렵 종료** 예상이다(E26).
 - **E1 결과(seed 1, 6.4M, 중단)**: PGCT가 IPPO와 All보다 낫고 Oracle의 89%다. 이득은 "뒤처진 agent 구제"에서 나왔다. E1은 팀이 색 라벨로만 다른 **팀 대칭 대조 조건**이라 팀 발견을 시험할 수 없다(D40, D41).
 - **논문**: IJCAI 2027(초록 1/4, 본문 1/11 AoE). **방법 논문 초안 v0.2**가 `output/ijcai_method_paper_20261018/`에 있다(영어+한국어, Overleaf zip). E1-F와 seed 결과 자리는 TBD다.
 

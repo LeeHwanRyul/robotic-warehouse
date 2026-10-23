@@ -1,5 +1,11 @@
 # 잠재 팀 추론 + 팀 내부 critic consensus 검증 (latent_team)
 
+2026-10-23 Codex 추가: 개인 보상·좌표 마스크·경험 기반 A+C reward gate를
+`train_from_scratch.py --reward-probe-ac`로 선택할 수 있다.
+자세한 정보 접근 조건, 예측기(경험 조건부 평균이며 CNN 아님), 보류 규칙과 검증 범위는
+[A+C 구현 문서](../docs/REWARD_PROBE_AC.md)를 참조한다. 아래 초기 설명의
+`relevant_goal`은 정정이 필요하다: 운반 중이면 agent 팀이 아니라 운반 선반 소유 팀 goal이다.
+
 2026-10-13 Claude Code 작성. 기존 PGCT 코드(`examples/`, `rware/`)는 수정하지 않고, 이 폴더의 새 실행기만 기존 모듈을 import해서 사용한다.
 
 ## 연구 질문
@@ -232,6 +238,79 @@ E1-F에서 팀별 목표가 실제로 다를 때 행동·probe·critic 전이가
   - 같은 checkpoint에서 v2 gate bank와 canonical bank의 같은 팀/다른 팀 JS를 잰다.
   - 결과는 `output/e1f_divergence_<run>/divergence.json`, `divergence.png`에 저장된다.
 - **확인한 것**: smoke `runs/smoke_e1f_runner_20261018_*`(pilot 2개, main 5개 모두 complete, 팀 보상·모서리 목표가 checkpoint 설정에 반영됨), 분석 스크립트 smoke와 E1 checkpoint 검증, 테스트 2개 추가(전체 185 passed).
+
+## Random-gated 대조군 (2026-10-19, 옵션)
+
+"어떤 상대를 고르느냐"가 중요한지, 아니면 "얼마나 공유하느냐"만 중요한지를 가르는 대조군이다(D44, D54). Oracle > All 비교는 전이량 차이와 섞이므로, 전이량을 PGCT 실측에 맞춘 무작위 donor와 비교해야 "같은 팀이라서" 생긴 효과를 볼 수 있다.
+
+- **동작**(`latent_team/random_gated.py`)
+  - 매 update마다 참조 PGCT run의 `transfer.jsonl`에서 같은 update의 실제 전이 arc 수(`actual_allocation`의 0이 아닌 칸)를 읽는다.
+  - 그 수만큼 지금 물리 이웃(다른 mode와 같은 범위) 중에서 receiver→donor arc를 균등 무작위로 고른다. 팀 label은 읽지 않는다.
+  - 가중치는 trainer처럼 receiver별로 합이 1이다.
+  - 물리 이웃이 모자라면 부족분을 다음 update로 넘긴다(최대 12개). 그래서 누적 전이량을 맞춘다. 갚지 못한 양은 `random_unmet_total`로 기록한다.
+  - 무작위 추출은 run seed에서 만든 별도 난수기를 쓰므로 trainer의 난수 흐름은 바뀌지 않는다.
+  - trainer는 All과 같이 `graph_mode=unrestricted`로 peer loss를 준비하고, wrapper가 donor 집합만 바꾼다. trainer·환경 파일은 수정하지 않았다.
+- **실행**: `--modes random --random-reference <PGCT transfer.jsonl>`. 참조는 같은 rollout 길이에 run 예산 이상의 update를 덮어야 한다(plan 단계에서 검사). 그래서 본 학습은 참조 PGCT가 끝난 뒤에 할 수 있다. 예: E1-F main PGCT가 10M을 마친 뒤 `runs/e1f_20261018_124343_main_canonical/e1f_pgct_s1/transfer.jsonl`.
+- **기록**: `transfer.jsonl`에 `random_target_arcs`, `random_used_arcs`, `random_candidate_arcs`, `random_debt`, `random_unmet_total`이 추가된다.
+- **한계**: arc 수를 맞춘다. receiver별 가중치 합이 1이라 peer loss 크기는 "donor가 있는 receiver 수"에 비례하는데, 이 값(`update/pgct_peer_weight`)은 PGCT와 다를 수 있다. 사후에 함께 비교한다.
+- **확인**
+  - 테스트 3개를 추가했다(전체 188 passed).
+  - 실제 E1-F PGCT 기록 1,650 update를 재생하면 목표 8,686 arc를 그대로 사용한다. 같은 팀 비율은 PGCT .329, 무작위 .362다.
+  - smoke `runs/smoke_random_gated_20261019`(All·Random, 64 step, v2 bank, 참조는 PGCT 101–140 update를 다시 번호 매긴 scratch 파일): Random update 1은 후보 12개 중 4개, update 2는 목표 8에 후보 6개라 6개를 쓰고 2개를 넘겼다. peer loss가 작동했고 초기 가중치 hash는 All과 같다.
+
+## E1-F 대체 후보 환경 (2026-10-19, 옵션, D62)
+
+`latent_team/env_candidates.py`에 정의했고, `--maps e1 --env-variant <후보>`로 쓴다. 환경 코드는 수정하지 않고 기존 인자만 쓴다.
+
+**모든 후보의 공통 설정**
+- E1-F처럼 팀 목표를 아래쪽 양 모서리로 나눈다.
+- **팀 보상**(배송·반납 보상을 팀 전원이 받음. shaping은 개인)을 쓴다. 후보 설정이 `--team-reward`보다 우선한다.
+- **seed가 짝수면 목표 좌우를 바꾼다.** 좌우 배치에 대한 seed 간 강건성 시험일 뿐이다. seed 하나 안에서는 이동 방향과 팀이 여전히 대응하므로, 방향과 독립적인 팀 발견을 주장할 근거가 되지 않는다(D63 정정).
+
+| 후보 | 맵(높이×너비) | agent/팀 | 센서·통신 | 요청/팀 |
+|---|---|---|---|---|
+| `c1_e1f_team` | 11×10 | 4/2 | 5·5 | 2 |
+| `c2_e1f8_team` | 11×16(shelf_columns 5) | 8/2 | 5·5 | 4 |
+| `c3_wide_s3_team` | 20×16(shelf_columns 5, rows 2) | 4/2 | 3·3 | 2 |
+
+- trainer는 `cfg.sensor_range`와 `cfg.agent_count`로 환경 인자를 덮어쓴다. 그래서 후보별 `CONFIG`가 이 두 값도 맞춘다(처음에는 이 때문에 C2가 4명으로 돌고 C3에서 bank 크기 오류가 났다).
+- 8명 실행에서는 `examples/train_pgct_spatial_experiments.SpatialMonitor`(4×4 고정)를 실행 중에만 인원수에 맞춘 `NAgentSpatialMonitor`로 바꿔 끼운다. 원 파일은 수정하지 않았다. `spatial.jsonl`의 `mean_physical_neighbors`는 4로 나누므로 8명이면 실제의 2배로 읽힌다. 원자료인 `geometric_candidate_step_counts`는 정확하다.
+- `exp_b_oracle_consensus.py`의 4×4 고정 부분과 `random_gated.py`를 인원수에 맞게 일반화했다. 4명일 때 동작은 같다.
+- **smoke**: `runs/smoke_candidates_20261019b/{c1,c3}*`, `runs/smoke_candidates_20261019c/c2*`. IPPO/PGCT/Oracle/All/Random과 PGCT-v2가 모두 complete다.
+  - 같은 폴더 이름의 실패 기록(20261019의 C3, 20261019b의 C2)과, 설정을 고치기 전 기록(20261019의 C2, 실제로는 4명)은 보존용이다.
+- 테스트 1개를 추가했다(전체 189 passed). **학습은 하지 않았다.** 다음 단계는 후보별 IPPO 2M pilot이고, 승인이 필요하다.
+- **pilot 실행기**: `latent_team/run_candidate_pilot.ps1`(IPPO, seed 1, 기본 2M, 후보별 plan 폴더 `runs/<Name>_<후보>`, PID는 `runs/<Name>_pids.json`).
+  - Claude 앱 밖에서 직접 연 PowerShell에서 실행한다: `powershell -ExecutionPolicy Bypass -File .\latent_team\run_candidate_pilot.ps1 -Track`.
+  - `-PlanOnly`로 계획만 만들 수 있다. 확인용 `runs/plancheck_*`는 계획과 bank만 있고 학습은 없다.
+
+### 현재 후보 A/B/C와 진단 도구 (2026-10-19, D63·D64)
+
+- 후보: `a_e1f4_team`(11×10, 4명, 통신 5), `b_e1f6_comm3`(11×10, 6명, 통신 3, **1순위**), `c_e1f6_wide_comm3`(11×16, 6명, 통신 3). 모두 팀 보상이다.
+- wrapper(`exp_b_oracle_consensus.matched_transfer`)의 이웃 후보·검사·Random-gated는 환경의 `communication_range`를 쓴다.
+- 연결률: `python latent_team/connectivity_check.py --variants b_e1f6_comm3 a_e1f4_team [--checkpoint ck.pt]`
+- 보상 상관 기준선: `python latent_team/reward_correlation_baseline.py --checkpoint <ck.pt> ...` (팀 보상 환경의 probe 비교에 반드시 포함한다)
+- pilot: `powershell -ExecutionPolicy Bypass -File .\latent_team\run_candidate_pilot.ps1 -Track`. 기본값은 B·A × seed 1·2이고, Claude 앱 밖에서 실행한다.
+
+### pickup 감점 제거 변형 (2026-10-21, D69·E45)
+
+- `a_e1f4_team_nopen`, `b_e1f6_comm3_nopen`: A·B와 같고, `unrequested_shelf_pickup_penalty`와 `premature_drop_penalty`만 0이다. 초기 탐색에서 TOGGLE이 가장 손해인 행동이 되어 0.1–0.2M에 pickup이 사라지는 문제(E44)의 인과 확인용이다.
+- pilot(앱 밖 PowerShell): `powershell -ExecutionPolicy Bypass -Command "& '.\latent_team\run_candidate_pilot.ps1' -Candidates b_e1f6_comm3_nopen,a_e1f4_team_nopen -TotalTimesteps 1000000 -Track"`. `-File`로 실행하면 쉼표로 이은 후보 목록이 문자열 하나로 넘어가 ValidateSet에서 거부된다(T093).
+- 결과(E46): 감점 0이면 TOGGLE이 무비용이 되어 episode당 100–300회 남발한다.
+- `b_e1f6_comm3_pen005`: B와 같고 두 감점만 .005다. 무작위 정책에서 TOGGLE이 가장 손해인 행동이 아니게 되는 경계(.0056–.0059, E47) 바로 아래 값이다.
+  - pilot: `powershell -ExecutionPolicy Bypass -Command "& '.\latent_team\run_candidate_pilot.ps1' -Candidates b_e1f6_comm3_pen005 -TotalTimesteps 1000000 -Track"`
+
+### 식별 가능성 2×2 (D74)
+
+- 기반은 B pen005(6 agent 3+3, 센서 5, 통신 3, 두 감점 .005)로 고정하고, goal 배치와 보상만 바꾼다. 모서리·팀 칸은 `b_e1f6_comm3_pen005`다.
+  - `b6_corner_indiv_pen005`: 모서리 goal, 개인 보상(E1-F형)
+  - `b6_adjacent_team_pen005`: 인접 goal (4,10)/(5,10), 팀 보상
+  - `b6_adjacent_indiv_pen005`: 인접 goal, 개인 보상(E1형)
+  - goal 쪽은 짝수 seed에서 바뀐다. 계획 대조에서 B pen005와 다른 값은 `team_reward_mode`와 `team_goal_positions`뿐이다.
+- 대기열 launcher `latent_team/run_queue.ps1`: 후보마다 계획을 만들고, 이 컴퓨터의 학습 프로세스(`train_from_scratch.py --run-job`, 다른 곳에서 띄운 것 포함)가 `-MaxConcurrent`개 미만일 때만 다음 job을 띄운다. 출력 폴더가 이미 있는 job은 다시 띄우지 않는다. 같은 `-Name`으로 다시 실행하면 계획 단계에서 멈춘다(기존 폴더 보호). 앱 밖 PowerShell에서 실행하고, 마지막 job이 시작될 때까지 창을 닫지 않는다.
+  - `powershell -ExecutionPolicy Bypass -Command "& '.\latent_team\run_queue.ps1' -Candidates b6_corner_indiv_pen005,b6_adjacent_team_pen005,b6_adjacent_indiv_pen005 -TotalTimesteps 1000000 -MaxConcurrent 4 -Track"`
+- 감시·판정·보고 `latent_team/pilot_verdict.py`: plan의 job이 모두 complete가 될 때까지 기다린 뒤 다섯 기준(T104 숫자, 4번은 마지막 0.1M 배송 20건 미만이면 보류)을 판정한다. 결과는 `output/pilot_verdicts/<plan>/verdict.{json,md}`에 쓴다. 학습은 시작하지 않는다.
+  - `python latent_team/pilot_verdict.py --plan runs/pilot_20261022_112521_b_e1f6_comm3_pen005 --spam-reference runs/pilot_20261021_133652_b_e1f6_comm3_nopen --compare runs/pilot_20261019_180044_b_e1f6_comm3 runs/pilot_20261021_133652_b_e1f6_comm3_nopen`
+- 비교 대상은 기존 `runs/pilot_20261019_180044_*`의 같은 seed 첫 1M이다. 학습률 일정이 없어 같은 step에서 바로 비교할 수 있다.
 
 ## 아직 하지 않은 것
 

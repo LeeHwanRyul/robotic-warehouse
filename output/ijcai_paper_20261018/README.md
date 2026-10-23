@@ -11,11 +11,13 @@
 | `references.bib` | 참고문헌 11개 |
 | `figures/` | 그림(PDF 5개, PNG 2개) |
 | `tables/` | 자동 생성 LaTeX 표 4개(`output/paper_e1_20261018/make_paper_materials.py`) |
-| `ijcai_paper_20261018_overleaf.zip` | 위 전부를 묶은 파일. Overleaf에 그대로 업로드 |
+
+
+Overleaf 업로드용 zip은 2026-10-23 사용자 요청으로 지웠다. 위 파일들을 그대로 묶으면 같은 zip이 된다.
 
 ## Overleaf에서 여는 방법
 
-1. Overleaf → New Project → Upload Project → `ijcai_paper_20261018_overleaf.zip`.
+1. 위 파일(`main.tex`, `main_ko.tex`, `references.bib`, `figures/`, `tables/`)을 zip으로 묶어 Overleaf → New Project → Upload Project로 올린다.
 2. **IJCAI 공식 style 파일을 추가**한다. IJCAI 홈페이지의 Author Kit(제출 연도 것)에서 `ijcai27.sty`(또는 `ijcai26.sty`)와 `named.bst`를 프로젝트 최상위에 올린다.
    - 이 파일이 있으면 `main.tex`가 자동으로 IJCAI 형식을 쓴다. 없으면 비슷한 2단 형식(letter, 여백 0.75in)으로 컴파일된다. 쪽수 확인은 반드시 공식 style로 한다.
    - Overleaf의 IJCAI 공식 템플릿으로 프로젝트를 만들고 `main.tex`, `references.bib`, `figures/`, `tables/`만 옮겨도 된다.

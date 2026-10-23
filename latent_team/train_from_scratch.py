@@ -9,6 +9,8 @@ set of the existing critic peer loss differs:
   oracle  same-team physical neighbours (ground-truth labels)
   all     every physical neighbour
   wrong   cross-team physical neighbours only
+  random  PGCT's measured per-update arc count, donors drawn at random among physical
+          neighbours (needs --random-reference <PGCT transfer.jsonl>; random_gated.py)
 
 The original trainer is reused unchanged. Settings come from the completed E1/E2
 PGCT run of the spatial experiment, except: no initial checkpoint, and the
@@ -36,18 +38,25 @@ try:
     from .exp_b_oracle_consensus import matched_transfer, transfer_summary
     from . import marl_baselines as B
     from . import probes_v2 as P2
+    from .random_gated import RandomGatedAllocator, reference_targets
+    from . import env_candidates as EC
+    from . import reward_probe_ac as AC
 except ImportError:
     import common as C
     from exp_b_oracle_consensus import matched_transfer, transfer_summary
     import marl_baselines as B
     import probes_v2 as P2
+    from random_gated import RandomGatedAllocator, reference_targets
+    import env_candidates as EC
+    import reward_probe_ac as AC
 
 from examples import train_recurrent_ippo_consensus as T
 from examples.train_pgct_spatial_experiments import MAPS, experiment_logging
 
-SHARING_MODES = ["ippo", "pgct", "oracle", "all", "wrong"]
+SHARING_MODES = ["ippo", "pgct", "oracle", "all", "wrong", "random"]
 MODES = SHARING_MODES + B.ALGORITHMS  # mappo / seps / hetdps: separate learners, same env/budget/evaluation
-GRAPH = {"pgct": "policy", "oracle": "oracle", "all": "unrestricted", "wrong": "wrong"}
+# random: the trainer prepares the All peer loss; random_gated.py then replaces the donor set.
+GRAPH = {"pgct": "policy", "oracle": "oracle", "all": "unrestricted", "wrong": "wrong", "random": "unrestricted"}
 THRESHOLDS = [10, 20, 30, 40]
 
 
@@ -60,8 +69,11 @@ def base_config(reference, map_name, *, seed, timesteps, home_ratio, learning_ra
     cfg = copy.deepcopy(template["config"])
     env = json.loads(cfg["env_kwargs_json"])
     env.update(MAPS[map_name], shelf_soft_zone_ratio=home_ratio)
-    env.update(P2.ENV_VARIANTS[env_variant])  # e1f: team goals at the two bottom corners
+    env.update(P2.ENV_VARIANTS.get(env_variant, {}))  # e1f: team goals at the two bottom corners
     env.update(team_reward_mode=team_reward)  # individual (default) or team: shared within each team
+    if env_variant in EC.CANDIDATES:  # D62 candidates: geometry, team reward, seed-dependent goal side
+        env.update(EC.env_overrides(env_variant, seed, cfg["env_id"], env))
+        cfg.update(EC.CONFIG[env_variant])  # trainer-level agent count / sensor range must agree
     cfg.update(init_checkpoint="", transfer_components="all", seed=seed, total_timesteps=timesteps,
                learning_rate=learning_rate, entropy_coef=entropy_coef, env_kwargs_json=json.dumps(env),
                save_dir=str(output), save_interval=save_interval, track=track, save_eval_video=save_video,
@@ -90,13 +102,16 @@ def mode_config(cfg, mode, name):
     return asdict(config)
 
 
-def build_bank(cfg, path):
+def build_bank(cfg, path, *, strip_coordinates=False):
     """One canonical bank per (map, seed), built like the trainer's own first probe call."""
     config = T.TrainConfig(**cfg)
     env_kwargs = json.loads(config.env_kwargs_json)
     with T.make_env(config.env_id, env_kwargs, config.observation_format) as env:
         env.reset(seed=config.seed)
         sequences, metadata = T.sample_policy_probe_sequences(config, env, None, np.random.default_rng(config.seed + 9173))
+    if strip_coordinates:
+        sequences[..., :2] = 0
+        metadata["ac_coordinates_masked"] = True
     torch.save(dict(sequences=sequences, metadata=metadata, seed=config.seed + 9173,
                     note="Shared by every mode of this map/seed; built from a fresh reset."), path)
 
@@ -110,6 +125,17 @@ def plan(args):
     args.env_variant = getattr(args, "env_variant", "e1")      # older callers: defaults unchanged
     args.probe_bank = getattr(args, "probe_bank", "canonical")
     args.team_reward = getattr(args, "team_reward", "individual")
+    args.random_reference = getattr(args, "random_reference", None)
+    ac_enabled = getattr(args, "reward_probe_ac", False)
+    ac_config = AC.ACConfig(**(json.loads(Path(args.ac_config).read_text(encoding="utf-8"))
+                               if getattr(args, "ac_config", None) else {})) if ac_enabled else None
+    if ac_enabled and (args.team_reward != "individual" or args.probe_bank != "canonical"
+                       or not set(args.modes) <= {"ippo", "pgct", "oracle", "all", "wrong"}):
+        raise ValueError("A+C requires --team-reward individual, canonical bank, and IPPO/PGCT/oracle/all/wrong modes")
+    if "random" in args.modes:
+        if not args.random_reference:
+            raise ValueError("--modes random needs --random-reference <PGCT transfer.jsonl>.")
+        targets, steps_per_update = reference_targets(args.random_reference)
     for map_name in args.maps:
         for seed in args.seeds:
             cfg = base_config(reference, map_name, seed=seed, timesteps=args.timesteps, home_ratio=args.home_ratio,
@@ -118,7 +144,16 @@ def plan(args):
                               save_video=args.save_video, smoke=args.smoke_test, stage=args.stage_label,
                               wandb_project=args.wandb_project, wandb_mode=args.wandb_mode,
                               env_variant=args.env_variant, team_reward=args.team_reward)
+            if ac_enabled:
+                env_kwargs = json.loads(cfg["env_kwargs_json"])
+                # This explicit opt-in takes precedence over old candidates' team fallback.
+                env_kwargs["team_reward_mode"] = "individual"
+                cfg["env_kwargs_json"] = json.dumps(env_kwargs)
+                if cfg["observation_format"] != "semantic" or cfg["sensor_range"] < ac_config.radius + 1:
+                    raise ValueError("A+C requires semantic observations with radius+1 visible cells")
             label = args.env_variant if args.env_variant != "e1" else map_name
+            if ac_enabled:
+                label += "_ac"
             if args.team_reward != "individual":
                 label += f"_{args.team_reward}rew"
             bank = output / (f"canonical_bank_{label}_s{seed}.pt" if args.probe_bank == "canonical"
@@ -128,21 +163,39 @@ def plan(args):
             for mode in args.modes:
                 name = f"{label}_{mode}_s{seed}"
                 config = mode_config(cfg, mode, name)
-                jobs.append(dict(name=name, map=map_name, mode=mode, seed=seed, config=config,
-                                 canonical_bank=None if mode == "ippo" or mode in B.ALGORITHMS else str(bank),
-                                 transfer_warmup_updates=warmup,
-                                 effective_timesteps=math.ceil(config["total_timesteps"] / config["rollout_steps"])
-                                 * config["rollout_steps"]))
+                if ac_enabled and mode == "pgct":
+                    # Disable policy-JS gating; the local reward controller supplies actual donors.
+                    config["graph_mode"] = "unrestricted"
+                job = dict(name=name, map=map_name, mode=mode, seed=seed, config=config,
+                           canonical_bank=None if mode == "ippo" or mode in B.ALGORITHMS else str(bank),
+                           transfer_warmup_updates=warmup,
+                           effective_timesteps=math.ceil(config["total_timesteps"] / config["rollout_steps"])
+                           * config["rollout_steps"])
+                if ac_enabled:
+                    job["reward_probe_ac"] = asdict(ac_config)
+                if mode == "random":
+                    updates = job["effective_timesteps"] // config["rollout_steps"]
+                    if steps_per_update != config["rollout_steps"] and not args.smoke_test:
+                        raise ValueError(f"Reference rollout length {steps_per_update} != {config['rollout_steps']}.")
+                    if len(targets) < updates and not args.smoke_test:
+                        raise ValueError(f"Reference covers {len(targets)} updates; the run needs {updates}. "
+                                         "Use a finished PGCT run with at least the same budget.")
+                    job.update(random_reference=str(Path(args.random_reference).resolve()),
+                               random_reference_updates=len(targets),
+                               random_reference_mean_arcs=float(np.mean(targets[:updates])))
+                jobs.append(job)
     output.mkdir(parents=True)
     for path, cfg in banks.items():
         if args.probe_bank == "canonical":
-            build_bank(cfg, Path(path))
+            build_bank(cfg, Path(path), strip_coordinates=ac_enabled)
         else:
             v2, summary = P2.build_bank(cfg["env_id"], json.loads(cfg["env_kwargs_json"]), seed=cfg["seed"])
             P2.save_bank(v2, summary, Path(path))
     manifest = dict(created=datetime.now().astimezone().isoformat(timespec="seconds"),
                     initialization="random (no checkpoint, no curriculum)", home_ratio=args.home_ratio,
                     env_variant=args.env_variant, probe_bank=args.probe_bank, team_reward=args.team_reward,
+                    reward_probe_ac=asdict(ac_config) if ac_enabled else None,
+                    random_reference=str(Path(args.random_reference).resolve()) if args.random_reference else None,
                     stage=args.stage_label, wandb_project=args.wandb_project if args.track else None,
                     learning_rate=args.learning_rate, entropy_coef=args.entropy_coef,
                     reference_experiment=str(args.reference_experiment.resolve()), eval_seed=args.eval_seed,
@@ -204,15 +257,25 @@ def run_job(output, manifest, name, eval_seed):
         return run
     T.init_wandb = init_wandb
     try:
-        with experiment_logging(cfg, run_dir, eval_seed):
+        with EC.agent_count_support(cfg.agent_count), experiment_logging(cfg, run_dir, eval_seed):
             job_status(run_dir, status="running")
             if job["mode"] in B.ALGORITHMS:
                 with B.install(cfg, job["mode"], run_dir):
                     T.train(cfg)
             else:
-                with matched_transfer(cfg, run_dir, job["mode"], bank_path=job["canonical_bank"],
-                                      warmup_updates=job["transfer_warmup_updates"]):
-                    T.train(cfg)
+                override = (RandomGatedAllocator(job["random_reference"], job["seed"])
+                            if job["mode"] == "random" else None)
+                if job.get("reward_probe_ac") is not None:
+                    options = AC.ACConfig(**job["reward_probe_ac"])
+                    with AC.install(cfg, run_dir, options, learn=job["mode"] == "pgct") as controller:
+                        with matched_transfer(cfg, run_dir, job["mode"], bank_path=job["canonical_bank"],
+                                              warmup_updates=job["transfer_warmup_updates"],
+                                              allocation_override=controller):
+                            T.train(cfg)
+                else:
+                    with matched_transfer(cfg, run_dir, job["mode"], bank_path=job["canonical_bank"],
+                                          warmup_updates=job["transfer_warmup_updates"], allocation_override=override):
+                        T.train(cfg)
         if not (run_dir / "final.pt").is_file():
             raise RuntimeError("Training did not produce final.pt")
         job_status(run_dir, status="complete",
@@ -288,13 +351,19 @@ def compare(output):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--maps", nargs="+", choices=list(MAPS), default=["e1"])
-    parser.add_argument("--env-variant", choices=list(P2.ENV_VARIANTS), default="e1",
-                        help="e1f: E1 map with team goals at the two bottom corners (requires --maps e1).")
+    parser.add_argument("--env-variant", choices=list(P2.ENV_VARIANTS) + list(EC.CANDIDATES), default="e1",
+                        help="e1f: E1 map with team goals at the two bottom corners (requires --maps e1). "
+                             "c1_/c2_/c3_*: candidate replacements for E1-F (env_candidates.py, team reward).")
     parser.add_argument("--probe-bank", choices=["canonical", "v2"], default="canonical",
                         help="v2: validated bank with separate gate (team) and critic-distillation probes.")
     parser.add_argument("--team-reward", choices=["individual", "team"], default="individual",
                         help="team: delivery/return rewards go to every member of the delivering team (shaping stays individual).")
     parser.add_argument("--modes", nargs="+", choices=MODES, default=["ippo", "pgct", "oracle", "all"])
+    parser.add_argument("--reward-probe-ac", action="store_true",
+                        help="Opt in to individual-reward, coordinate-free A+C gating (PGCT); matched baselines also mask coordinates.")
+    parser.add_argument("--ac-config", type=Path, help="Optional JSON overrides for reward_probe_ac.ACConfig.")
+    parser.add_argument("--random-reference", type=Path,
+                        help="PGCT transfer.jsonl whose per-update arc counts the random mode reproduces.")
     parser.add_argument("--seeds", type=int, nargs="+", default=[1])
     parser.add_argument("--timesteps", type=int, default=10000000)
     parser.add_argument("--home-ratio", type=float, default=.5)

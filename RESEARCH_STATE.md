@@ -1,5 +1,62 @@
 # PGCT 현재 연구 상태
 
+## 최신 변경 — 2026-10-23 KST, Codex (정확한 시각 미기록)
+
+- 사용자 승인으로 A+C 실행 경로를 구현했다. `latent_team/train_from_scratch.py --reward-probe-ac`가 선택 옵션이다. 개인 보상만 사용하고 정책/critic/평가의 self_x/y를 마스킹한다.
+- 보상 모델은 개인 경험 조건부 평균(비모수)이다. CNN 일반화 구현은 아니다. 공통 물리 전이와 관측에서 생성한 가상 local action branch를 현재 이웃끼리 비교한다. hidden team/ownership map으로 질의를 재라벨하지 않는다. 지원 부족/모호함/평탄 응답은 보류한다.
+- `tests/test_reward_probe_ac.py` 11개 + 기존 `tests/test_latent_team.py` 20개, 총 31개 통과. PPO 최적화를 실행하지 않았으며 실제 팀 발견 AUROC/전이 향상은 미검증이다. 실행 중 프로세스는 확인/중단/재시작하지 않았다.
+- 안내: `docs/REWARD_PROBE_AC.md`. 이전 문서의 실행 상태/대기 계획은 과거 스냅샷이다. 다음 본 학습은 별도이며 이번에는 시작하지 않았다.
+
+## 최신 확인 — 2026-10-23 17:33 KST, Claude Code
+
+- **새 세션 시작점**: `docs/SESSION_HANDOFF.md`. 연구 맥락은 `docs/RESEARCH_CONTEXT.md`, 실험 이력은 `docs/EXPERIMENT_HISTORY.md`에 있다.
+- **실행 중**: 2×2 인접 칸 IPPO 1M × seed 2(`runs/queue_20261022_140114_b6_adjacent_{team,indiv}_pen005`). 17:33에 팀 0.84–0.85M, 개인 0.57–0.59M이다. 모서리 두 칸은 complete(E52).
+- **대기 중**: 메인 1단계, 모서리·개인 IPPO/Oracle/All × seed 1–3, 5M(`runs/queue_20261023_172201_*`, PID 32236). 시작한 job은 없다. 인접 칸이 끝나면 자동으로 시작한다.
+- **10-23 결과·결정**
+  - 감점 .005로 pickup 정체가 풀렸지만, 1M에서는 한 agent가 독주한다(E52, E53).
+  - 1M으로 최종 결론을 낸 것은 과했다. 메인은 5M이다(D78).
+  - goal 방향 축이 개인 보상 칸에서도 팀 신호를 냈다(E54, D80).
+  - 메인 설정을 개인 보상으로 바꿨다(D81).
+- **미결(사용자 답 대기)**: 메인 대기열을 멈추고 팀당 요청 수 6·9개 pilot을 먼저 할지 정해야 한다(T130, E55).
+
+## 최신 확인 — 2026-10-22, Claude Code
+
+- **nopen pilot(E45→E46) 종료**: A·B nopen × seed 1·2, 1M, 모두 complete. 초기 가중치는 기존 pilot과 같다.
+  - TOGGLE·요청 선반 pickup 붕괴는 사라졌다. pickup 정체의 원인(D69)이 인과적으로 확인됐다.
+  - 그러나 네 run 모두 1M 안에 평가 배송 ≥1에 도달하지 못했다. 요청되지 않은 선반 pickup이 50–150/episode로 폭증했다.
+  - 판정은 D70. 감점 0은 본 실험 환경으로 부적합하다는 의견이다.
+- **다음 후보(승인 필요)**: 학습 없이 감점 크기 sweep으로 TOGGLE이 무작위 정책에서 가장 손해가 아니게 되는 값을 찾고, 그 값으로 B pilot을 다시 돌린다.
+- E1-F는 여전히 1.536M에서 정지 상태다. 재시작은 승인 대기다.
+
+## 최신 확인 — 2026-10-19 16:23 KST, Claude Code
+
+- **E1-F main 5개가 종료됐다.** 13:07–13:08 KST에 Claude 데스크톱 앱 업데이트(이벤트 로그 13:08:12)로 앱 프로세스 트리와 함께 끝났다. 코드 오류는 없다.
+  - 마지막 metrics: 1.67–1.70M step.
+  - 마지막 checkpoint: 01500(1.536M).
+  - W&B는 crashed로 표시된다.
+- **재시작은 승인 대기**다. 처음부터 다시 할지, checkpoint에서 이어 할지는 새 wrapper가 필요하다. 어느 쪽이든 앱과 독립된 터미널이나 작업 스케줄러로 실행해야 한다(E26 추가).
+- probe 분석은 E37–E39와 D57–D61을 참조한다. 보상 probe는 "유망 후보, 본 PGCT 도입 보류" 상태다.
+
+## 최신 확인 — 2026-10-19 오후, Claude Code
+
+- **E1-F main**: 계속 running이다. 12:31 KST에 약 1.66M이었다. 2M checkpoint는 오늘 저녁 무렵으로 예상된다.
+- **probe 분석(E29–E34)**
+  - 현재 probe JS는 팀 식별 지표로 믿기 어렵다.
+  - 학습된 보상 예측기 probe는 철회했다(D50).
+  - E1 판별 probe와 규칙 B는 독립 계보에서 일반화되지 않아 보류했다(D52).
+  - 판정은 E1-F 학습 후 Δ_m(t)로 한다. 원 기획은 유지한다(D54 2×2 판정표).
+- **Random-gated 구현(E35)**: `--modes random --random-reference`, smoke까지 했다. 본 학습은 참조 PGCT(10M)가 끝난 뒤, 승인을 받고 진행한다.
+- **도구**
+  - `latent_team/probe_wandb_viz.py`(W&B probe 컬러맵, 업로드 미시작)
+  - `latent_team/render_checkpoint_videos.py`(영상)
+
+## 최신 확인 — 2026-10-19 10:48 KST, Claude Code
+
+- **E1-F main**: 5개 running, 약 1.52–1.55M step, 약 19 step/s. 평가 delivery는 거의 0이다(IPPO 1.48M에 0.05 한 번). PGCT gate는 아직 같은 팀을 고르지 않는다(E28).
+- **지표 신뢰성(D45)**: 같은 seed에서도 전이 mode의 첫 발견 시점이 0.2–2.1M 흔들린다. 첫 발견 이후 0.5M 동안 PGCT가 IPPO보다 느리다. 단일 seed의 최종 성능 비교는 발견 운이 증폭된 값일 수 있다.
+- **영상**: `output/videos_20261019/`(E1 6.40M 4개, E1-F 1.28/1.54M).
+- **대기(승인 필요)**: 공통 발견 checkpoint에서 분기하는 실험(D45), 기존 대기 항목.
+
 ## 최신 확인 — 2026-10-18 14:30 KST, Claude Code
 
 - **새 세션 시작점**: `HANDOFF.md`(전면 갱신)를 먼저 읽는다.
@@ -151,3 +208,7 @@ E2의 완료 로그 3,907 update에서 최대 연결 성분 크기 3이 661회(�
 현재 공용 기록은 `AGENTS.md`·`CLAUDE.md`·이 파일·`DECISIONS.md`·`EXPERIMENTS.md`·`CONVERSATION_LOG.md`다. 원본 대화 자동 수집이나 Hook/MCP 동기화는 구성하지 않았다.
 
 2026-10-13 추가 사용자 지시: 이후 모든 대화를 원문으로 기록한다. `CONVERSATION_LOG.md`의 L01–L12는 과거 요약이며, T001부터 사용자 메시지·진행 안내·최종 답변 원문을 남긴다. AGENTS.md와 CLAUDE.md에 지속 기록 규칙을 반영했다.
+
+## 2026-10-23 KST Codex — A+C 코드 분석 (시각 미기록)
+- 개인 보상/절대좌표 없는 A+C 방향. 공통 사건의 agent별 관측 대응 미구현, 배송 벡터 정확도 미검증. 상세 DECISIONS.md 같은 날짜 항목.
+- 학습/알고리즘 변경 없음. 프로세스 상태는 이번에 재확인하지 않음.

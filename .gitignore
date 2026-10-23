@@ -260,4 +260,11 @@ runs/
 __pycache__/
 *.pyc
 
+
+# Local-only artifacts kept on disk but not committed (2026-10-23)
+tmp/
+output/videos_*/
+output/**/smoke/
+*_overleaf.zip
+
 # End of https://www.gitignore.io/api/linux,python,windows,pycharm+all,visualstudiocode
