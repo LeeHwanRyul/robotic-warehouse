@@ -41,6 +41,7 @@ try:
     from .random_gated import RandomGatedAllocator, reference_targets
     from . import env_candidates as EC
     from . import reward_probe_ac as AC
+    from . import reward_probe_ac_v2 as AC2
 except ImportError:
     import common as C
     from exp_b_oracle_consensus import matched_transfer, transfer_summary
@@ -49,6 +50,7 @@ except ImportError:
     from random_gated import RandomGatedAllocator, reference_targets
     import env_candidates as EC
     import reward_probe_ac as AC
+    import reward_probe_ac_v2 as AC2
 
 from examples import train_recurrent_ippo_consensus as T
 from examples.train_pgct_spatial_experiments import MAPS, experiment_logging
@@ -127,8 +129,10 @@ def plan(args):
     args.team_reward = getattr(args, "team_reward", "individual")
     args.random_reference = getattr(args, "random_reference", None)
     ac_enabled = getattr(args, "reward_probe_ac", False)
-    ac_config = AC.ACConfig(**(json.loads(Path(args.ac_config).read_text(encoding="utf-8"))
-                               if getattr(args, "ac_config", None) else {})) if ac_enabled else None
+    ac_v2 = ac_enabled and getattr(args, "ac_gate", "v1") == "v2"  # gate v2: reward_probe_ac_v2.py
+    ac_config = ((AC2.ACV2Config if ac_v2 else AC.ACConfig)(
+        **(json.loads(Path(args.ac_config).read_text(encoding="utf-8")) if getattr(args, "ac_config", None) else {}))
+        if ac_enabled else None)
     if ac_enabled and (args.team_reward != "individual" or args.probe_bank != "canonical"
                        or not set(args.modes) <= {"ippo", "pgct", "oracle", "all", "wrong"}):
         raise ValueError("A+C requires --team-reward individual, canonical bank, and IPPO/PGCT/oracle/all/wrong modes")
@@ -149,11 +153,12 @@ def plan(args):
                 # This explicit opt-in takes precedence over old candidates' team fallback.
                 env_kwargs["team_reward_mode"] = "individual"
                 cfg["env_kwargs_json"] = json.dumps(env_kwargs)
-                if cfg["observation_format"] != "semantic" or cfg["sensor_range"] < ac_config.radius + 1:
-                    raise ValueError("A+C requires semantic observations with radius+1 visible cells")
+                visible = ac_config.radius if ac_v2 else ac_config.radius + 1  # v1 also simulates one step
+                if cfg["observation_format"] != "semantic" or cfg["sensor_range"] < visible:
+                    raise ValueError(f"A+C requires semantic observations with {visible} visible cells")
             label = args.env_variant if args.env_variant != "e1" else map_name
             if ac_enabled:
-                label += "_ac"
+                label += "_acv2" if ac_v2 else "_ac"
             if args.team_reward != "individual":
                 label += f"_{args.team_reward}rew"
             bank = output / (f"canonical_bank_{label}_s{seed}.pt" if args.probe_bank == "canonical"
@@ -172,7 +177,7 @@ def plan(args):
                            effective_timesteps=math.ceil(config["total_timesteps"] / config["rollout_steps"])
                            * config["rollout_steps"])
                 if ac_enabled:
-                    job["reward_probe_ac"] = asdict(ac_config)
+                    job["reward_probe_ac_v2" if ac_v2 else "reward_probe_ac"] = asdict(ac_config)
                 if mode == "random":
                     updates = job["effective_timesteps"] // config["rollout_steps"]
                     if steps_per_update != config["rollout_steps"] and not args.smoke_test:
@@ -192,14 +197,22 @@ def plan(args):
             v2, summary = P2.build_bank(cfg["env_id"], json.loads(cfg["env_kwargs_json"]), seed=cfg["seed"])
             P2.save_bank(v2, summary, Path(path))
     manifest = dict(created=datetime.now().astimezone().isoformat(timespec="seconds"),
-                    initialization="random (no checkpoint, no curriculum)", home_ratio=args.home_ratio,
-                    env_variant=args.env_variant, probe_bank=args.probe_bank, team_reward=args.team_reward,
-                    reward_probe_ac=asdict(ac_config) if ac_enabled else None,
+                    initialization="random (no checkpoint, no curriculum)", 
+                    home_ratio=args.home_ratio,
+                    env_variant=args.env_variant, 
+                    probe_bank=args.probe_bank, 
+                    team_reward=args.team_reward,
+                    reward_probe_ac=asdict(ac_config) if ac_enabled and not ac_v2 else None,
+                    **(dict(reward_probe_ac_v2=asdict(ac_config)) if ac_v2 else {}),
                     random_reference=str(Path(args.random_reference).resolve()) if args.random_reference else None,
-                    stage=args.stage_label, wandb_project=args.wandb_project if args.track else None,
-                    learning_rate=args.learning_rate, entropy_coef=args.entropy_coef,
-                    reference_experiment=str(args.reference_experiment.resolve()), eval_seed=args.eval_seed,
-                    smoke_test=args.smoke_test, jobs=jobs,
+                    stage=args.stage_label, 
+                    wandb_project=args.wandb_project if args.track else None,
+                    learning_rate=args.learning_rate, 
+                    entropy_coef=args.entropy_coef,
+                    reference_experiment=str(args.reference_experiment.resolve()), 
+                    eval_seed=args.eval_seed,
+                    smoke_test=args.smoke_test, 
+                    jobs=jobs,
                     note="Same seed => same random initial weights for every mode (checked via "
                          "initial_weights_sha256.txt). Only the critic peer-loss donor set differs.")
     (output / "experiment.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
@@ -265,9 +278,12 @@ def run_job(output, manifest, name, eval_seed):
             else:
                 override = (RandomGatedAllocator(job["random_reference"], job["seed"])
                             if job["mode"] == "random" else None)
-                if job.get("reward_probe_ac") is not None:
-                    options = AC.ACConfig(**job["reward_probe_ac"])
-                    with AC.install(cfg, run_dir, options, learn=job["mode"] == "pgct") as controller:
+                if job.get("reward_probe_ac_v2") is not None or job.get("reward_probe_ac") is not None:
+                    v2 = job.get("reward_probe_ac_v2") is not None
+                    module = AC2 if v2 else AC
+                    options = (AC2.ACV2Config(**job["reward_probe_ac_v2"]) if v2
+                               else AC.ACConfig(**job["reward_probe_ac"]))
+                    with module.install(cfg, run_dir, options, learn=job["mode"] == "pgct") as controller:
                         with matched_transfer(cfg, run_dir, job["mode"], bank_path=job["canonical_bank"],
                                               warmup_updates=job["transfer_warmup_updates"],
                                               allocation_override=controller):
@@ -361,7 +377,11 @@ def main():
     parser.add_argument("--modes", nargs="+", choices=MODES, default=["ippo", "pgct", "oracle", "all"])
     parser.add_argument("--reward-probe-ac", action="store_true",
                         help="Opt in to individual-reward, coordinate-free A+C gating (PGCT); matched baselines also mask coordinates.")
-    parser.add_argument("--ac-config", type=Path, help="Optional JSON overrides for reward_probe_ac.ACConfig.")
+    parser.add_argument("--ac-gate", choices=["v1", "v2"], default="v1",
+                        help="With --reward-probe-ac: v1 exact-match empirical gate (default); v2 MLP reward "
+                             "predictor on own reward-event probes (reward_probe_ac_v2.py, job names *_acv2_*).")
+    parser.add_argument("--ac-config", type=Path,
+                        help="Optional JSON overrides for reward_probe_ac.ACConfig (v1) or ACV2Config (v2).")
     parser.add_argument("--random-reference", type=Path,
                         help="PGCT transfer.jsonl whose per-update arc counts the random mode reproduces.")
     parser.add_argument("--seeds", type=int, nargs="+", default=[1])

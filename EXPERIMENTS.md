@@ -1141,3 +1141,114 @@ ID / 실제 실행 날짜·작성 도구 / 상태(계획·smoke·진행·완료�
 - 명령: C:\Users\95101\anaconda3\envs\RWARE_MARL\python.exe -m pytest tests/test_reward_probe_ac.py tests/test_latent_team.py -q -p no:cacheprovider --basetemp output/ac_validation_20261023_saved_state_tmp
 - 근거: tests/test_reward_probe_ac.py, tests/test_latent_team.py, output/ac_validation_20261023_saved_state_tmp/, output/ac_verification_20261023/summary.json. 표준 gym Box 정밀도 및 multi-agent list reward 경고가 있었고 실패는 없다.
 - 한계: 경험 조건부 평균 예측기이며 CNN 일반화는 구현하지 않았다. 실제 학습된 정책으로 수집한 배송 경험에서의 보상 예측 정확도/AUROC/전이 향상은 미검증. 기존 결과와 로그는 보존.
+
+## E56. A+C v1 본 학습 진행 확인(모서리·개인, 좌표 마스킹) — 2026-10-26 Claude Code, 읽기 전용
+
+- 실행: 사용자가 10-23 18:55 앱 밖 PowerShell에서 시작(PID 18880, Codex가 준 명령). `runs/ac_20261023_185556/`, `--reward-probe-ac --team-reward individual --modes ippo pgct oracle all --seeds 1 2 --timesteps 5000000 --track`. 8 job을 한 프로세스에서 순차 실행한다(job당 약 42시간, 약 34 step/s).
+- 설정 확인(`experiment.json`, checkpoint `effective_env_kwargs`): `team_reward_mode=individual`, goal 팀0 (0,10)/팀1 (9,10)(s1; s2는 좌우 반대), 감점 .005, 요청 팀당 3, λ .01, γ .99, GAE λ .95. 모든 mode에서 self_x/self_y를 0으로 마스킹. PGCT는 `graph_mode=unrestricted` + A+C allocation override. 팀 구성은 agent 0·2·4 = 팀0, 1·3·5 = 팀1(`_balanced_assignments`).
+- IPPO s1(complete, 5,000,192 step): 평가 배송 24.1/ep(4.75–5M 평균), agent별 0 / 4.64 / 5.38 / 5.05 / 4.20 / 4.85. 6명 중 5명이 배웠고 agent 1(팀0)은 0. 1M 시점은 2.58/ep.
+- PGCT s1(running): 10-26 11:44에 2.87M, 13:22에 3.01M.
+  - 2.87M까지: 이웃 쌍 비교 11,275회 중 지지 부족 보류 6,022, 거리·신호 미달 5,248, 승인 5(전부 agent 4–6 쌍, 같은 팀). 실제 전이 update 2,807개 중 3개. 신호 ≥ .2인 비교 5,253회 중 5회. 가상 질의(A) 지지 0.
+  - 3.01M까지: update 2,943개 중 전이 5개, 승인 행 20개.
+  - 2.75M checkpoint 예측기: agent별 지지 장면 16–165개, 보상 큰 지지 장면(|평균| ≥ .2) 1–2개, LRU 4,096칸이 가득 찬 상태.
+- 비트 단위 일치(`output/ac_offline_20261026/divergence.py`): 첫 실제 전이(2,821,120 step, update 2755, 4↔6) 전 2,754 update에서 return·value loss·policy loss·entropy가 IPPO s1과 완전히 같다. value loss는 update 2755에서 처음 다르고, 평가는 2.87M에서 처음 다르다(10.9 대 12.35). 원인: peer loss가 0이면 IPPO와 같은 연산만 하고, A+C gate는 난수를 쓰지 않는다. 옛 전이 mode는 warm-up 직후부터 증류해 처음부터 달랐다(E24의 분기는 같은 mode 재실행의 GPU 비결정성).
+- W&B `probe/pgct_gate_arcs`·`probe/same_team_gate`·`probe/cross_team_gate`는 trainer 자체(unrestricted) gate다. 2,826개 로그 전부에서 `update/physical_candidate_arcs`와 같다. 실제 전이는 `update/actual_transfer_arcs`(0이 아닌 로그 3개).
+- 한계: seed 1만 진행. PGCT s1은 사실상 IPPO 복제라 Q1 정보가 거의 없다. 판정은 5M 이후.
+- 근거: `runs/ac_20261023_185556/*/{job_status.json,metrics.jsonl,transfer.jsonl}`, `comparison.md`.
+
+## E57. A+C gate 오프라인 진단(저장된 checkpoint, 학습 없음) — 2026-10-26 Claude Code
+
+- 방법: `output/ac_offline_20261026/collect.py`. A+C IPPO s1 checkpoint 7개(0.256M, 0.768M, 1.536M, 2.56M, 3.584M, 4.864M, final 5.0M) × 8 episode, 확률 마스킹 정책(정책 입력 좌표 마스킹), reset seed 9,300,001부터. agent 전이 168,000개의 공용 관측(v1 `public_view`, 반경 2)·행동·자기 보상과 채점용 숨은 라벨(팀, 위치, 배송자, goal 소유)을 저장. 팀 라벨은 채점에만 썼다.
+- 조건 1(관측 가능성): 두 goal 배송의 공용 관측(자기 상태 + 벽·goal 채널)이 겹치지 않는다(각 2종, 공통 0).
+- 조건 2(음성 예시): 다른 팀 goal에 선반을 들고 들어간 전이가 agent마다 31–136번(agent 1은 0), 평균 보상 ≈ 0. 이전 답변의 '개인 보상에서 상대 goal에 가지 않는다'는 틀렸다.
+- v1 정확 일치 예측기: 같은 장면이 3 episode 이상에서 8번 이상 반복되는 전이는 agent 경험의 5–27%. 배송 key 278개 중 표본이 충분한 17개의 보상 비율 중앙값 .45, std .45, std ≤ .10은 1개(숨은 요청 여부 때문에 같은 공용 전이에 +1/0이 섞임). 쌍별 공통 보상 사건 질의 0. 다른 agent를 지우거나 3×3으로 줄이면 지지는 62–77%로 늘지만 분산 필터가 여전히 사건을 막고, 필터를 빼면 다른 팀 승인 6건.
+- 일반화 예측기(agent별 MLP 567→128→64→1, 자기 보상 MSE, episode 80% 학습): 사건 probe(배송·반납 1,068개) AUROC 1.00(같은 팀 평균 거리 .26, 다른 팀 .54), 좌우 대칭 probe .91(agent 1 제외 1.00), 무작위 경험 probe .81. 1.5M까지 경험만 쓰면 .67/.57. 팀별 응답이 반대로 나온다: 예) agent 3(팀0) 팀0 goal 배송 .89 / 팀1 goal .00 / 팀0 배송의 대칭 .00 / 팀1 배송의 대칭 .87. 거리 행렬에서 모든 agent의 가장 가까운 두 명이 팀원(같은 팀 최대 .34 < 다른 팀 최소 .39).
+- 한계: seed 1 run 하나, 15쌍(같은 6·다른 9). 실제 학습 경험의 근사(checkpoint 롤아웃). 사건 probe 일부는 배송한 agent의 학습 표본이다. agent 1은 예측기가 모든 곳에서 ≈ 0이라 팀원과 가까운 것은 약한 증거다.
+- 근거: `output/ac_offline_20261026/{README.md,collect.py,analyze.py,results.json,details.py,details.json,divergence.py}`, `rollouts.npz`.
+- 재현: `python output/ac_offline_20261026/collect.py` → `analyze.py` → `details.py`.
+
+## E58. Gate v2 구현·검증(본 학습 없음) — 2026-10-26 Claude Code, 사용자 요청
+
+- 사용자 요청(T139): 예측기 일반화, 사건 probe, 문턱 재보정, A+C gate W&B 기록을 새 옵션으로 추가하고 기본값을 유지하며 smoke test까지. 학습은 사용자가 시작한다.
+- 구현: `latent_team/reward_probe_ac_v2.py`, `train_from_scratch.py --ac-gate {v1,v2}`(기본 v1, v2 job 이름 `*_acv2_*`, manifest `reward_probe_ac_v2`). 설정 `ACV2Config` 기본값: 자기 전이 버퍼 20,000, 사건 버퍼 512(|r| ≥ .5), 사건 과표집 25%, MLP hidden 128, lr 1e-3, round마다 50 step × batch 256(P=5 update, warm-up 중에도 학습), 성숙 = 자기 사건 ≥ 20 + 자기 사건 평균 예측 ≥ .3, probe = 쌍 각자 최근 사건 32개 + 좌우 대칭, 거리 Σ|a−b|/Σ(|a|+|b|), EMA β .35, 3 round 이상, 문턱 .5, 대칭 gate, 별도 RNG. W&B·metrics `update/ac_v2_*`와 사후 감사 `update/ac_v2_audit_*`(env info 팀 ID, gate 입력 아님). checkpoint `reward_probe_ac_v2`. 문서 `docs/REWARD_PROBE_AC.md` v2 절.
+- 검증: `tests/test_reward_probe_ac_v2.py` 7개 + 기존 v1 11개 = 18 passed, `tests/test_latent_team.py` 20 passed. 실제 trainer smoke(`--smoke-test`, 6 agent, 64 step, CPU, scratchpad 출력, W&B 없음): `update/ac_v2_*`가 `metrics.jsonl`에 기록, checkpoint 저장, 보상 사건 0이라 전부 보류, IPPO·PGCT 초기 hash(`caaef33f…`)와 eval 일치.
+- 실행 중인 A+C v1 학습(PID 18880)은 시작 시 코드를 이미 읽었고 job을 같은 프로세스에서 돌리므로 영향이 없다.
+- 한계: 본 학습 성능과 시점별 온라인 정확도는 미검증. 비대칭 donor 규칙은 넣지 않았다.
+
+## E59. Gate v1 대 v2 오프라인 판정 비교(기존 모델 경험 재생, 학습 없음) — 2026-10-26 Claude Code
+
+- 방법: `output/ac_offline_20261026/gate_eval.py`. 롤아웃 경험을 수집 순서대로 실제 `ACController`(v1)와 `ACV2Controller`(v2)에 넣고 1,000 env step마다 판정 round. 모든 쌍이 매 round 접촉한다고 가정(접촉 빈도는 별개 문제). v1 가상 질의는 전체 관측이 필요해 재생하지 않았다.
+- 데이터: E57 롤아웃(A+C IPPO s1 0.26–5M, 28 round) + 옛 1M IPPO(좌표 있음, 정책 입력에 좌표 유지) `runs/queue_20261022_140114_b6_{corner,adjacent}_indiv_pen005/*_ippo_s{1,2}` checkpoint 00250·00500·00750·final × 8 episode(16 round).
+- 결과(정확도 = (같은 팀 승인 + 다른 팀 거부)/결정한 쌍, 15쌍):
+
+| 데이터 | v1 정확도 (결정 쌍) | v1 승인 같은/다른 | v2 정확도 (결정 쌍) | v2 승인 같은/다른 |
+|---|---|---|---|---|
+| A+C IPPO s1 0.26–5M | .63 (8) | 1 / 0 | 1.00 (10) | 4 / 0 |
+| 모서리 1M s1 | .25 (8) | 0 / 0 | 전부 보류 | 0 / 0 |
+| 모서리 1M s2 | .50 (12) | 0 / 0 | 전부 보류 | 0 / 0 |
+| 인접 1M s1 | .60 (15) | 0 / 0 | 전부 보류 | 0 / 0 |
+| 인접 1M s2 | .56 (9) | 0 / 0 | 전부 보류 | 0 / 0 |
+
+- v2(A+C 5M): 같은 팀 거리 .14–.18, 다른 팀 .58–.70. 보류 5쌍은 모두 agent 1이 낀 쌍. 첫 승인은 2.56M checkpoint 경험 구간(round 15), 다른 팀 승인은 모든 round에서 0. 좌우 대칭을 끈 v2도 같은 결과.
+- v1: 1M 모델에서 거리 AUROC .30–.42. v1의 '거부'에는 문턱 미달 외에 신호·round 부족도 섞여 있다.
+- 한계: 5M run은 seed 1 하나, 실제 경험의 약 1/180 재생, 접촉 가정. 1M 모델은 배송 agent가 0–2명이라 v2 성숙 agent가 없다. 인접 배치는 배운 모델이 없어 조건 (가)의 음성 사례를 검증하지 못했다.
+- 근거: `output/ac_offline_20261026/{gate_eval.py,gate_eval.json,gate_eval_stdout.txt}`, `rollouts_*_1M_s*.npz`.
+
+## E60. 보상 성분별 식별 가능성 감사와 실제 경험량 초기 식별 곡선(학습 없음) — 2026-10-26 Claude Code, 사용자 요청(T142)
+
+- 요청: D87의 최소 실험 1번(성분 감사)과 2번(실제 경험량에 맞춘 초기 식별 곡선, V2 절대 차이 대 대조 부호). 학습 금지.
+- 방법: `output/ac_early_id_20261026/stream_eval.py`. checkpoint 0.256/0.512/0.768/1.0M가 각 구간을 대표하도록 구간 길이만큼(구간당 약 25만 step) 확률 마스킹 정책 재생, 데이터당 약 100만 env step. 보상을 배송·반납·pickup·goal 진척·나머지로 분해(환경 내부 사건과 진척 식을 재현, 감사 전용). 같은 경험을 실제 `ACV2Controller`(기본 설정)에 학습 박자(5 update마다 round, warm-up 0.1M, 통신 범위 안 물리 이웃)로 입력. 4 round마다 15쌍을 V2 절대 차이와 대조 c = r̂(q) − r̂(대칭 q)의 상관·부호로 채점. 감사는 `audit.py`(성분 × 특징 묶음 × 구간 조건부 평균, 10개 3+3 분할 중 실제 팀 순위, agent 쌍 AUROC).
+- 데이터: A+C IPPO s1(좌표 마스킹), 옛 1M IPPO 모서리·개인 s1·s2, 인접·개인 s1(정책 입력에 좌표 있음, gate 입력에는 없음).
+- 결과 1(≤0.26M): goal 진척(방향 특징)은 모서리 3개에서 분할 순위 1/10, agent AUROC .87–1.00. 인접에서는 순위 6/10, .35. 배송(방향+지형)은 네 데이터 모두 team_gap 1.00, 순위 1/10(인접도 goal 근처 지형으로 두 goal이 구분된다). pickup은 순위 1–10 혼재, agent AUROC .30–.50으로 관측상 식별 불가. 나머지(감점 등)도 대체로 불가.
+- 결과 2: V2 gate 첫 같은 팀 승인 acs1 0.27M, 모서리 s1 0.32M, s2 0.26M, 인접 0.86M. 다른 팀 승인은 네 데이터 모두 0(195–200 round). AUROC ≥ .9 첫 시점: V2 절대 차이 0.16 / 0.27 / 0.02 / 0.78M, 대조 상관 0.04 / 0.20 / 0.10 / 0.06M. 대조 corr>0 판정 정확도(0.1/0.2/0.3M): acs1 .93/1.00/1.00, 모서리 s1 .40/.73/1.00, s2 1.00/1.00/1.00, 인접 .67/.93/.80.
+- 해석: E59의 'v2 첫 승인 2.56M'은 재생량(1/180) 때문이었다. 실제 경험량에서는 모서리 0.26–0.32M. 초기 팀 신호는 goal 진척 방향과 goal 근처 배송이고, pickup은 아니다(D87 예상 확인). 대조는 순위를 더 일찍 맞추지만, 0으로 바로 판정하면 0.1–0.2M에 오판정이 있어 보류 규칙이 필요하다. 인접 배치는 방향 신호에서는 음성 사례지만 배송 지형으로 결국 식별된다.
+- 한계: 각 구간을 구간 끝 정책으로 대신했다(재생 초기 배송은 학습 로그보다 적음). run마다 seed 하나, 15쌍. 같은 팀의 행동 유사성 혼입을 완전히 배제하지 못했다. AUROC는 모든 쌍 접촉 가정. 대조 방식은 분석 스크립트에만 있다.
+- 근거: `output/ac_early_id_20261026/{README.md,*_curve.json,audit.json,summary.json,*_stdout.txt}`, `*_audit.npz`.
+- 실행 중이던 A+C v1 학습(PID 18880)은 건드리지 않았다. 처음 띄운 분석 프로세스 4개는 메모리 사용이 커질 것으로 보여 Claude가 직접 멈추고 배열을 미리 할당하도록 고쳐 다시 실행했다(학습 프로세스와 무관).
+
+## E61. Oracle s1이 IPPO보다 빠르지 않은 이유 — 읽기 전용 분석(학습 없음) — 2026-10-29 Claude Code, 사용자 요청(T147)
+
+- 대상: `runs/ac_20261023_185556`(A+C v1, 모서리·개인 보상, 좌표 마스킹, seed 1). IPPO·Oracle·PGCT는 complete(5M). All s1은 10:40 기준 1.6M에서 진행 중이다. checkpoint 정책 추론만 했다(실제 상태 분석은 mode·시점마다 3 episode).
+- 팀 평가 배송/episode at 1M / 2M / 3M / 4.5M:
+  - IPPO 2.4 / 8.1 / 11.6 / 21.7
+  - Oracle 0.4 / 7.4 / 10.6 / 21.5
+  - PGCT v1 2.4 / 8.1 / 11.7 / 20.5
+  - All(1M) 1.5
+  - Oracle은 0.5–1M에서만 뚜렷이 느리다.
+- 증류 효과(같은 팀 (V_i − V_j)²):
+  - probe 위: IPPO .060 / .870 / 1.205, Oracle .0015 / .0060 / .0048 (1M / 2M / 4.75M). 증류는 probe를 150–250배 맞췄다.
+  - 실제 방문 상태: IPPO .080 / .674 / 1.194, Oracle .023 / .115 / 1.223. 후반에는 효과가 이어지지 않는다.
+- 팀원 V의 쓸모(IPPO 실제 상태, 내 할인 return 대비 MSE): 2M에 자기 critic .18, 팀원 critic .74. 4.75M에 자기 critic .83, 팀원 critic 1.79. 같은 팀 critic 차이(2M .67)가 다른 팀(.44)보다 작지 않다.
+- 1M의 probe 위 |V|: IPPO .140, Oracle .064. 첫 발견자의 V가 평균되어 눌렸다는 가설과 맞지만, 결과일 수도 있다.
+- 수준 도달 뒤 +5 배송까지 걸린 step(M):
+  - 5→10: IPPO 1.13, Oracle 1.43, PGCT 1.13
+  - 10→15: IPPO .92, Oracle .92, PGCT 1.18
+  - 15→20: IPPO .87, Oracle .46, PGCT .56
+  - PGCT v1은 2.82M까지 IPPO와 같았으므로, IPPO와 PGCT의 차이가 seed 하나에서 생기는 혼돈 수준이다.
+- 정책 JS(probe, IPPO, 같은 팀 / 다른 팀): 0.25M .038 / .056, 1M .185 / .189, 4.75M .217 / .248. KL(π‖U)은 1M에 배송한 agent(.79·1.34·.60)와 못 한 agent(.50·.48·.56)를 잘 가르지 못한다.
+- `probe/cross_team_gate`(PGCT 평균 .277)는 다른 팀 물리 이웃 비율(4.98/18)과 같다. A+C PGCT의 trainer gate가 `unrestricted`이기 때문이다. 실제 v1 allocation은 같은 팀 48 arc, 다른 팀 0 arc.
+- 한계: seed 하나. 실제 상태는 3 episode이고 mode마다 방문 분포가 다르다.
+- 근거: `output/oracle_why_20261029/{README.md,oracle_why.py,oracle_vgap.py,oracle_realgap.py,oracle_js.py}`.
+
+## E62. 전이 재설계 전제 점검: 팀원 critic의 팀 특이성과 max 상향(학습 없음) — 2026-10-29 Claude Code, 사용자 요청(T148)
+
+- 대상: A+C IPPO s1 checkpoint 1M·2M·3M. 시점마다 3 episode를 확률 정책으로 굴리고, 받는 agent의 실제 방문 상태에서 6개 critic을 모두 recurrent로 돌렸다. 할인 return은 γ .99이고, episode 끝 100 step은 제외했다. 추론만 했다.
+- 뒤처진 agent(그 rollout 배송 0) / 앞선 agent별 상향폭 mean relu(max_j V_j − V_i), 같은 팀 대 다른 팀 critic:
+  - 1M: 뒤처진 .35 / .34, 앞선 .03 / .15
+  - 2M: 뒤처진 1.19 / .72, 앞선 .13 / .56
+  - 3M: 뒤처진 1.07 / 1.12, 앞선 .18 / .25
+- 운반 중이고 자기 goal이 시야 밖인 상태에서 각 critic과 내 return의 상관(자기 / 같은 팀 / 다른 팀):
+  - 1M: .56 / .65 / .56
+  - 2M: .59 / .66 / .53
+  - 3M: .39 / .48 / .50
+  - 전체 상태: 자기 .49–.56, 같은 팀 .34–.41, 다른 팀 .27–.31
+- 내 return 대비 편향(자기 V / max(자기, 같은 팀) / max(자기, 다른 팀)):
+  - 1M: +.03 / +.25 / +.29
+  - 2M: +.27 / +.76 / +.89
+  - 3M: +.13 / +.45 / +.52
+- 해석:
+  - max 결합은 뒤처진 agent만 크게 올리고 앞선 agent는 거의 바꾸지 않는다. 방향이 저절로 정해진다.
+  - 다른 팀 critic은 앞선 agent에게도 큰 상향을 준다. gate가 필요하다.
+  - 팀 특이성은 작다. 관측 ch4·ch12가 팀 기준이기 때문이다. 과대추정 위험이 있다.
+- 한계: seed 하나, 시점마다 3 episode, IPPO 정책만 봤다. 상향의 방향이 맞는지(행동 선택 개선)는 측정하지 않았다.
+- 근거: `output/oracle_why_20261029/{transfer_premise.py,transfer_premise_stdout.txt}`.
