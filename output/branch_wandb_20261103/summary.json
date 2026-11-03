@@ -1,0 +1,1668 @@
+{
+ "b6_corner_indiv_pen005_acv2_br01000_allk_max_s1": {
+  "mode": "allk_max",
+  "seed": 1,
+  "points": 9,
+  "last3_steps": [
+   358400,
+   409600,
+   460800
+  ],
+  "team_last3": 6.483333333333333,
+  "laggards_last3": 0.15,
+  "leaders_last3": 6.333333333333333,
+  "agents_last3": [
+   0.0,
+   0.0,
+   2.566666666666667,
+   1.7,
+   0.15,
+   2.0666666666666664
+  ],
+  "first_step_laggard_ge_0_25": {
+   "0": null,
+   "1": null,
+   "4": 460800
+  },
+  "curve": [
+   {
+    "step": 51200,
+    "team": 4.55,
+    "laggards": 0.0,
+    "leaders": 4.550000000000001,
+    "agents": [
+     0.0,
+     0.0,
+     2.15,
+     1.05,
+     0.0,
+     1.35
+    ]
+   },
+   {
+    "step": 102400,
+    "team": 4.3,
+    "laggards": 0.0,
+    "leaders": 4.3,
+    "agents": [
+     0.0,
+     0.0,
+     2.0,
+     1.15,
+     0.0,
+     1.15
+    ]
+   },
+   {
+    "step": 153600,
+    "team": 4.45,
+    "laggards": 0.0,
+    "leaders": 4.45,
+    "agents": [
+     0.0,
+     0.0,
+     2.05,
+     1.35,
+     0.0,
+     1.05
+    ]
+   },
+   {
+    "step": 204800,
+    "team": 5.15,
+    "laggards": 0.0,
+    "leaders": 5.1499999999999995,
+    "agents": [
+     0.0,
+     0.0,
+     2.3,
+     1.4,
+     0.0,
+     1.45
+    ]
+   },
+   {
+    "step": 256000,
+    "team": 5.35,
+    "laggards": 0.0,
+    "leaders": 5.3500000000000005,
+    "agents": [
+     0.0,
+     0.0,
+     2.2,
+     1.7,
+     0.0,
+     1.45
+    ]
+   },
+   {
+    "step": 307200,
+    "team": 6.25,
+    "laggards": 0.0,
+    "leaders": 6.25,
+    "agents": [
+     0.0,
+     0.0,
+     2.5,
+     1.75,
+     0.0,
+     2.0
+    ]
+   },
+   {
+    "step": 358400,
+    "team": 6.25,
+    "laggards": 0.0,
+    "leaders": 6.25,
+    "agents": [
+     0.0,
+     0.0,
+     2.6,
+     1.9,
+     0.0,
+     1.75
+    ]
+   },
+   {
+    "step": 409600,
+    "team": 6.1,
+    "laggards": 0.1,
+    "leaders": 6.0,
+    "agents": [
+     0.0,
+     0.0,
+     2.4,
+     1.55,
+     0.1,
+     2.05
+    ]
+   },
+   {
+    "step": 460800,
+    "team": 7.1,
+    "laggards": 0.35,
+    "leaders": 6.75,
+    "agents": [
+     0.0,
+     0.0,
+     2.7,
+     1.65,
+     0.35,
+     2.4
+    ]
+   }
+  ],
+  "team_mean_all": 5.500000000000001,
+  "max_gae": {
+   "updates": 489,
+   "donor_arcs_total": 5866.0,
+   "same_team_arcs": 2386.0,
+   "cross_team_arcs": 3480.0,
+   "updates_with_donor": 489
+  }
+ },
+ "b6_corner_indiv_pen005_acv2_br01000_ippo_s1": {
+  "mode": "ippo",
+  "seed": 1,
+  "points": 9,
+  "last3_steps": [
+   358400,
+   409600,
+   460800
+  ],
+  "team_last3": 6.566666666666666,
+  "laggards_last3": 0.43333333333333335,
+  "leaders_last3": 6.133333333333333,
+  "agents_last3": [
+   0.0,
+   0.43333333333333335,
+   2.566666666666667,
+   1.4333333333333333,
+   0.0,
+   2.1333333333333333
+  ],
+  "first_step_laggard_ge_0_25": {
+   "0": null,
+   "1": 409600,
+   "4": null
+  },
+  "curve": [
+   {
+    "step": 51200,
+    "team": 3.75,
+    "laggards": 0.0,
+    "leaders": 3.75,
+    "agents": [
+     0.0,
+     0.0,
+     1.45,
+     1.35,
+     0.0,
+     0.95
+    ]
+   },
+   {
+    "step": 102400,
+    "team": 3.95,
+    "laggards": 0.0,
+    "leaders": 3.95,
+    "agents": [
+     0.0,
+     0.0,
+     2.1,
+     0.85,
+     0.0,
+     1.0
+    ]
+   },
+   {
+    "step": 153600,
+    "team": 4.35,
+    "laggards": 0.0,
+    "leaders": 4.35,
+    "agents": [
+     0.0,
+     0.0,
+     1.6,
+     1.45,
+     0.0,
+     1.3
+    ]
+   },
+   {
+    "step": 204800,
+    "team": 4.8,
+    "laggards": 0.0,
+    "leaders": 4.8,
+    "agents": [
+     0.0,
+     0.0,
+     2.0,
+     1.4,
+     0.0,
+     1.4
+    ]
+   },
+   {
+    "step": 256000,
+    "team": 5.3,
+    "laggards": 0.05,
+    "leaders": 5.25,
+    "agents": [
+     0.0,
+     0.05,
+     2.05,
+     1.1,
+     0.0,
+     2.1
+    ]
+   },
+   {
+    "step": 307200,
+    "team": 5.45,
+    "laggards": 0.0,
+    "leaders": 5.45,
+    "agents": [
+     0.0,
+     0.0,
+     2.85,
+     1.35,
+     0.0,
+     1.25
+    ]
+   },
+   {
+    "step": 358400,
+    "team": 6.55,
+    "laggards": 0.05,
+    "leaders": 6.5,
+    "agents": [
+     0.0,
+     0.05,
+     2.75,
+     1.7,
+     0.0,
+     2.05
+    ]
+   },
+   {
+    "step": 409600,
+    "team": 7.7,
+    "laggards": 0.55,
+    "leaders": 7.15,
+    "agents": [
+     0.0,
+     0.55,
+     2.95,
+     1.6,
+     0.0,
+     2.6
+    ]
+   },
+   {
+    "step": 460800,
+    "team": 5.45,
+    "laggards": 0.7,
+    "leaders": 4.75,
+    "agents": [
+     0.0,
+     0.7,
+     2.0,
+     1.0,
+     0.0,
+     1.75
+    ]
+   }
+  ],
+  "team_mean_all": 5.255555555555556
+ },
+ "b6_corner_indiv_pen005_acv2_br01000_ippo_s3": {
+  "mode": "ippo",
+  "seed": 3,
+  "points": 9,
+  "last3_steps": [
+   358400,
+   409600,
+   460800
+  ],
+  "team_last3": 5.633333333333334,
+  "laggards_last3": 0.75,
+  "leaders_last3": 4.883333333333334,
+  "agents_last3": [
+   0.0,
+   0.75,
+   2.25,
+   1.1833333333333333,
+   0.0,
+   1.45
+  ],
+  "first_step_laggard_ge_0_25": {
+   "0": null,
+   "1": 307200,
+   "4": null
+  },
+  "curve": [
+   {
+    "step": 51200,
+    "team": 3.0,
+    "laggards": 0.0,
+    "leaders": 3.0,
+    "agents": [
+     0.0,
+     0.0,
+     1.1,
+     0.95,
+     0.0,
+     0.95
+    ]
+   },
+   {
+    "step": 102400,
+    "team": 4.55,
+    "laggards": 0.0,
+    "leaders": 4.55,
+    "agents": [
+     0.0,
+     0.0,
+     2.1,
+     1.65,
+     0.0,
+     0.8
+    ]
+   },
+   {
+    "step": 153600,
+    "team": 4.85,
+    "laggards": 0.0,
+    "leaders": 4.85,
+    "agents": [
+     0.0,
+     0.0,
+     2.35,
+     1.5,
+     0.0,
+     1.0
+    ]
+   },
+   {
+    "step": 204800,
+    "team": 5.25,
+    "laggards": 0.05,
+    "leaders": 5.199999999999999,
+    "agents": [
+     0.0,
+     0.05,
+     2.5,
+     1.85,
+     0.0,
+     0.85
+    ]
+   },
+   {
+    "step": 256000,
+    "team": 4.45,
+    "laggards": 0.05,
+    "leaders": 4.4,
+    "agents": [
+     0.0,
+     0.05,
+     2.4,
+     1.05,
+     0.0,
+     0.95
+    ]
+   },
+   {
+    "step": 307200,
+    "team": 6.6,
+    "laggards": 0.65,
+    "leaders": 5.95,
+    "agents": [
+     0.0,
+     0.65,
+     3.15,
+     1.55,
+     0.0,
+     1.25
+    ]
+   },
+   {
+    "step": 358400,
+    "team": 5.95,
+    "laggards": 0.6,
+    "leaders": 5.35,
+    "agents": [
+     0.0,
+     0.6,
+     2.8,
+     1.15,
+     0.0,
+     1.4
+    ]
+   },
+   {
+    "step": 409600,
+    "team": 5.65,
+    "laggards": 0.7,
+    "leaders": 4.949999999999999,
+    "agents": [
+     0.0,
+     0.7,
+     2.05,
+     1.3,
+     0.0,
+     1.6
+    ]
+   },
+   {
+    "step": 460800,
+    "team": 5.3,
+    "laggards": 0.95,
+    "leaders": 4.35,
+    "agents": [
+     0.0,
+     0.95,
+     1.9,
+     1.1,
+     0.0,
+     1.35
+    ]
+   }
+  ],
+  "team_mean_all": 5.066666666666666
+ },
+ "b6_corner_indiv_pen005_acv2_br01000_oracle_mature_max_s1": {
+  "mode": "oracle_mature_max",
+  "seed": 1,
+  "points": 9,
+  "last3_steps": [
+   358400,
+   409600,
+   460800
+  ],
+  "team_last3": 6.283333333333334,
+  "laggards_last3": 0.0,
+  "leaders_last3": 6.283333333333333,
+  "agents_last3": [
+   0.0,
+   0.0,
+   2.4833333333333334,
+   1.8499999999999999,
+   0.0,
+   1.95
+  ],
+  "first_step_laggard_ge_0_25": {
+   "0": null,
+   "1": null,
+   "4": null
+  },
+  "curve": [
+   {
+    "step": 51200,
+    "team": 3.45,
+    "laggards": 0.0,
+    "leaders": 3.45,
+    "agents": [
+     0.0,
+     0.0,
+     1.05,
+     1.15,
+     0.0,
+     1.25
+    ]
+   },
+   {
+    "step": 102400,
+    "team": 3.8,
+    "laggards": 0.0,
+    "leaders": 3.8,
+    "agents": [
+     0.0,
+     0.0,
+     1.15,
+     1.15,
+     0.0,
+     1.5
+    ]
+   },
+   {
+    "step": 153600,
+    "team": 4.3,
+    "laggards": 0.0,
+    "leaders": 4.3,
+    "agents": [
+     0.0,
+     0.0,
+     1.35,
+     1.4,
+     0.0,
+     1.55
+    ]
+   },
+   {
+    "step": 204800,
+    "team": 5.05,
+    "laggards": 0.0,
+    "leaders": 5.05,
+    "agents": [
+     0.0,
+     0.0,
+     1.9,
+     1.45,
+     0.0,
+     1.7
+    ]
+   },
+   {
+    "step": 256000,
+    "team": 5.55,
+    "laggards": 0.0,
+    "leaders": 5.550000000000001,
+    "agents": [
+     0.0,
+     0.0,
+     1.95,
+     1.5,
+     0.0,
+     2.1
+    ]
+   },
+   {
+    "step": 307200,
+    "team": 5.45,
+    "laggards": 0.0,
+    "leaders": 5.45,
+    "agents": [
+     0.0,
+     0.0,
+     1.95,
+     1.7,
+     0.0,
+     1.8
+    ]
+   },
+   {
+    "step": 358400,
+    "team": 6.35,
+    "laggards": 0.0,
+    "leaders": 6.35,
+    "agents": [
+     0.0,
+     0.0,
+     2.6,
+     1.95,
+     0.0,
+     1.8
+    ]
+   },
+   {
+    "step": 409600,
+    "team": 6.85,
+    "laggards": 0.0,
+    "leaders": 6.85,
+    "agents": [
+     0.0,
+     0.0,
+     2.4,
+     2.15,
+     0.0,
+     2.3
+    ]
+   },
+   {
+    "step": 460800,
+    "team": 5.65,
+    "laggards": 0.0,
+    "leaders": 5.65,
+    "agents": [
+     0.0,
+     0.0,
+     2.45,
+     1.45,
+     0.0,
+     1.75
+    ]
+   }
+  ],
+  "team_mean_all": 5.161111111111111,
+  "max_gae": {
+   "updates": 489,
+   "donor_arcs_total": 960.0,
+   "same_team_arcs": 960.0,
+   "cross_team_arcs": 0.0,
+   "updates_with_donor": 480,
+   "mature_first": 0.0,
+   "mature_last": 3.0,
+   "approved_cross_max": 0.0,
+   "approved_same_last": 2.0,
+   "mature_agents_last": {
+    "0": 0.0,
+    "1": 0.0,
+    "2": 1.0,
+    "3": 1.0,
+    "4": 0.0,
+    "5": 1.0
+   }
+  }
+ },
+ "b6_corner_indiv_pen005_acv2_br01000_oracle_mature_max_s3": {
+  "mode": "oracle_mature_max",
+  "seed": 3,
+  "points": 9,
+  "last3_steps": [
+   358400,
+   409600,
+   460800
+  ],
+  "team_last3": 6.7,
+  "laggards_last3": 0.6333333333333333,
+  "leaders_last3": 6.066666666666667,
+  "agents_last3": [
+   0.0,
+   0.6333333333333333,
+   3.016666666666667,
+   1.6166666666666665,
+   0.0,
+   1.4333333333333336
+  ],
+  "first_step_laggard_ge_0_25": {
+   "0": null,
+   "1": 358400,
+   "4": null
+  },
+  "curve": [
+   {
+    "step": 51200,
+    "team": 4.2,
+    "laggards": 0.0,
+    "leaders": 4.199999999999999,
+    "agents": [
+     0.0,
+     0.0,
+     1.95,
+     1.15,
+     0.0,
+     1.1
+    ]
+   },
+   {
+    "step": 102400,
+    "team": 4.75,
+    "laggards": 0.0,
+    "leaders": 4.75,
+    "agents": [
+     0.0,
+     0.0,
+     2.3,
+     1.25,
+     0.0,
+     1.2
+    ]
+   },
+   {
+    "step": 153600,
+    "team": 4.0,
+    "laggards": 0.0,
+    "leaders": 4.0,
+    "agents": [
+     0.0,
+     0.0,
+     1.45,
+     1.25,
+     0.0,
+     1.3
+    ]
+   },
+   {
+    "step": 204800,
+    "team": 5.2,
+    "laggards": 0.0,
+    "leaders": 5.2,
+    "agents": [
+     0.0,
+     0.0,
+     2.1,
+     1.75,
+     0.0,
+     1.35
+    ]
+   },
+   {
+    "step": 256000,
+    "team": 5.6,
+    "laggards": 0.0,
+    "leaders": 5.6,
+    "agents": [
+     0.0,
+     0.0,
+     2.85,
+     1.35,
+     0.0,
+     1.4
+    ]
+   },
+   {
+    "step": 307200,
+    "team": 6.4,
+    "laggards": 0.2,
+    "leaders": 6.199999999999999,
+    "agents": [
+     0.0,
+     0.2,
+     2.5,
+     2.05,
+     0.0,
+     1.65
+    ]
+   },
+   {
+    "step": 358400,
+    "team": 7.0,
+    "laggards": 0.25,
+    "leaders": 6.75,
+    "agents": [
+     0.0,
+     0.25,
+     2.85,
+     1.75,
+     0.0,
+     2.15
+    ]
+   },
+   {
+    "step": 409600,
+    "team": 6.0,
+    "laggards": 0.65,
+    "leaders": 5.35,
+    "agents": [
+     0.0,
+     0.65,
+     2.75,
+     1.55,
+     0.0,
+     1.05
+    ]
+   },
+   {
+    "step": 460800,
+    "team": 7.1,
+    "laggards": 1.0,
+    "leaders": 6.1,
+    "agents": [
+     0.0,
+     1.0,
+     3.45,
+     1.55,
+     0.0,
+     1.1
+    ]
+   }
+  ],
+  "team_mean_all": 5.583333333333333,
+  "max_gae": {
+   "updates": 489,
+   "donor_arcs_total": 2204.0,
+   "same_team_arcs": 2204.0,
+   "cross_team_arcs": 0.0,
+   "updates_with_donor": 478,
+   "mature_first": 0.0,
+   "mature_last": 4.0,
+   "approved_cross_max": 0.0,
+   "approved_same_last": 6.0,
+   "mature_agents_last": {
+    "0": 0.0,
+    "1": 1.0,
+    "2": 1.0,
+    "3": 1.0,
+    "4": 0.0,
+    "5": 1.0
+   }
+  }
+ },
+ "b6_corner_indiv_pen005_acv2_br01000_oracle_mature_max_s5": {
+  "mode": "oracle_mature_max",
+  "seed": 5,
+  "points": 9,
+  "last3_steps": [
+   358400,
+   409600,
+   460800
+  ],
+  "team_last3": 6.883333333333333,
+  "laggards_last3": 0.8166666666666667,
+  "leaders_last3": 6.066666666666666,
+  "agents_last3": [
+   0.0,
+   0.75,
+   2.533333333333333,
+   1.6499999999999997,
+   0.06666666666666667,
+   1.8833333333333335
+  ],
+  "first_step_laggard_ge_0_25": {
+   "0": null,
+   "1": 307200,
+   "4": null
+  },
+  "curve": [
+   {
+    "step": 51200,
+    "team": 3.85,
+    "laggards": 0.0,
+    "leaders": 3.8499999999999996,
+    "agents": [
+     0.0,
+     0.0,
+     1.45,
+     1.15,
+     0.0,
+     1.25
+    ]
+   },
+   {
+    "step": 102400,
+    "team": 4.5,
+    "laggards": 0.0,
+    "leaders": 4.5,
+    "agents": [
+     0.0,
+     0.0,
+     1.55,
+     1.5,
+     0.0,
+     1.45
+    ]
+   },
+   {
+    "step": 153600,
+    "team": 4.55,
+    "laggards": 0.05,
+    "leaders": 4.5,
+    "agents": [
+     0.0,
+     0.05,
+     1.4,
+     1.45,
+     0.0,
+     1.65
+    ]
+   },
+   {
+    "step": 204800,
+    "team": 4.65,
+    "laggards": 0.0,
+    "leaders": 4.6499999999999995,
+    "agents": [
+     0.0,
+     0.0,
+     1.65,
+     1.7,
+     0.0,
+     1.3
+    ]
+   },
+   {
+    "step": 256000,
+    "team": 4.7,
+    "laggards": 0.0,
+    "leaders": 4.699999999999999,
+    "agents": [
+     0.0,
+     0.0,
+     1.95,
+     1.4,
+     0.0,
+     1.35
+    ]
+   },
+   {
+    "step": 307200,
+    "team": 5.9,
+    "laggards": 0.4,
+    "leaders": 5.5,
+    "agents": [
+     0.0,
+     0.4,
+     2.4,
+     2.0,
+     0.0,
+     1.1
+    ]
+   },
+   {
+    "step": 358400,
+    "team": 6.65,
+    "laggards": 0.65,
+    "leaders": 6.0,
+    "agents": [
+     0.0,
+     0.55,
+     2.15,
+     1.65,
+     0.1,
+     2.2
+    ]
+   },
+   {
+    "step": 409600,
+    "team": 6.65,
+    "laggards": 0.8,
+    "leaders": 5.85,
+    "agents": [
+     0.0,
+     0.75,
+     2.55,
+     1.9,
+     0.05,
+     1.4
+    ]
+   },
+   {
+    "step": 460800,
+    "team": 7.35,
+    "laggards": 1.0,
+    "leaders": 6.35,
+    "agents": [
+     0.0,
+     0.95,
+     2.9,
+     1.4,
+     0.05,
+     2.05
+    ]
+   }
+  ],
+  "team_mean_all": 5.422222222222222,
+  "max_gae": {
+   "updates": 489,
+   "donor_arcs_total": 2148.0,
+   "same_team_arcs": 2148.0,
+   "cross_team_arcs": 0.0,
+   "updates_with_donor": 480,
+   "mature_first": 0.0,
+   "mature_last": 5.0,
+   "approved_cross_max": 0.0,
+   "approved_same_last": 8.0,
+   "mature_agents_last": {
+    "0": 0.0,
+    "1": 1.0,
+    "2": 1.0,
+    "3": 1.0,
+    "4": 1.0,
+    "5": 1.0
+   }
+  }
+ },
+ "b6_corner_indiv_pen005_acv2_br01000_oracle_max_s1": {
+  "mode": "oracle_max",
+  "seed": 1,
+  "points": 9,
+  "last3_steps": [
+   358400,
+   409600,
+   460800
+  ],
+  "team_last3": 5.883333333333333,
+  "laggards_last3": 0.0,
+  "leaders_last3": 5.883333333333334,
+  "agents_last3": [
+   0.0,
+   0.0,
+   2.1999999999999997,
+   1.8333333333333333,
+   0.0,
+   1.8500000000000003
+  ],
+  "first_step_laggard_ge_0_25": {
+   "0": null,
+   "1": null,
+   "4": null
+  },
+  "curve": [
+   {
+    "step": 51200,
+    "team": 4.35,
+    "laggards": 0.0,
+    "leaders": 4.35,
+    "agents": [
+     0.0,
+     0.0,
+     2.0,
+     1.5,
+     0.0,
+     0.85
+    ]
+   },
+   {
+    "step": 102400,
+    "team": 4.75,
+    "laggards": 0.0,
+    "leaders": 4.75,
+    "agents": [
+     0.0,
+     0.0,
+     1.7,
+     1.55,
+     0.0,
+     1.5
+    ]
+   },
+   {
+    "step": 153600,
+    "team": 5.65,
+    "laggards": 0.0,
+    "leaders": 5.6499999999999995,
+    "agents": [
+     0.0,
+     0.0,
+     2.6,
+     1.5,
+     0.0,
+     1.55
+    ]
+   },
+   {
+    "step": 204800,
+    "team": 5.1,
+    "laggards": 0.0,
+    "leaders": 5.1,
+    "agents": [
+     0.0,
+     0.0,
+     1.85,
+     1.75,
+     0.0,
+     1.5
+    ]
+   },
+   {
+    "step": 256000,
+    "team": 5.05,
+    "laggards": 0.0,
+    "leaders": 5.050000000000001,
+    "agents": [
+     0.0,
+     0.0,
+     2.2,
+     1.45,
+     0.0,
+     1.4
+    ]
+   },
+   {
+    "step": 307200,
+    "team": 5.2,
+    "laggards": 0.0,
+    "leaders": 5.2,
+    "agents": [
+     0.0,
+     0.0,
+     1.75,
+     1.5,
+     0.0,
+     1.95
+    ]
+   },
+   {
+    "step": 358400,
+    "team": 5.15,
+    "laggards": 0.0,
+    "leaders": 5.15,
+    "agents": [
+     0.0,
+     0.0,
+     1.65,
+     1.8,
+     0.0,
+     1.7
+    ]
+   },
+   {
+    "step": 409600,
+    "team": 6.15,
+    "laggards": 0.0,
+    "leaders": 6.15,
+    "agents": [
+     0.0,
+     0.0,
+     2.2,
+     1.95,
+     0.0,
+     2.0
+    ]
+   },
+   {
+    "step": 460800,
+    "team": 6.35,
+    "laggards": 0.0,
+    "leaders": 6.35,
+    "agents": [
+     0.0,
+     0.0,
+     2.75,
+     1.75,
+     0.0,
+     1.85
+    ]
+   }
+  ],
+  "team_mean_all": 5.305555555555555,
+  "max_gae": {
+   "updates": 489,
+   "donor_arcs_total": 5866.0,
+   "same_team_arcs": 5866.0,
+   "cross_team_arcs": 0.0,
+   "updates_with_donor": 489
+  }
+ },
+ "b6_corner_indiv_pen005_acv2_br01000_oracle_maxd1_s1": {
+  "mode": "oracle_maxd1",
+  "seed": 1,
+  "points": 9,
+  "last3_steps": [
+   358400,
+   409600,
+   460800
+  ],
+  "team_last3": 6.133333333333333,
+  "laggards_last3": 0.6,
+  "leaders_last3": 5.533333333333333,
+  "agents_last3": [
+   0.0,
+   0.0,
+   2.4833333333333334,
+   1.5333333333333334,
+   0.6,
+   1.5166666666666666
+  ],
+  "first_step_laggard_ge_0_25": {
+   "0": null,
+   "1": null,
+   "4": 358400
+  },
+  "curve": [
+   {
+    "step": 51200,
+    "team": 4.25,
+    "laggards": 0.0,
+    "leaders": 4.25,
+    "agents": [
+     0.0,
+     0.0,
+     1.85,
+     1.55,
+     0.0,
+     0.85
+    ]
+   },
+   {
+    "step": 102400,
+    "team": 4.85,
+    "laggards": 0.0,
+    "leaders": 4.85,
+    "agents": [
+     0.0,
+     0.0,
+     2.6,
+     1.25,
+     0.0,
+     1.0
+    ]
+   },
+   {
+    "step": 153600,
+    "team": 4.35,
+    "laggards": 0.0,
+    "leaders": 4.35,
+    "agents": [
+     0.0,
+     0.0,
+     1.8,
+     1.2,
+     0.0,
+     1.35
+    ]
+   },
+   {
+    "step": 204800,
+    "team": 4.75,
+    "laggards": 0.0,
+    "leaders": 4.75,
+    "agents": [
+     0.0,
+     0.0,
+     1.85,
+     1.55,
+     0.0,
+     1.35
+    ]
+   },
+   {
+    "step": 256000,
+    "team": 4.75,
+    "laggards": 0.0,
+    "leaders": 4.75,
+    "agents": [
+     0.0,
+     0.0,
+     1.9,
+     1.6,
+     0.0,
+     1.25
+    ]
+   },
+   {
+    "step": 307200,
+    "team": 5.45,
+    "laggards": 0.05,
+    "leaders": 5.3999999999999995,
+    "agents": [
+     0.0,
+     0.0,
+     2.55,
+     1.55,
+     0.05,
+     1.3
+    ]
+   },
+   {
+    "step": 358400,
+    "team": 4.9,
+    "laggards": 0.4,
+    "leaders": 4.5,
+    "agents": [
+     0.0,
+     0.0,
+     2.0,
+     1.3,
+     0.4,
+     1.2
+    ]
+   },
+   {
+    "step": 409600,
+    "team": 6.1,
+    "laggards": 0.55,
+    "leaders": 5.55,
+    "agents": [
+     0.0,
+     0.0,
+     2.5,
+     1.35,
+     0.55,
+     1.7
+    ]
+   },
+   {
+    "step": 460800,
+    "team": 7.4,
+    "laggards": 0.85,
+    "leaders": 6.550000000000001,
+    "agents": [
+     0.0,
+     0.0,
+     2.95,
+     1.95,
+     0.85,
+     1.65
+    ]
+   }
+  ],
+  "team_mean_all": 5.199999999999999,
+  "max_gae": {
+   "updates": 489,
+   "donor_arcs_total": 5868.0,
+   "same_team_arcs": 5868.0,
+   "cross_team_arcs": 0.0,
+   "updates_with_donor": 489
+  }
+ },
+ "b6_corner_indiv_pen005_acv2_br01000_pgct_max_s1": {
+  "mode": "pgct_max",
+  "seed": 1,
+  "points": 9,
+  "last3_steps": [
+   358400,
+   409600,
+   460800
+  ],
+  "team_last3": 6.05,
+  "laggards_last3": 0.4166666666666667,
+  "leaders_last3": 5.633333333333334,
+  "agents_last3": [
+   0.0,
+   0.4166666666666667,
+   2.533333333333333,
+   1.6666666666666667,
+   0.0,
+   1.4333333333333333
+  ],
+  "first_step_laggard_ge_0_25": {
+   "0": null,
+   "1": 409600,
+   "4": null
+  },
+  "curve": [
+   {
+    "step": 51200,
+    "team": 4.45,
+    "laggards": 0.0,
+    "leaders": 4.45,
+    "agents": [
+     0.0,
+     0.0,
+     2.1,
+     1.45,
+     0.0,
+     0.9
+    ]
+   },
+   {
+    "step": 102400,
+    "team": 4.15,
+    "laggards": 0.0,
+    "leaders": 4.15,
+    "agents": [
+     0.0,
+     0.0,
+     1.55,
+     1.3,
+     0.0,
+     1.3
+    ]
+   },
+   {
+    "step": 153600,
+    "team": 5.45,
+    "laggards": 0.0,
+    "leaders": 5.449999999999999,
+    "agents": [
+     0.0,
+     0.0,
+     2.1,
+     1.45,
+     0.0,
+     1.9
+    ]
+   },
+   {
+    "step": 204800,
+    "team": 4.65,
+    "laggards": 0.0,
+    "leaders": 4.65,
+    "agents": [
+     0.0,
+     0.0,
+     1.6,
+     1.5,
+     0.0,
+     1.55
+    ]
+   },
+   {
+    "step": 256000,
+    "team": 5.05,
+    "laggards": 0.0,
+    "leaders": 5.050000000000001,
+    "agents": [
+     0.0,
+     0.0,
+     2.45,
+     1.35,
+     0.0,
+     1.25
+    ]
+   },
+   {
+    "step": 307200,
+    "team": 6.65,
+    "laggards": 0.0,
+    "leaders": 6.65,
+    "agents": [
+     0.0,
+     0.0,
+     3.05,
+     1.45,
+     0.0,
+     2.15
+    ]
+   },
+   {
+    "step": 358400,
+    "team": 5.3,
+    "laggards": 0.0,
+    "leaders": 5.3,
+    "agents": [
+     0.0,
+     0.0,
+     2.05,
+     1.35,
+     0.0,
+     1.9
+    ]
+   },
+   {
+    "step": 409600,
+    "team": 6.55,
+    "laggards": 0.3,
+    "leaders": 6.25,
+    "agents": [
+     0.0,
+     0.3,
+     3.05,
+     1.85,
+     0.0,
+     1.35
+    ]
+   },
+   {
+    "step": 460800,
+    "team": 6.3,
+    "laggards": 0.95,
+    "leaders": 5.35,
+    "agents": [
+     0.0,
+     0.95,
+     2.5,
+     1.8,
+     0.0,
+     1.05
+    ]
+   }
+  ],
+  "team_mean_all": 5.394444444444444,
+  "max_gae": {
+   "updates": 489,
+   "donor_arcs_total": 1920.0,
+   "same_team_arcs": 1920.0,
+   "cross_team_arcs": 0.0,
+   "updates_with_donor": 470,
+   "mature_first": 0.0,
+   "mature_last": 4.0,
+   "approved_cross_max": 0.0,
+   "approved_same_last": 6.0,
+   "mature_agents_last": {
+    "0": 0.0,
+    "1": 1.0,
+    "2": 1.0,
+    "3": 1.0,
+    "4": 0.0,
+    "5": 1.0
+   }
+  }
+ },
+ "b6_corner_indiv_pen005_acv2_br01000_pgct_max_s3": {
+  "mode": "pgct_max",
+  "seed": 3,
+  "points": 9,
+  "last3_steps": [
+   358400,
+   409600,
+   460800
+  ],
+  "team_last3": 5.733333333333333,
+  "laggards_last3": 0.0,
+  "leaders_last3": 5.733333333333334,
+  "agents_last3": [
+   0.0,
+   0.0,
+   1.9166666666666667,
+   1.7166666666666668,
+   0.0,
+   2.1
+  ],
+  "first_step_laggard_ge_0_25": {
+   "0": null,
+   "1": null,
+   "4": null
+  },
+  "curve": [
+   {
+    "step": 51200,
+    "team": 3.9,
+    "laggards": 0.0,
+    "leaders": 3.9,
+    "agents": [
+     0.0,
+     0.0,
+     1.65,
+     1.25,
+     0.0,
+     1.0
+    ]
+   },
+   {
+    "step": 102400,
+    "team": 4.1,
+    "laggards": 0.0,
+    "leaders": 4.1,
+    "agents": [
+     0.0,
+     0.0,
+     1.45,
+     1.65,
+     0.0,
+     1.0
+    ]
+   },
+   {
+    "step": 153600,
+    "team": 5.2,
+    "laggards": 0.0,
+    "leaders": 5.2,
+    "agents": [
+     0.0,
+     0.0,
+     2.0,
+     1.95,
+     0.0,
+     1.25
+    ]
+   },
+   {
+    "step": 204800,
+    "team": 4.9,
+    "laggards": 0.0,
+    "leaders": 4.9,
+    "agents": [
+     0.0,
+     0.0,
+     1.85,
+     1.6,
+     0.0,
+     1.45
+    ]
+   },
+   {
+    "step": 256000,
+    "team": 5.7,
+    "laggards": 0.0,
+    "leaders": 5.7,
+    "agents": [
+     0.0,
+     0.0,
+     2.2,
+     1.6,
+     0.0,
+     1.9
+    ]
+   },
+   {
+    "step": 307200,
+    "team": 6.1,
+    "laggards": 0.0,
+    "leaders": 6.1,
+    "agents": [
+     0.0,
+     0.0,
+     2.6,
+     1.5,
+     0.0,
+     2.0
+    ]
+   },
+   {
+    "step": 358400,
+    "team": 6.2,
+    "laggards": 0.0,
+    "leaders": 6.199999999999999,
+    "agents": [
+     0.0,
+     0.0,
+     2.05,
+     1.9,
+     0.0,
+     2.25
+    ]
+   },
+   {
+    "step": 409600,
+    "team": 5.25,
+    "laggards": 0.0,
+    "leaders": 5.25,
+    "agents": [
+     0.0,
+     0.0,
+     1.55,
+     1.8,
+     0.0,
+     1.9
+    ]
+   },
+   {
+    "step": 460800,
+    "team": 5.75,
+    "laggards": 0.0,
+    "leaders": 5.75,
+    "agents": [
+     0.0,
+     0.0,
+     2.15,
+     1.45,
+     0.0,
+     2.15
+    ]
+   }
+  ],
+  "team_mean_all": 5.233333333333333,
+  "max_gae": {
+   "updates": 489,
+   "donor_arcs_total": 1350.0,
+   "same_team_arcs": 1350.0,
+   "cross_team_arcs": 0.0,
+   "updates_with_donor": 465,
+   "mature_first": 0.0,
+   "mature_last": 4.0,
+   "approved_cross_max": 0.0,
+   "approved_same_last": 6.0,
+   "mature_agents_last": {
+    "0": 0.0,
+    "1": 1.0,
+    "2": 1.0,
+    "3": 1.0,
+    "4": 0.0,
+    "5": 1.0
+   }
+  }
+ }
+}

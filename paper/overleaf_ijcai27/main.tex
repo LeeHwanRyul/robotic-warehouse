@@ -79,9 +79,9 @@ Generalized policy improvement combines value functions of several policies thro
 Consider $N$ agents in a partially observable environment. Agent $i$ receives an observation $o_{i,t}$, takes an action $a_{i,t}$ and receives its own scalar reward $r_{i,t}$. Each agent has a hidden team label $z_i$, and agents of one team are rewarded by the same rule. Two agents are \emph{latent teammates} if $z_i=z_j$. Labels are used only for evaluation and for oracle baselines.
 
 \paragraph{Information model.}
-Each agent keeps its own recurrent Actor and Critic. Agents $i$ and $j$ can communicate during rollout $u$ only if they come within Chebyshev distance three at some step:
+Each agent keeps its own recurrent Actor and Critic. Agents $i$ and $j$ can communicate during rollout $u$ only if they come within Chebyshev distance $r_c$ at some step:
 \DonorEquation
-On contact, agents may exchange public event views, their predicted rewards on those views and Critic weights. They never exchange reward values, team labels, Actor weights or private trajectories. A public projection $P$ removes task-private observation channels (requested shelves and the agent's own goal) and absolute coordinates. In the implementation, $P(o)$ keeps six ego features and eleven physical grid channels within radius two, a 281-dimensional view. Actor and Critic use the full semantic observation with the two coordinate entries set to zero.
+We take the communication radius equal to the observation radius ($r_c=5$ in our task), so an agent can talk to the agents it can see; the radius of the reported runs is stated in Section~\ref{sec:setup}. On contact, agents may exchange public event views, their predicted rewards on those views and Critic weights. They never exchange reward values, team labels, Actor weights or private trajectories. A public projection $P$ removes task-private observation channels (requested shelves and the agent's own goal) and absolute coordinates. In the implementation, $P(o)$ keeps six ego features and eleven physical grid channels within radius two, a 281-dimensional view. Actor and Critic use the full semantic observation with the two coordinate entries set to zero.
 
 \paragraph{Goal.}
 Each agent should estimate the relation $\mathbf 1[z_i=z_j]$ for agents it meets, abstain when it lacks evidence, and use the estimate to improve its own learning without changing its own reward or its Critic's target.
@@ -104,14 +104,14 @@ Every five PPO updates, the predictor takes 50 Adam steps (batch 256, learning r
 \subsection{Reward Probes}
 When $i$ and $j$ have met during rollout $u$, they build a common probe set
 \ProbeEquation
-Here $\mathcal E_i^u$ is the public view of the 32 most recent own events of agent $i$ recorded before rollout $u$ starts, and $M$ mirrors views and turning actions left to right. Probes are concatenated with repetitions. Mirrors create a counterfactual question that a single team's events cannot ask: in the corner layout, the mirror of a delivery at one goal looks like a delivery at the other goal. Reward values are never part of a probe.
+Here $\mathcal E_i^u$ is the public view of the 32 most recent own events of agent $i$ recorded before rollout $u$ starts. Probes are concatenated with repetitions. Reward values are never part of a probe. The two event sets already contain the question that separates teams when both agents have rewarded events: a delivery at one goal is rewarding for one team and not for the other. When the map has a known left--right symmetry, the probe set can optionally be augmented with mirrored copies $M(\mathcal E_i^u\cup\mathcal E_j^u)$, where $M$ mirrors views and turning actions; this adds an assumption about the map and is not part of the core method. Our runs use this augmentation (Section~\ref{sec:setup}).
 
 \paragraph{Causal snapshot.}
 Comparisons happen at the end of a rollout, but a pair may have met early in it. To use only information that existed at contact time, each agent freezes its event probes, its maturity flag and its predictor version at the start of rollout $u$. Predictors are refitted only after a rollout, so the frozen version is exactly the predictor used during the rollout. The comparison for rollout $u$ uses this frozen state and is performed before the predictors are refitted.
 
 \begin{figure*}[t]
 \centering\resizebox{.97\textwidth}{!}{\input{figures/fig_discovery.tex}}
-\caption{Reward-based team discovery for a pair of agents that met. Both predictors answer the same public probes. Teammates assign reward to the same probes (distance near 0). Agents of different teams assign reward to complementary probes, including mirrored ones (distance near 1). Bars are an illustration, not data. Agents without enough own reward events abstain.}\label{fig:discovery}
+\caption{Reward-based team discovery for a pair of agents that met. Both predictors answer the same public probes. Teammates assign reward to the same probes (distance near 0). Agents of different teams assign reward to complementary probes (distance near 1). Bars are an illustration, not data. Agents without enough own reward events abstain.}\label{fig:discovery}
 \end{figure*}
 
 \subsection{Response Distance and Team Discovery}
@@ -119,7 +119,7 @@ Both predictors evaluate the same probes (Figure~\ref{fig:discovery}). Their dis
 \DistanceEquation
 Probes on which both predictors answer zero add nothing to the numerator or the denominator. Many uninformative probes therefore do not dilute the distance. If the denominator is below $10^{-8}$ the comparison abstains. An agent is \emph{mature} ($m_i^u=1$) if it has observed at least 20 own events, its predictor has been fitted, and its mean prediction on its own recent events is at least 0.3. Pairs are compared every five updates and only if both agents are mature. The distance is smoothed across comparison rounds and the pair is approved by
 \ApprovalEquation
-Here $n_{ij}$ counts rounds in which both predictors were refitted on new experience. The approval is symmetric and persists when the agents lose contact; a stale approval is used only if the pair meets again. The threshold 0.5 means that most of the response mass is shared; it is fixed in advance and not tuned on our runs. No team label enters this decision.
+Here $n_{ij}$ counts rounds in which both predictors were refitted on new experience; we use $\beta=0.35$, $n_{\min}=3$ and $\tau=0.5$. The approval is symmetric and persists when the agents lose contact; a stale approval is used only if the pair meets again. The threshold $\tau=0.5$ means that most of the response mass is shared; it is fixed in advance and not tuned on our runs. No team label enters this decision.
 
 \subsection{Selective Peer Critic Access}
 The donor set of agent $i$ for rollout $u$ is
@@ -147,11 +147,11 @@ Donor Critic weights are those used during rollout $u$ and are received on conta
 \subsection{Max-GAE Advantage Estimation}
 For a nonempty donor set, the positive uplift and the combined value are
 \MaxEquation
-The cap $c$ is optional; our default is $c=+\infty$. The GAE recursion uses the trainer's termination and time-limit handling:
+The GAE recursion uses the trainer's termination and time-limit handling:
 \GAEEquation
 where $d_t$ marks episode ends and $z^f_{i,t}$ is the value of a captured time-limit observation (zero otherwise). The self advantage $A^{\rm self}$ uses the same recursion with $V_i$ in place of $f$. With $\gamma=0.99$ and $\lambda_f=\lambda=0.95$, the Actor advantage is
 \BlendEquation
-Figure~\ref{fig:critic} shows the computation. Two details matter. First, the mask is applied to the advantage difference $\Delta$, not only to $b$. Masking only $b$ would let future uplift leak into the cold-start steps through the GAE recursion. Second, the factor $s_i\le1$ shrinks a large auxiliary term to the scale of the agent's own advantage but never inflates a small one. In our task the raw difference was 2.6--12 times $\operatorname{std}A^{\rm self}$ for lagging agents. Without $s_i$, PPO's advantage normalization would make the result almost independent of $\eta$.
+Figure~\ref{fig:critic} shows the computation. Two details matter. First, the mask $w_t$ multiplies the advantage difference $A^f-A^{\rm self}$, not only $b$. Masking only $b$ would let future uplift leak into the cold-start steps through the GAE recursion. Second, the factor $s_i\le1$ shrinks a large auxiliary term to the scale of the agent's own advantage but never inflates a small one. In our task the raw difference was 2.6--12 times $\operatorname{std}A^{\rm self}$ for lagging agents. Without $s_i$, PPO's advantage normalization would make the result almost independent of $\eta$.
 
 \begin{figure*}[t]
 \centering\resizebox{.97\textwidth}{!}{\input{figures/fig_critic.tex}}
@@ -168,15 +168,15 @@ The Actor maximizes the clipped objective plus an entropy bonus. The Critic mini
 
 \paragraph{A necessary condition for discovery.} If two reward rules induce the same predictor responses on every public probe available to the agents, no rule that sees only these responses can tell them apart. Discovery therefore requires task-discriminating public reward events. An agent that has never received a qualifying reward has no response to compare, and PGCT abstains for it by design.
 
-\paragraph{Reduction to independent PPO.} If $\mathcal G_i^u=\emptyset$ or $b_{i,t}=0$ for all $t$, then $\Delta=0$ and $A^{\rm PGCT}=A^{\rm self}$. Because $s_i\le1$, the change $|A^{\rm PGCT}-A^{\rm self}|$ goes to zero as the uplift does. For a fixed donor set, unmasked steps and fixed $s_i$, GAE is linear in its value input, and the Actor advantage equals GAE computed with $V_i+\eta s_i w_t b_i$.
+\paragraph{Reduction to independent PPO.} If $\mathcal G_i^u=\emptyset$ or $b_{i,t}=0$ for all $t$, then $A^{f}=A^{\rm self}$ and therefore $A^{\rm PGCT}=A^{\rm self}$. Because $s_i\le1$, the change $|A^{\rm PGCT}-A^{\rm self}|$ goes to zero as the uplift does. For a fixed donor set, unmasked steps and fixed $s_i$, GAE is linear in its value input, and the Actor advantage equals GAE computed with $V_i+\eta s_i w_t b_i$.
 
 \paragraph{Sensitivity to value errors.} For bounded value perturbations $\Delta f$ on continuing trajectories,
 \BoundEquation
 This bounds how a peer-value error can move the advantage. It is not a performance guarantee: the peer value is extrapolated to another agent's histories, other agents keep learning, and contacts change between rollouts.
 
 \section{Experiments}
-\subsection{Setup}
-\paragraph{Environment.} We use a multi-team variant of the robotic warehouse \cite{benchmark}: an $11\times10$ grid with six agents in two teams of three. The team goals are at the two bottom corners, $(0,10)$ and $(9,10)$. Each team has three requested shelves. Observations are semantic grids with sensor radius five. Every agent receives its own reward: 1 for a delivery, 1 for a shelf return, 0.15 for picking up a requested shelf, small progress terms (0.02, 0.005, 0.002) and small penalties (0.002--0.05) for unproductive actions. No team reward is used. Table~\ref{tab:settings} lists the learning settings.
+\subsection{Setup}\label{sec:setup}
+\paragraph{Environment.} We use a multi-team variant of the robotic warehouse \cite{benchmark}: an $11\times10$ grid with six agents in two teams of three. The team goals are at the two bottom corners, $(0,10)$ and $(9,10)$. Each team has three requested shelves. Observations are semantic grids with sensor radius five. Every agent receives its own reward: 1 for a delivery, 1 for a shelf return, 0.15 for picking up a requested shelf, small progress terms (0.02, 0.005, 0.002) and small penalties (0.002--0.05) for unproductive actions. No team reward is used. Table~\ref{tab:settings} lists the learning settings. The reported runs differ from the default method in two settings: they use a contact radius $r_c=3$, smaller than the observation radius, and they augment probes with mirrored copies. A contact within radius 3 is also a contact within radius 5, so the default only adds contacts; without mirrors, an offline replay gave the same decisions (Section~\ref{sec:discovery}). Runs with $r_c=5$ and without mirrors are pending.
 
 \begin{table}[t]\centering\small
 \begin{tabular}{lr}\toprule
@@ -189,9 +189,10 @@ Discount / GAE parameter & 0.99 / 0.95\\
 Encoder / GRU width & 128 / 128\\
 Reward fit: interval / steps & 5 updates / 50\\
 Event threshold / maturity & $r\ge0.5$ / 20 events\\
-EMA $\beta$ / threshold / rounds & 0.35 / 0.5 / 3\\
-Contact radius (Chebyshev) & 3\\
-Max-GAE $\eta$ / scale / cap & 0.5 / shrink / none\\\bottomrule
+EMA $\beta$ / threshold $\tau$ / rounds $n_{\min}$ & 0.35 / 0.5 / 3\\
+Contact radius $r_c$ (Chebyshev), runs & 3\\
+Mirrored probes, runs & yes\\
+Max-GAE $\eta$ / scale & 0.5 / shrink\\\bottomrule
 \end{tabular}
 \caption{Environment interaction and PGCT settings.}\label{tab:settings}
 \end{table}
@@ -200,10 +201,10 @@ Max-GAE $\eta$ / scale / cap & 0.5 / shrink / none\\\bottomrule
 
 \paragraph{Protocol and metrics.} Evaluation uses 20 deterministic episodes of 500 steps with fixed reset seeds. The learning comparison branches all methods from a common independent-PPO checkpoint at 1.024M steps (seed 1) and trains each for 0.5M further steps with seeds 1, 3 and 5, which keep the checkpoint's goal layout. At this checkpoint three agents ($a_0,a_1,a_4$) deliver little or nothing. The primary outcome is their evaluation deliveries; the deliveries of $a_2,a_3,a_5$ are a safety measure. Branch seeds continue one training run and are not independent training seeds; independent runs from scratch will follow if the branch shows an effect.
 
-\subsection{Team Discovery}
+\subsection{Team Discovery}\label{sec:discovery}
 Figure~\ref{fig:gate-data} shows a 5M-step run (seed 1) in which the discovery rule of PGCT was active. Same-team and different-team pairs separate as soon as agents mature. In the 0.1--0.25M bin, the mean response distance is 0.25 for teammates and 0.99 for others, and five of six agents are mature by 0.25M. The same-team distance keeps falling (0.08 after 4M). The different-team distance stays near 0.99 until about 1M and then slowly declines. Over the run, 5{,}252 directed peer-access arcs went to true teammates and 352 to agents of the other team, a same-team share of 93.7\%. The first different-team approval appears at 4.28M steps, so all access before that point was correct. This share is weighted by access frequency and is not a pair-level accuracy. The run used update-end positions as contacts and an earlier peer-usage rule, so it evaluates the discovery component only.
 
-As an offline check, we replayed a subsample of the experience of a completed independent-PPO run (0.26--5M steps, about 1/180 of its transitions) through the same rule, assuming every pair is in contact at every round. Of the 15 pairs, the 10 that reached a decision were all classified correctly: four same-team approvals and no different-team approval (same-team distances 0.14--0.18, different-team 0.58--0.70). The other five pairs all involved the one agent that never learned to deliver, and they abstained.
+As an offline check, we replayed a subsample of the experience of a completed independent-PPO run (0.26--5M steps, about 1/180 of its transitions) through the same rule, assuming every pair is in contact at every round. Of the 15 pairs, the 10 that reached a decision were all classified correctly: four same-team approvals and no different-team approval (same-team distances 0.14--0.18, different-team 0.58--0.70). The other five pairs all involved the one agent that never learned to deliver, and they abstained. Removing the mirrored probes from this replay left every decision unchanged.
 
 \begin{figure*}[t]\centering
 \includegraphics[width=.98\textwidth]{figures/discovery_log.pdf}

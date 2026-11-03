@@ -1,0 +1,15 @@
+% Preview of Overall Architecture v3 in a default 16:9 Beamer deck.
+\documentclass[aspectratio=169,10pt]{beamer}
+\setbeamertemplate{navigation symbols}{}
+\usepackage{tikz}
+\input{../../paper/figures/pgct_style.tex}
+
+\begin{document}
+\begin{frame}{Proposed Method: Overall Architecture}
+\centering
+\resizebox{\linewidth}{!}{\input{overall_v3.tex}}
+
+\vspace{4pt}
+{\footnotesize Agents exchange only event views, predictions and Critic weights on contact; never reward values or team labels.}
+\end{frame}
+\end{document}

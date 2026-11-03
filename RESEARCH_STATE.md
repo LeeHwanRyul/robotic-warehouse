@@ -1,5 +1,40 @@
 # PGCT 현재 연구 상태
 
+## 최신 확인 — 2026-11-04 KST, Claude Code (T206)
+
+- **후반 다른 팀 거리 하락(E74)**: W&B 로그상 반납 비중 .09 → .43과 다른 팀 거리 .99 → .61이 함께 움직인다(구간 상관 −.93). 직접 검증 스크립트 `output/return_share_20261104/split_by_event.py`는 원래 PC에서 실행해야 한다.
+- **논문 표기**: Actor advantage 식에서 Δ 기호를 빼고 $w_t(A^f-A^{\rm self})$로 직접 썼다(영·한, 그림 3, Overleaf 사본). 민감도 식의 섭동 기호 $\Delta f$, $\Delta A$는 그대로다. 상승분 식의 상한 $c$(기본 ∞)도 식·본문·표·그림 3에서 뺐다(실험은 모두 상한 없음). T207: 승인 식의 숫자를 기호로 바꿨다($n_{ij}\ge n_{\min}$, $\bar D_{ij}<\tau$; 값 $\beta=0.35$, $n_{\min}=3$, $\tau=0.5$는 본문과 표).
+- **주의**: 논문 수정은 모두 이 worktree(`.claude/worktrees/blissful-elion-d7da03`)에만 있고 커밋하지 않았다. 메인 체크아웃(`feature/PGCT_Next`)의 `paper/`는 예전 그대로다.
+
+## 최신 확인 — 2026-11-03 KST, Claude Code (T203, 논문 수정)
+
+- **논문(D110)**: 방법 절은 통신 반경 $r_c$ = 관측 반경 5, 좌우 대칭 $M$은 선택 사항. 실험 절과 표에는 실제 조건(통신 3, $M$ 사용)과 "통신 5·$M$ 없음 실험 진행 예정"을 밝혔다. 영어 7쪽(참고문헌이 7쪽에서 시작), 한국어 8쪽, Overleaf 사본 재생성.
+- **결과 수정이 필요한 실험**: 통신 5·$M$ 없음 분기(미실행). 끝나면 실험 절을 그 결과로 바꾼다.
+
+## 최신 확인 — 2026-11-03 20시 무렵 KST, Claude Code (T187, W&B로 분기 실험 중간 결과 확인)
+
+- **진행(W&B)**: 1단계 12 job 중 5개 finished(seed 1 네 모드, ippo_s3), `oracle_max_s3` running. 2단계 6 job 중 5개 finished, `pgct_max_s5` running(E73).
+- **팀 발견(최종 PGCT, 온라인)**: 다섯 stage-2 job 모두 다른 팀 승인 0. pgct_max s1·s3은 분기 후 20–26k step에 첫 승인, 끝에 같은 팀 6 arc(성숙한 같은 팀 쌍 전부). a0는 성숙하지 않아 범위는 12 arc 중 6이다.
+- **학습**: 가속은 아직 보이지 않는다(seed 1에서 D2 뒤처진 agent .00 대 IPPO .43). 1단계 seed 3·5 완료 뒤 판정한다.
+- 데이터·그림: `output/branch_wandb_20261103/`.
+
+## 최신 확인 — 2026-11-03 KST, Claude Code (T176, 사용자 W&B 스크린숏으로 분기 실험 진행 확인; 정확한 시각 기록하지 않음)
+
+- **실행 중(W&B 초록 점 기준, 프로세스·로그는 이 PC에 없어 미확인)**: 1단계 `runs/maxgae_br1M_20261102_165216`은 12 job 중 5번째 `ippo_s3`(그래프상 약 0.25M/0.5M), 2단계 `runs/pgctd2_br1M_20261102_180212`는 6 job 중 5번째 `oracle_mature_max_s5`.
+- **끝난 job**: 1단계 seed 1의 4개(ippo, oracle_max, oracle_maxd1, allk_max), 2단계 oracle_mature_max·pgct_max × seed 1·3. 결과는 아직 분석하지 않았다.
+- **남은 job**: 1단계 oracle_max_s3·oracle_maxd1_s3·allk_max_s3와 seed 5의 4개, 2단계 pgct_max_s5. 11-02 추정 종료(2단계 11-04 새벽, 1단계 11-05 오전)와 맞는 진행이다.
+- W&B `update/pgct_peer_*`가 0인 것은 Max-GAE 모드가 증류를 쓰지 않기 때문이다. 작동 여부는 `update/max_gae_*`로 본다.
+
+## 최신 확인 — 2026-11-03 KST, Claude Code (T174–T175, 다른 PC에서 맥락 복원; 정확한 시각 기록하지 않음)
+
+- **연구 상태 변화 없음.** T174는 문서·코드 읽기와 대조만 했다(코드·학습·Git 변경 없음). T175에서 사용자 요청으로 대화와 이 항목을 기록했다.
+- **작업 PC가 바뀌었다.** 저장소는 GitHub에서 받은 `C:\Task\embodied\robotic-warehouse`이고, 이 세션은 worktree `claude/blissful-elion-d7da03`(master `f9120b1`과 같은 커밋)다. 노트의 경로 `C:\RWARE\MARL_RWARE\third_party\robotic-warehouse`와 다르다.
+  - `runs/`는 gitignore 대상이라 옛 run 3개(`runs/recurrent_ippo_consensus/`)만 있다. 참조 실험 `runs/sp_20261008_120638_983201`, A+C run, 11-02 분기 실험 두 개(`maxgae_br1M_20261102_165216`, `pgctd2_br1M_20261102_180212`)가 없다. 그래서 `train_from_scratch.py` 계획 단계와 run에 의존하는 테스트를 이 PC에서 그대로 쓸 수 없다.
+  - conda 환경 `RWARE_MARL`이 없다(있는 환경: 2026-embodied, marl-policy-sharing, marl-small).
+- **분기 실험**: 11-02 기록상 2단계는 11-04 새벽, 1단계는 11-05 오전 종료 추정이다. 결과는 원래 PC의 로그로 확인해야 한다.
+- **코드·문서 대조(읽기 전용)**: `pgct_max` 경로(v2 `approved()`, rollout 시작 스냅샷으로 비교한 뒤 재학습, donor = 접촉 ∧ 승인, shrink D2, 첫 7 step 가림)가 D99·D100·D103과 일치한다. `MaxGAEConfig` 데이터클래스의 기본 scale은 `raw`이고 CLI 기본값만 `shrink`다.
+- **문서 불일치(고치지 않음)**: CLAUDE.md의 "현재 연구 방향(2026-10-23)"·"알고리즘 구조"와 `docs/SESSION_HANDOFF.md`·`docs/RESEARCH_CONTEXT.md`·`docs/EXPERIMENT_HISTORY.md`는 10-23 기준이라 A+C v2와 Max-GAE가 빠져 있다. 최신은 이 파일 맨 위와 D82–D106이다.
+
 ## 최신 확인 — 2026-11-02 KST, Claude Code (T173, IJCAI-27 형식 전환)
 
 - **논문(D106)**: 영어판은 IJCAI-27 공식 템플릿, 7쪽(본문 약 5.6 + 참고문헌 약 1.2), 보조 자료 2쪽, Overleaf용 `paper/overleaf_ijcai27.zip`. 한국어판은 내용 동기화.

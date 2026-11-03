@@ -1,0 +1,6 @@
+{
+ "run": "t98339-hanyang-university/rware-from-scratch/q2u47mml",
+ "train_rows": 4883,
+ "bins": 21,
+ "corr_return_share_vs_cross_ema": -0.930838591536368
+}

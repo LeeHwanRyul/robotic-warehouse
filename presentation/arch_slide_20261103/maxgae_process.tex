@@ -1,0 +1,60 @@
+% Max-GAE process for one receiver i (slide figure). Needs tikz and paper/figures/pgct_style.tex.
+% Value curves are an illustration, not data.
+\begin{tikzpicture}[pg,every node/.append style={execute at begin node={\hyphenpenalty10000\relax}}]
+\tikzset{
+  bx/.style={draw=pgblue,line width=.9pt,rounded corners=4pt,fill=white,align=center,inner sep=4pt,
+             font=\sffamily\small},
+  tag/.style={circle,fill=pgblue,text=white,font=\sffamily\bfseries\scriptsize,inner sep=1.2pt,minimum size=4.2mm},
+  note/.style={font=\sffamily\scriptsize,text=pggrey,align=center},
+}
+% ---------------- row 1: evaluate MY history with two critics ----------------
+\node[bx,text width=2.5cm] (hist) at (0,0) {\textbf{My history} $h_{i,t}$\\[3pt]
+  \tikz{\foreach \k in {0,...,5}{\draw[pgblue,fill=pgsky] (0.3*\k,0) rectangle ++(0.22,0.22);}}\\[1pt]
+  {\scriptsize $o_{i,1},\dots,o_{i,t}$}};
+\node[bx,text width=3.4cm,fill=pgsand,draw=pgorange] (cj) at (4.3,0.95)
+  {\textbf{Teammate $j$'s Critic} $V_j$\\{\scriptsize received on contact, frozen}};
+\node[bx,text width=3.4cm] (ci) at (4.3,-0.95) {\textbf{My Critic} $V_i$};
+\draw[flowo] (hist.east) -- ++(0.35,0) |- (cj.west);
+\draw[flow] (hist.east) -- ++(0.35,0) |- (ci.west);
+\node[note,text=pgorange,anchor=north] at (0,-0.95) {both Critics read\\\textbf{my} history};
+\node[tag] at (cj.north west) {2};
+% value curves (illustration)
+\begin{scope}[shift={(7.05,-1.25)}]
+  \fill[pglight] (0,0) rectangle (0.6,2.55);
+  \node[note,anchor=north] at (0.3,-0.02) {warm-up};
+  \fill[pgsand] plot[smooth] coordinates {(0.6,1.30) (1.2,1.55) (1.8,1.70) (2.35,1.55)}
+       -- plot[smooth] coordinates {(2.35,1.55) (1.8,1.20) (1.2,0.95) (0.6,0.80)} -- cycle;
+  \draw[pgblue,line width=1.3pt] plot[smooth] coordinates {(0,0.75) (0.6,0.80) (1.2,0.95) (1.8,1.20) (2.35,1.55) (3.0,2.05) (3.6,2.15)};
+  \draw[pgorange,line width=1.3pt] plot[smooth] coordinates {(0,1.15) (0.6,1.30) (1.2,1.55) (1.8,1.70) (2.35,1.55) (3.0,1.60) (3.6,1.70)};
+  \draw[pggrey,line width=.5pt,->] (0,0) -- (3.75,0) node[note,anchor=north east] {time $t$ in my rollout};
+  \node[font=\sffamily\bfseries\small,text=pgorange] at (1.45,1.27) {$b_t$};
+  \node[note,text=pgorange,anchor=west] at (3.65,1.70) {$V_j(\tilde h^{\,j}_{i,t})$};
+  \node[note,text=pgblue,anchor=west] at (3.65,2.18) {$V_i(h_{i,t})$};
+  \node[note,anchor=north] at (3.05,1.45) {teammate lower:\\$b_t=0$};
+\end{scope}
+\draw[flowo] (cj.east) -- ++(0.35,0) |- (7.0,0.45);
+\draw[flow] (ci.east) -- (7.0,-0.95);
+\node[bx,text width=3.0cm,draw=pgorange] (up) at (14.15,0.25) {\textbf{Positive uplift}\\[2pt]
+  $b_t=\big[\max_j V_j-V_i\big]_+$\\[1pt]{\scriptsize only where a teammate rates\\my situation higher}};
+\draw[flowo] (12.05,0.25) -- (up.west);
+\node[tag] at (up.north west) {3};
+% ---------------- row 2: advantages ----------------
+\node[bx,text width=2.6cm] (aself) at (4.3,-3.35) {\textbf{Own advantage}\\$A^{\rm self}=\mathrm{GAE}(V_i)$};
+\node[bx,text width=2.9cm,draw=pgorange] (af) at (8.2,-3.35) {\textbf{Max-GAE}\\$A^{f}=\mathrm{GAE}(V_i+w_t b_t)$};
+\node[bx,text width=3.3cm,draw=pgorange,line width=1.3pt] (mix) at (12.35,-3.35) {\textbf{Actor advantage}\\[1pt]
+  $A^{\rm PGCT}=A^{\rm self}+\eta\,s_i\,\Delta$\\[1pt]{\scriptsize $\Delta=A^f-A^{\rm self}$\\$s_i\le1$ shrinks a large $\Delta$}};
+\node[bx,text width=1.6cm,fill=pgsand,draw=pgorange] (actor) at (15.55,-3.35) {\textbf{Actor}\\update};
+\node[bx,text width=1.75cm,fill=pgsky] (critic) at (0.35,-3.35) {\textbf{Critic}\\update};
+\draw[flow] (ci.south) -- node[note,right,text=pgblue]{$V_i$} (aself.north);
+\draw[flowo] (up.south) |- ($(af.north)+(0,0.55)$) -- (af.north);
+\draw[flow] (aself.east) -- (af.west);
+\draw[flow] (af.east) -- (mix.west);
+\draw[flow] (aself.south) -- ++(0,-0.55) -| (mix.south);
+\draw[flowo] (mix.east) -- (actor.west);
+\draw[flow] (aself.west) -- node[note,above,text=pgblue]{own return} node[note,below,text=pgblue]{$R^{\rm self}$} (critic.east);
+\node[tag] at (af.north west) {4};
+\node[tag] at (mix.north west) {5};
+% ---------------- bottom line ----------------
+\node[font=\sffamily\small,text=black,anchor=north] at (7.6,-4.75)
+  {No approved teammate met \ $\Rightarrow$ \ $b_t=0$ \ $\Rightarrow$ \ $A^{\rm PGCT}=A^{\rm self}$: the update equals independent PPO.};
+\end{tikzpicture}

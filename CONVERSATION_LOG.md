@@ -17168,3 +17168,2241 @@ The flat Overleaf package also compiles to 7 pages. Last, I'll update the guide 
 - **결과가 아직 비어 있습니다.** 남은 약 1.4쪽 안에 분기 결과 표·그래프와 처음부터 학습한 비교를 넣어야 합니다. 넘치면 Properties 절이나 반사실 점검 절을 줄입니다.
 
 기록은 `DECISIONS.md` D106, `RESEARCH_STATE.md`, `PGCT_DELIVERABLES_README.md`, 대화 기록 T173에 남겼습니다. 실행 중인 학습은 건드리지 않았고, 커밋은 하지 않았습니다.
+
+## 원문 기록 T174 — 2026-11-03 KST, Claude Code (정확한 시각 기록하지 않음)
+
+### 사용자 — 원문 (붙여넣은 글. 받은 그대로)
+
+현재 프로젝트는 다른 컴퓨터에서 작업한 내용을 GitHub에서 pull하여 가져온 저장소입니다.
+이전 개발 및 연구 맥락을 최대한 정확하게 복원하기 위해 프로젝트 문서와 현재 코드베이스를 읽어주세요.
+1. 핵심 문서 읽기
+먼저 다음 파일들을 찾아서 읽으세요.
+
+* CLAUDE.md
+* AGENTS.md
+* HANDOFF.md
+* RESEARCH_STATE.md
+* DECISIONS.md
+* EXPERIMENTS.md
+* CONVERSATION_LOG.md
+
+추가로 다음 문서들도 확인하세요.
+
+* docs/RESEARCH_CONTEXT.md
+* docs/EXPERIMENT_HISTORY.md
+* docs/SESSION_HANDOFF.md
+* README.md
+
+파일이 다른 경로에 있다면 검색해서 찾고, 존재하지 않는 파일은 건너뛰세요.
+2. 연구 맥락 복원
+문서를 바탕으로 다음 사항을 이해하세요.
+
+* PGCT 연구의 최초 목표와 현재 문제 정의
+* DTDE 및 잠재 팀 발견의 핵심 가정
+* 팀 식별 방식과 Reward Probe의 발전 과정
+* V1/V2/V3 및 이후 알고리즘 변경 사항
+* Critic Transfer 방식과 설계 변경 이유
+* IPPO, Oracle, All, PGCT 비교 실험
+* 성공한 실험, 실패한 실험 및 확인되지 않은 가설
+* 현재 진행 중인 작업과 다음 연구 과제
+
+과거에 폐기된 접근법을 현재 설계와 혼동하지 마세요. 최신 설계 결정과 실제 코드 구현을 우선하여 이해하세요.
+3. 코드와 문서 대조
+Git 브랜치, 최근 커밋, 주요 소스 코드 및 실행 스크립트를 확인하세요.
+문서에 기록된 연구 설계와 현재 구현이 일치하는지 검토하세요.
+특히 문서에 적힌 계획, 이미 구현된 기능, 실험으로 검증된 결과를 명확히 구분하세요.
+4. 작업 맥락 확보
+읽은 내용을 현재 세션의 작업 맥락으로 활용하세요.
+향후 코드 수정이나 연구 논의에서 과거 설계 결정과 실험 결과를 고려할 수 있도록 핵심 사항을 정리하세요.
+맥락이 부족한 경우에는 추측하지 말고 관련 기록이나 코드를 다시 확인하세요.
+5. 결과 보고
+모든 확인이 끝나면 한국어로 다음 내용을 정리해 주세요.
+
+1. 현재 PGCT 연구의 정확한 목표
+2. 현재 채택된 알고리즘 구조
+3. 주요 실험의 진행 상황과 결과
+4. 이전에 결정한 중요한 설계 원칙
+5. 현재 코드 구현 상태
+6. 마지막 작업 내용과 다음으로 진행할 작업
+7. 문서 간 충돌하거나 추가 확인이 필요한 부분
+
+이번에는 프로젝트를 이해하는 작업만 수행하세요.
+코드 수정, 파일 생성, 학습 실행, Git 변경은 절대 하지 마세요.
+
+### 수행 기록 — 원문 대화와 별도
+
+- 새 PC에서 GitHub로 받은 저장소의 첫 세션이다. 작업 폴더는 `C:\Task\embodied\robotic-warehouse`의 worktree `claude/blissful-elion-d7da03`(master `f9120b1`과 같은 커밋)다.
+- 읽은 문서: CLAUDE.md, AGENTS.md, HANDOFF.md, RESEARCH_STATE.md 전체, DECISIONS.md D80–D106, EXPERIMENTS.md E56–E72, CONVERSATION_LOG.md T159–T173 일부(T159 붙여넣은 글의 앞뒤, T164, T169–T173), docs/SESSION_HANDOFF.md, docs/RESEARCH_CONTEXT.md, docs/EXPERIMENT_HISTORY.md, docs/MAX_GAE.md, docs/REWARD_PROBE_AC.md, PGCT_DELIVERABLES_README.md, README.md·EXPERIMENT_STORY.md 앞부분. DECISIONS·EXPERIMENTS의 앞부분과 CONVERSATION_LOG의 나머지는 제목만 훑었다.
+- 읽은 코드: `latent_team/train_from_scratch.py`(모드·계획), `latent_team/max_gae.py`(donor 규칙, D2 척도, 가림, install), `latent_team/reward_probe_ac_v2.py`(`ACV2Config`, 스냅샷, 비교, `approved()`), `latent_team/env_candidates.py`, `latent_team/common.py`, 테스트의 run 의존 부분, `paper/english/main.tex`의 알고리즘 서술.
+- Git(읽기 전용): 브랜치·worktree 목록, 최근 커밋. PR #8(`f9120b1`, 11-02 19:08)로 모든 변경이 master에 병합됐고, 메인 체크아웃은 같은 커밋의 `feature/PGCT_Next`다. 두 체크아웃 모두 변경 없음.
+- 확인한 환경 차이: `runs/`에는 옛 run 3개(`runs/recurrent_ippo_consensus/`)만 있다. 참조 실험 `runs/sp_20261008_120638_983201`, A+C run, 11-02 분기 실험이 없다. conda 환경 `RWARE_MARL`이 없다.
+- 파일 생성·수정, 학습, pytest, Git 변경은 하지 않았다. 사용자 지시에 따라 이 turn에는 대화 기록도 남기지 않았고, T175에서 사용자 요청으로 함께 기록했다.
+
+### Assistant — 진행 안내
+
+핵심 문서(인수인계·연구 상태·연구 맥락·실험 이력·Max-GAE·Reward Probe 문서)를 읽었습니다. 10-23 인수인계 이후 11-02까지 설계가 크게 바뀌어서, 지금은 DECISIONS·EXPERIMENTS의 최신 항목(D82–D106, E56–E72)과 대화 로그 끝부분을 확인하고 있습니다. 그다음 코드와 대조하겠습니다.
+
+DECISIONS(D80–D106)와 EXPERIMENTS(E56–E72)를 다 읽었습니다. 이제 대화 로그 마지막 부분(T163–T173)을 보고, 그다음 코드와 실제 run 폴더 상태를 읽기 전용으로 확인하겠습니다.
+
+문서 쪽 확인은 끝났습니다. 지금은 Git 상태와 이 PC의 `runs/` 폴더를 보고 있습니다. 문서가 언급하는 학습 run 폴더(A+C·분기 실험)가 이 PC에는 없어 보여서, 그 점을 확인한 뒤 코드를 읽겠습니다.
+
+코드 대조 중입니다. 확인한 중요한 점 하나: 이 PC의 `runs/`에는 옛 run 3개만 있고, 문서가 기준으로 삼는 run 폴더(참조 실험 `sp_20261008…`, A+C run, 11-02 분기 실험)가 없습니다. 이제 Max-GAE·v2 gate 핵심 코드와 논문 알고리즘 서술이 결정 기록(D99–D103)과 맞는지 보겠습니다.
+
+기록·코드 대조는 거의 끝났습니다. 보고서를 쓰기 전에 두 가지만 더 확인합니다: 10-23에 걸어 둔 5M 메인 대기열이 그 뒤 어떻게 됐는지, 그리고 문서에 적힌 Python 환경이 이 PC에도 있는지입니다.
+
+### Assistant — 최종 답변
+
+PGCT 문서와 코드를 모두 읽고 서로 대조했습니다. 파일은 하나도 바꾸지 않았습니다. 그래서 프로젝트 규칙인 `CONVERSATION_LOG.md` 기록도 이번에는 하지 않았습니다.
+
+먼저 알아 두셔야 할 점이 두 가지 있습니다.
+- **CLAUDE.md와 `docs/SESSION_HANDOFF.md`는 10-23 기준이라 지금 설계와 다릅니다.** 최신 상태는 `RESEARCH_STATE.md` 맨 위(11-02)와 `DECISIONS.md` D82–D106에 있습니다.
+- **이 PC에는 학습 결과가 없습니다.** `runs/`는 gitignore 대상이라 넘어오지 않았습니다. 문서가 근거로 쓰는 run 폴더와 11-02에 시작한 분기 실험 결과는 모두 다른 PC에 있습니다.
+
+## 1. PGCT 연구의 목표
+
+**문제 설정**
+- 완전 분산(DTDE) 다중 팀 MARL입니다.
+- 팀 라벨이 없고, 각 agent는 자기 개인 보상만 받습니다.
+- 통신 범위(Chebyshev 3) 안에서 만난 agent끼리만 정보를 주고받습니다.
+
+**두 질문**
+- **Q1 식별:** 같은 목표(같은 팀 요청 선반·goal)를 가진 잠재 팀원을 온라인으로 찾을 수 있는가.
+- **Q2 활용:** 찾은 관계로 독립 학습을 개선할 수 있는가.
+
+**기여의 중심은 Q1, 잠재 팀 발견입니다**(D41, D71, D104).
+- Critic 활용은 발견한 관계가 쓸모 있는지 검증하는 보조 장치입니다.
+- "전이 적합성 발견"으로 중심을 옮기지 않습니다.
+
+**처음 목표에서 달라진 점**
+- 처음: 정책 probe JS로 팀원을 찾고, 팀원끼리 critic을 증류한다.
+- 지금: 개인 보상 응답으로 팀원을 찾고, 팀원 critic으로 actor advantage를 보강한다.
+- 논문의 주장도 'critic 합의'가 아니라 '개인 보상으로 발견한 잠재 팀 관계로 독립 정책 학습을 개선하는 방법'입니다.
+
+**핵심 가정**
+- 보상은 교환하지 않습니다. 같은 팀이란 agent 기준 보상 규칙이 같다는 뜻입니다.
+- 공용 질의에서는 팀 기준 관측 채널(ch4 요청 선반, ch12 goal)과 절대좌표를 뺍니다. 넣으면 두 팀 모두 'my goal' 배송에 1을 예측해 구분되지 않습니다(명제 3의 확장, D83).
+- 자기 보상 사건을 겪지 않은 agent는 판정에서 빠집니다. 사용자가 의도된 설계 조건으로 받아들였습니다(T159).
+- 접촉 때 주고받는 것은 rollout 시작 시점의 사건 probe·예측기·성숙 여부, 그리고 critic 가중치입니다(D103).
+
+학회는 IJCAI 2027입니다(초록 2027-01-04, 본문 01-11 AoE).
+
+## 2. 지금 채택된 알고리즘: `pgct_max` (내부 이름 PGCT-D2)
+
+| 단계 | 내용 | 기본값 |
+|---|---|---|
+| 기반 | Recurrent IPPO, 개인 보상, 정책·critic 입력의 self_x/y 마스킹 | |
+| 보상 예측기 | agent별 MLP r̂_i(공용 관측, 행동, 다음 공용 관측). 자기 경험만 씀 | 전이 버퍼 2만, 사건(\|r\|≥.5) 버퍼 512, 사건 25% 과표집, 5 update마다 50 step 학습 |
+| 성숙 판정 | 미성숙이면 판정 보류 | 자기 사건 ≥20, 사건 평균 예측 ≥.3 |
+| Probe | 두 agent 각자의 최근 보상 사건 공용 관측(C) + 좌우 대칭(A) | agent당 32개 |
+| 거리·승인 | Σ\|a−b\|/Σ(\|a\|+\|b\|) → EMA → 대칭 승인. 접촉이 끊겨도 승인은 유지 | β .35, round ≥3, EMA <.5 |
+| 인과 스냅샷 | rollout 시작 상태로 먼저 비교하고, 그 뒤 재학습 | 두 새 모드에서만 `contact_snapshot=True` |
+| Donor 선택 | 이번 rollout에 접촉 ∧ 승인 (∧ critic EV 하한, 선택 옵션이며 기본 꺼짐) | |
+| Max-GAE D2 | b = clip(max_j V_j(h_i) − V_i(h_i), 0, cap), A_max = GAE(V_i + b), actor = A_self + η·s·(A_max − A_self), s = min(1, std(A_self)/std(Δ)). rollout 첫 7 step은 Δ = 0 | η .5, shrink |
+| Critic | 자기 return으로만 학습 | |
+
+- Donor가 없으면 IPPO와 비트 단위로 같습니다.
+- 팀 라벨은 감사 로그에만 쓰고, 승인 판단에는 들어가지 않습니다.
+
+**팀 식별 방식은 이렇게 바뀌어 왔습니다.**
+1. **정책 probe JS**(canonical 48개, τ .12): 팀 식별 AUROC가 .375–.5로 우연 수준이었습니다(E11, E29).
+2. **probe bank v2, 궤적 probe, probe 가중치:** 개선이 없었습니다.
+3. **보상 결합 probe:** 팀 보상에서는 AUROC 1.00이지만, 보상 공유가 곧 팀의 정의라 자명합니다(D72). 개인 보상에서는 15쌍 중 5–9쌍을 잘못 판정했습니다.
+4. **goal 방향 축(D80):** 오프라인에서 부호 규칙 정확도 .76–.83이었습니다. gate로 구현하지는 않았습니다.
+5. **A+C v1**(Codex, 10-23): 비모수 조건부 평균과 정확 일치 조회를 썼습니다. 5M 동안 전이가 48 arc뿐이라 사실상 닫혀 있었습니다(E56).
+6. **A+C v2**(10-26): 현재 식별 방식입니다. V2.1(대조 부호)은 제안만 했고, V3(가상 궤적)는 근거가 약해 접었습니다(D87).
+
+**전이 방식은 이렇게 바뀌어 왔습니다.**
+1. 공통 probe 위 V 증류(λ .01)에서는 Oracle-team도 IPPO보다 빠르지 않았습니다(E61). 원인은 증류 세기가 아니라 대상입니다. 같은 팀이어도 V^{π_j} ≠ V^{π_i}입니다(D90).
+2. 그래서 max 결합 advantage(D91, MAMBA 계열)로 바꿨습니다.
+3. D2 척도를 relative에서 shrink로 바꿨습니다(D99).
+4. v2 승인을 donor 선택에 연결했습니다(D100).
+5. 인과 스냅샷을 넣었습니다(D103).
+
+**접은 대안**
+- 팀 평균 보상으로 학습하는 B안: 개인 보상 원칙(D82)을 깰 위험이 있습니다(D93).
+- 정책 KL(D89): 사용자가 보류했습니다.
+- r̂ 전이: 철회했습니다.
+
+## 3. 주요 실험의 진행 상황과 결과
+
+| 실험 | 조건 | 결과 | 상태 |
+|---|---|---|---|
+| E1 처음부터 학습 | 4 agent, goal 인접, seed 1 | 6.4M에서 Oracle 32.2 > PGCT 27.3 > IPPO 23.2 > All 19.4 | 두 팀이 대칭인 환경이라 팀 발견을 시험할 수 없었습니다(D40). 근거로 쓰지 않습니다 |
+| E1-F | goal 모서리, 10M 계획 | 앱 업데이트 때 1.67M에서 함께 종료 | 재시작하지 않았습니다(D79) |
+| 환경 수정(E44–E48) | | pickup 감점을 .02에서 .005로 줄여 초기 정체를 풀었습니다 | 완료 |
+| A+C v1 본 학습 `runs/ac_20261023_185556` | 모서리·개인 보상, 좌표 마스킹, 5M | IPPO s1 평가 배송 24.1/ep(6명 중 5명이 배움). Oracle(V 증류)은 1M에 0.4 대 IPPO 2.4, 4.5M에 21.5 대 21.7. v1 PGCT는 IPPO와 거의 같음 | s1 네 모드와 IPPO s2 완료. pgct_s2는 11-02 18:01에 약 3.19M에서 사용자가 중단. oracle_s2·all_s2는 실행하지 않음 |
+| v2 PGCT s1 `runs/acv2_s1_20261029_084340` | 같은 조건, v2 + V 증류, 5M | 같은 팀 arc 5,252 대 다른 팀 352(93.72%). 0.1–0.25M에 같은 팀 거리 .25, 다른 팀 .99. 다른 팀 승인은 4.28M 이후에만 생김 | 발견 구성요소의 근거로만 씁니다. 성능 분석 기록은 없습니다 |
+| 오프라인 분석(E59, E60, E62, E63) | 학습 없음 | v2가 결정한 10쌍이 모두 정답. 실제 경험량 기준 첫 같은 팀 승인은 모서리 0.26–0.32M, 인접 0.86M. 뒤처진 agent에게 같은 팀 critic이 dV > .2를 주면 실제 이득(dMC > 0)이 67–100% | 완료 |
+| **1단계 분기** `runs/maxgae_br1M_20261102_165216` | A+C IPPO s1의 1.024M checkpoint에서 0.5M 추가 학습. ippo / oracle_max(D2) / oracle_maxd1(D1) / allk_max × seed 1·3·5 | 결과 없음 | 11-02 16:52 시작, 11-05 오전 종료 추정 |
+| **2단계 분기** `runs/pgctd2_br1M_20261102_180212` | oracle_mature_max / pgct_max × seed 1·3·5 | 초기 66 update에서 성숙한 agent는 a2·a3·a5뿐. donor는 앞선 같은 팀 agent 사이의 2 arc | 11-02 18:02 시작, 11-04 새벽 종료 추정 |
+
+**아직 검증하지 못한 것**
+- Max-GAE가 뒤처진 agent의 학습을 실제로 빠르게 하는가
+- `pgct_max`가 Oracle만큼 잘하는가
+- 4.28M 이후 다른 팀 승인은 왜 생기는가
+- 보상 사건이 없는 agent(a0, a4)를 어떻게 다룰 것인가
+- 인접 goal 배치가 음성 사례가 되는가, 두 번째 환경(LBF 후보)에서도 되는가
+- 처음부터 학습한 다중 seed 비교
+
+## 4. 이전에 정한 설계 원칙
+
+**연구 원칙**
+- 각 agent는 개인 보상만 씁니다(D82, 사용자가 정한 절대 원칙). 팀 보상 결과는 참조로만 씁니다.
+- 팀 라벨은 감사에만 쓰고 gate 입력에 넣지 않습니다.
+- 비교에는 접촉 시점에 실제로 보낼 수 있었던 정보만 씁니다.
+- Critic은 자기 return으로 학습합니다. MAMBA는 계산 방식의 출처로만 인용하고, 성능 보장은 주장하지 않습니다(D94, D95).
+- D2는 shrink 척도를 씁니다. relative는 b가 0에 가까워도 advantage를 바꾸므로 쓰지 않습니다(E66).
+- seed 1 checkpoint에서는 홀수 seed로만 분기합니다. 짝수 seed에서는 goal 좌우가 바뀝니다(`env_candidates.py:104`).
+- 1M 결과로 최종 결론을 내지 않습니다(D78).
+- 분기 비교를 처음부터 학습한 IPPO 비교처럼 설명하지 않습니다.
+- 다음 양들을 섞지 않습니다.
+  - 승인, 접촉, 실제 donor 사용
+  - 정책 유사성, critic 일치, 성능 기여
+
+**운영 원칙**
+- trainer, `rware/`, `examples/`는 수정하지 않습니다. 새 기능은 `latent_team/`에 옵션으로 넣고 기본값을 유지합니다.
+- 긴 학습은 사용자가 앱 밖 PowerShell에서 시작합니다.
+- 실행 중인 학습은 멈추거나 다시 시작하지 않습니다.
+- 기존 결과는 보존합니다.
+- 커밋은 요청이 있을 때만 합니다.
+- 모든 turn을 `CONVERSATION_LOG.md`에 원문으로 기록합니다.
+
+## 5. 현재 코드 구현 상태
+
+**Git**
+- 문서에는 "`feature/PGCT_Change`에 커밋하지 않은 변경이 많다"고 적혀 있습니다.
+- 지금은 모두 커밋되어 master에 병합됐습니다(PR #8, `f9120b1`, 11-02 19:08).
+- 메인 체크아웃은 같은 커밋의 새 브랜치 `feature/PGCT_Next`이고, 이 세션은 worktree입니다. 둘 다 변경 사항이 없습니다.
+
+**구현돼 있고 문서와 일치하는 것**
+- **`latent_team/train_from_scratch.py`**
+  - 모드: 기존 모드, Max-GAE 6종, mappo/seps/hetdps
+  - 옵션: `--reward-probe-ac`, `--ac-gate v2`, `--max-gae-*`, `--init-checkpoint`(goal 배치 검사 포함)
+  - 스냅샷 플래그가 없는 옛 PGCT-D2 계획은 거부합니다.
+- **`latent_team/reward_probe_ac_v2.py`**
+  - `ACV2Config`의 기본값이 문서와 같습니다.
+  - `snapshot()`이 있고, 비교한 뒤 재학습합니다. 스냅샷과 비교 사이에 재학습이 끼면 오류로 멈춥니다.
+  - `approved()`가 있습니다.
+- **`latent_team/max_gae.py`**
+  - donor 규칙 5종, shrink 척도, 첫 7 step 가림, critic EV 로그와 필터
+  - donor가 없으면 원래 `update_ippo`를 그대로 호출합니다.
+- **논문:** 알고리즘 1과 "Causal snapshot" 단락에 D103이 반영되어 있습니다.
+
+**구현되지 않은 것**
+- goal 방향 축 gate, 보상 결합 gate, V2.1
+- 정확한 이어 학습(optimizer와 v2 상태 복원)
+- 승인 유효기간
+- EV 필터를 켰을 때 `allk_max`의 donor 수 맞춤
+- 보상 사건이 없는 agent 처리
+- 팀당 요청 6·9개 후보(E55 제안)
+- LBF 환경
+
+**테스트:** 마지막 기록은 다른 PC에서 77개 통과(11-02)입니다. 이번에는 실행하지 않았습니다.
+
+**작은 주의점:** `MaxGAEConfig`의 데이터클래스 기본 `scale`은 `"raw"`이고, CLI 기본값만 `shrink`입니다. 코드에서 설정 객체를 직접 만들면 raw가 됩니다.
+
+## 6. 마지막 작업과 다음 작업
+
+**마지막 작업(11-02, T163–T173)**
+1. PGCT-D2 통합 전 코드 검토(D98)
+2. 필수 수정 1–4(D99)
+3. Codex의 PGCT-D2 구현(D100)과 그 검토(D102)
+4. rollout 시작 스냅샷(D103)
+5. 영어·한국어 논문과 Beamer 재작성(D104)
+6. IJCAI-27 공식 키트 전환(D106). 영어판은 7쪽이고, 결과를 넣을 여유가 약 1.4쪽 있습니다.
+7. 커밋과 병합
+
+**다음 작업(기록에 적힌 순서)**
+1. 분기 실험이 끝나면 다른 PC에서 결과를 확인합니다. 오늘(11-03)은 아직 종료 추정 시각 전입니다.
+   - 미리 정한 판정 기준 1: 뒤처진 a0·a1·a4의 평가 배송이 늘었는가
+   - 미리 정한 판정 기준 2: 앞선 a2·a3·a5의 배송이 떨어지지 않았는가
+   - 함께 `max_gae_*` 지표와 critic EV를 보고 EV 하한을 정합니다.
+2. 결과가 긍정적이면 처음부터 학습하는 5M 비교를 seed 3개 이상으로 시작합니다. job 하나에 약 2일 걸립니다.
+3. 논문을 마무리합니다.
+   - 결과 표와 그래프 채우기
+   - 재현성 체크리스트
+   - Overleaf pdfLaTeX 최종 빌드
+   - 발표자 정보 넣기
+4. 미결 과제를 정합니다.
+   - 보상 사건이 없는 agent를 연구 범위에서 뺄지, shaping probe로 다룰지
+   - 후반 다른 팀 오승인의 원인
+   - 승인 유효기간
+   - 환경이 하나뿐인 문제
+
+## 7. 문서끼리 충돌하거나 확인이 필요한 부분
+
+1. **CLAUDE.md의 "현재 연구 방향"과 "알고리즘 구조"가 옛 내용입니다.**
+   - 아직 다음 내용을 적고 있습니다: 정책 JS gate, λ .01 critic 증류, goal 방향 축을 주력 후보로 둔 것, IPPO/Oracle/All 5M 메인 실험.
+   - 실제로는 A+C v2 보상 probe와 Max-GAE이고, 메인 실험은 1M checkpoint 분기로 바뀌었습니다.
+   - 그 5M 메인 대기열(PID 32236)은 job을 하나도 시작하지 않은 채 사라졌고, A+C v1 run으로 대체됐습니다.
+2. **처음 읽을 문서가 문서마다 다릅니다.**
+   - CLAUDE.md는 `docs/SESSION_HANDOFF.md`(10-23)를 최신이라고 하고, AGENTS.md는 `HANDOFF.md`(10-18)를 먼저 읽으라고 합니다.
+   - 실제 최신은 `RESEARCH_STATE.md`(11-02)입니다.
+   - `RESEARCH_CONTEXT`, `EXPERIMENT_HISTORY`, `EXPERIMENT_STORY`도 10-23 기준이라 A+C와 Max-GAE가 빠져 있습니다.
+3. **이 PC는 실행 환경이 다릅니다.**
+   - 문서의 경로는 `C:\RWARE\MARL_RWARE\third_party\robotic-warehouse`인데, 여기는 `C:\Task\embodied\robotic-warehouse`입니다.
+   - `RWARE_MARL` conda 환경이 없습니다. 있는 환경은 2026-embodied, marl-policy-sharing, marl-small입니다.
+   - 참조 실험 `runs/sp_20261008_120638_983201`이 없습니다. 그래서 `train_from_scratch.py`는 계획 단계에서 실패하고, 통합 테스트는 상당수 건너뜁니다.
+4. **분기 실험 결과는 다른 PC의 로그로만 확인할 수 있습니다.**
+5. **논문의 발견 근거는 최종 알고리즘에서 나온 수치가 아닙니다.**
+   - 93.72%는 옛 경로의 로그입니다. update가 끝날 때의 접촉 기준으로 V 증류를 한 run입니다.
+   - `pgct_max`의 승인 시점이나 정확도와는 다른 값입니다.
+   - 논문 본문에 그 경계가 적혀 있지만, 결과가 들어오면 다시 확인해야 합니다.
+6. **"A+C"라는 이름이 시점마다 뜻이 다릅니다.**
+   - D83에서는 접근 전체의 이름이었습니다.
+   - v1 코드에서는 C = 실제 전이, A = 가상 행동 분기였습니다.
+   - v2에서는 A = 좌우 대칭입니다.
+7. **다시 계산할 수 없는 수치가 있습니다.**
+   - E54의 agent 단위 수치(152명 .74, 배운 19명 .90)와 E28 발견 시점 스크립트는 저장소에 없습니다.
+   - v2 PGCT s1의 성능 분석 기록이 없습니다.
+8. **논문 결과 표에 D1(`oracle_maxd1`) 행이 없습니다.** 1단계에서 돌고 있는 모드입니다. 표에 넣을지 정해야 합니다.
+
+### Assistant — 다음 단계 상자
+
+문서와 코드를 읽고 대조해 PGCT 연구 맥락을 복원했습니다. 파일·Git·학습은 건드리지 않았습니다. 이 PC에는 runs/ 결과와 RWARE_MARL 환경이 없어 11-02에 시작한 분기 실험 결과는 확인하지 못했습니다.
+
+질문: 이번 대화를 CONVERSATION_LOG.md에 기록할까요? (버튼: 기록해줘 / 지금은 안 함)
+
+## 원문 기록 T175 — 2026-11-03 KST, Claude Code (정확한 시각 기록하지 않음)
+
+### 사용자 — 원문
+
+기록해줘
+
+### 수행 기록 — 원문 대화와 별도
+
+- T174 다음 단계 버튼이다.
+- 변경: `CONVERSATION_LOG.md`(T174·T175 추가, 기존 형식대로 CRLF), `RESEARCH_STATE.md`(2026-11-03 확인 항목 추가), `research_archive/RESEARCH_ARCHIVE.md`(통합 사본 재생성). `RWARE_MARL` 환경이 없어 재생성은 시스템 Python 3.13으로 했다(표준 라이브러리만 쓰는 스크립트).
+- `DECISIONS.md`·`EXPERIMENTS.md`는 새 결정·실험이 없어 바꾸지 않았다. CLAUDE.md의 낡은 절은 고치지 않았다.
+- 변경은 worktree 브랜치 `claude/blissful-elion-d7da03`에만 있고 커밋하지 않았다. 메인 체크아웃(`feature/PGCT_Next`)에는 아직 없다.
+
+### Assistant — 진행 안내
+
+기록할 내용을 정리했습니다. 이제 `CONVERSATION_LOG.md` 끝에 CRLF로 덧붙이고, 통합 사본을 다시 만들겠습니다.
+
+### Assistant — 최종 답변
+
+이번 대화를 기록했습니다.
+
+- `CONVERSATION_LOG.md`: T174(맥락 복원 요청)와 T175(이 요청)를 원문으로 추가했습니다. T174에는 붙여넣은 요청, 진행 안내 5개, 최종 답변, 다음 단계 상자를 넣었습니다. 기존 형식대로 CRLF로 썼고, 정확한 시각을 몰라 날짜(2026-11-03 KST)만 적었습니다.
+- `RESEARCH_STATE.md`: 맨 위에 짧은 확인 항목을 추가했습니다. 연구 상태는 바뀌지 않았고, 이 PC의 차이(경로, `runs/`와 분기 실험 결과 없음, `RWARE_MARL` 환경 없음)와 문서 불일치만 적었습니다.
+- `research_archive/RESEARCH_ARCHIVE.md`: 통합 사본을 다시 만들었습니다. `RWARE_MARL` 환경이 없어 시스템 Python 3.13으로 실행했습니다(표준 라이브러리만 쓰는 스크립트).
+- `DECISIONS.md`, `EXPERIMENTS.md`: 새 결정이나 실험이 없어 바꾸지 않았습니다. CLAUDE.md의 낡은 절도 고치지 않았습니다.
+
+주의할 점이 있습니다. 이 세션은 worktree(`claude/blissful-elion-d7da03` 브랜치)에서 돌고 있습니다. 그래서 이번 기록은 메인 체크아웃의 `feature/PGCT_Next`에는 아직 없고, 커밋도 하지 않았습니다. Codex 등이 메인 체크아웃에서 다음 대화를 T174로 기록하면 번호가 겹칠 수 있으니, 이 변경을 먼저 합치는 편이 좋습니다.
+
+### Assistant — 다음 단계 상자
+
+T174·T175 대화를 CONVERSATION_LOG.md에 원문으로 남기고, RESEARCH_STATE.md에 이 PC의 환경 차이를 적고, 통합 사본을 다시 만들었습니다. 변경은 이 worktree 브랜치에만 있고 커밋하지 않았습니다.
+
+질문: 이 기록을 커밋할까요? (버튼: 커밋해줘 / 나중에)
+
+## 원문 기록 T176 — 2026-11-03 KST, Claude Code (정확한 시각 기록하지 않음)
+
+### 사용자 — 원문
+
+[첨부 이미지: W&B `rware-from-scratch` 프로젝트 workspace 스크린숏. 세션 scratchpad의 `images\1.png`]
+
+현재 진행중인 실험은 뭐야?
+
+### 수행 기록 — 원문 대화와 별도
+
+- 첨부 스크린숏 전체를 읽었다. run 목록(42개 중 보이는 20개, 이름 일부 잘림)과 초록 점(실행 중) 두 개, 패널 Critic Learning·Task Completion·Learning Performance의 범례(10개 중 4개 이름)를 확인했다.
+- 실행 순서 확인(읽기 전용): `latent_team/train_from_scratch.py`의 `plan()`은 seed 바깥·모드 안쪽 순서로 job을 만들고, 실행기는 manifest 순서대로 하나씩 돈다.
+- 이 PC에는 해당 run 로그가 없어 프로세스·`job_status.json`은 확인하지 못했다. 판단 근거는 스크린숏뿐이다. 진행률(ippo_s3 약 0.25M)은 그래프 끝 위치를 눈으로 읽은 대략값이다.
+- 코드·학습 변경 없음. 기록: 이 T176, `RESEARCH_STATE.md`, 통합 사본 재생성. 커밋 없음.
+
+### Assistant — 최종 답변
+
+스크린숏 기준으로 두 실험이 돌고 있습니다. 둘 다 11-02에 다른 PC에서 시작한 1M checkpoint 분기 실험이고, 지금은 각각 다섯 번째 job을 돌리고 있습니다. 이 PC에는 로그가 없어서 W&B 화면(초록 점 = 실행 중)만 보고 판단했습니다.
+
+## 지금 실행 중인 job
+
+| 실험 | 실행 중 job | 진행 |
+|---|---|---|
+| 1단계 분기 `runs/maxgae_br1M_20261102_165216` | `b6_corner_indiv_pen005_acv2_br01000_ippo_s3` | 12개 중 5번째. 그래프상 약 0.25M / 0.5M |
+| 2단계 분기 `runs/pgctd2_br1M_20261102_180212` | `b6_corner_indiv_pen005_acv2_br01000_oracle_mature_max_s5` | 6개 중 5번째. 진행 정도는 화면에서 읽기 어렵습니다 |
+
+공통 조건은 다음과 같습니다.
+- A+C IPPO seed 1의 1.024M checkpoint에서 출발합니다(모서리 goal, 개인 보상, 좌표 마스킹).
+- job마다 0.5M step을 더 학습합니다.
+- seed는 goal 배치가 같은 1·3·5만 씁니다.
+- job은 하나씩 돌고, 한 seed의 모드를 모두 끝낸 뒤 다음 seed로 넘어갑니다.
+
+## 각 실험이 묻는 것
+
+**1단계(정답 팀):** 팀원 critic을 Max-GAE로 쓰면 뒤처진 agent가 더 빨리 배우는가.
+- `ippo`: 전이 없이 계속 학습하는 기준선
+- `oracle_max`: 정답 팀원 critic, D2(shrink, η .5)
+- `oracle_maxd1`: 정답 팀원 critic, D1(raw, η 1)
+- `allk_max`: 같은 수의 무작위 donor(팀을 무시한 대조군)
+
+**2단계(발견한 팀):** 정답 대신 보상 probe로 찾은 팀원으로도 같은 효과가 나는가.
+- `oracle_mature_max`: 정답 팀이지만 보상 예측기가 성숙한 agent만
+- `pgct_max`: 최종 PGCT(v2 승인 ∧ rollout 접촉)
+
+## 끝난 것과 남은 것
+
+| | 끝남 | 실행 중 | 남음 |
+|---|---|---|---|
+| 1단계 | seed 1의 4개(ippo, oracle_max, oracle_maxd1, allk_max) | ippo_s3 | oracle_max_s3, oracle_maxd1_s3, allk_max_s3, seed 5의 4개 |
+| 2단계 | oracle_mature_max·pgct_max × seed 1·3 | oracle_mature_max_s5 | pgct_max_s5 |
+
+진행 속도는 11-02의 추정(job당 약 5.3시간, 2단계 11-04 새벽, 1단계 11-05 오전 종료)과 맞아 보입니다. 목록의 나머지 run(눈 아이콘이 꺼진 것)은 A+C v1·v2 본 학습과 옛 2×2 run이고, 실행 중이 아닙니다.
+
+## 화면을 볼 때 주의할 점
+
+- **Critic Learning 패널의 `pgct_peer_weight`, `pgct_peer_loss`가 0인 것은 정상입니다.** 옛 critic 증류용 지표인데, Max-GAE 모드는 증류를 쓰지 않습니다. Max-GAE가 실제로 작동하는지는 `update/max_gae_*` 패널에서 봐야 합니다. 예: `donor_arcs`, `adv_shift`, `eta_eff`, `reward_mature_agent_k`, `approved_same_team_arcs`, `approved_cross_team_arcs`.
+- **지금 그래프로 우열을 판단하지 않는 편이 좋습니다.** 서로 다른 seed와 단계가 한 그래프에 섞여 있고, 1단계는 seed 1만 끝났습니다. 미리 정한 판정 기준은 같은 seed끼리 비교한 뒤처진 a0·a1·a4의 평가 배송, 그리고 앞선 a2·a3·a5의 배송이 떨어지지 않는지입니다. 팀 합계 그래프로는 이것을 볼 수 없습니다.
+- x축 Step은 분기 이후 step입니다. 전체 학습량은 1.024M에 이 값을 더한 것입니다.
+
+이 대화는 T176으로 `CONVERSATION_LOG.md`와 `RESEARCH_STATE.md`에 기록했습니다. 커밋은 하지 않았습니다.
+
+## 원문 기록 T177 — 2026-11-03 KST, Claude Code (정확한 시각 기록하지 않음)
+
+### 사용자 — 원문
+
+근데 이 500k의 학습에 어떤 의미가 있어?
+
+### 수행 기록 — 원문 대화와 별도
+
+- 질문 turn이다. 이미 읽은 기록(D95·D98·D105, E56·E64·E65·E66, `docs/MAX_GAE.md`, 논문 `tab:pending`)으로 답했다. 새 분석·학습·코드 변경 없음.
+- 기록: `DECISIONS.md` D107(의견), 이 T177, 통합 사본 재생성. 커밋 없음.
+
+### Assistant — 진행 안내
+
+Now the conversation log entry.
+
+### Assistant — 최종 답변
+
+이 500k는 논문 결과용이 아니라, **팀원 critic을 Max-GAE로 쓰는 것이 효과가 있는지 싸게 확인하는 관문**입니다(D95). 다만 1단계와 2단계의 의미가 다르고, 2단계는 설계상 핵심 질문에 답하기 어렵습니다.
+
+## 왜 1M checkpoint에서 0.5M인가
+
+- Max-GAE는 팀원 critic이 내 critic보다 높게 평가할 때만 작동합니다. 처음부터 학습하면 초반에는 좋은 critic이 없어 b ≈ 0, 즉 사실상 IPPO라 계산이 많이 낭비됩니다.
+- A+C IPPO s1의 1.024M 시점은 실력 차가 뚜렷합니다. a2·a3·a5는 배송을 하고, a0·a1·a4는 거의 못 합니다(0.95–1.06M 배송: a0 0, a1 .06, a4 0, E66). 실제로 뒤처진 agent는 step의 99%에서 b > 0이었습니다(E64). 효과가 있다면 가장 잘 드러날 상황입니다.
+- 비용이 작습니다. job당 약 5.3시간이고, 처음부터 5M은 job당 약 2일입니다.
+- 같은 checkpoint에서 그대로 이어 간 `ippo`가 기준이라, 차이를 Max-GAE 때문이라고 말할 수 있습니다.
+
+## 1단계가 답할 수 있는 것
+
+- 질문: 정답 팀원의 critic을 쓰면 뒤처진 agent가 1.02M → 1.52M 사이에 배송을 시작하는가, 그리고 앞선 agent는 손해를 보지 않는가.
+- 원래 IPPO s1에서 a4는 1.5M에도 배송이 0이었고, a0는 5M까지 0이었습니다(E56, E66). 그래서 0.5M 안에 a0·a4가 배송을 시작하면 분명한 신호입니다.
+- `allk_max`(같은 수의 무작위 donor)와 비교하면 "팀원이라서 도움이 되는가"를, `oracle_maxd1`(D1)과 비교하면 크기 조절(shrink)이 필요한지를 봅니다.
+
+## 2단계는 사정이 다릅니다
+
+- `pgct_max`와 `oracle_mature_max`는 받는 쪽과 주는 쪽 모두 보상 예측기가 성숙해야 합니다(자기 보상 사건 20개 이상).
+- 도움이 필요한 a0·a1·a4가 바로 그 사건이 없는 agent입니다. 그래서 받는 쪽이 될 수 없습니다. 초기 로그에서도 donor는 앞선 agent끼리의 2 arc뿐이었습니다(D105).
+- 결국 2단계 0.5M은 주로 "앞선 agent를 해치지 않는가"와 "승인이 같은 팀으로만 나는가"를 보는 실험입니다. 뒤처진 agent는 스스로 사건을 20개 모으기 전까지 IPPO와 같습니다.
+- 이 제약은 분기 설계에서 더 심합니다. 분기는 보상 예측기를 새로 시작하고, 1M 정책의 뒤처진 agent는 배송을 거의 못 하기 때문입니다. 처음부터 학습한 v2 run(E65)에서는 0.25M에 6명 중 5명, 2M에 6명 모두 성숙했습니다. 그래서 **2단계가 약하게 나와도 PGCT를 기각하는 근거로 쓰면 안 됩니다.** PGCT의 본 시험은 처음부터 학습한 비교입니다.
+
+## 한계
+
+- seed 1·3·5는 같은 checkpoint에서 이어 간 학습의 난수만 다릅니다. 독립 초기화 seed가 아니고, 출발점 정책도 하나뿐입니다.
+- 평가는 51,200 step마다 20 episode라 0.5M 동안 약 10회입니다. 작은 차이는 잡음과 구분하기 어렵습니다.
+- 0.5M 안에 차이가 없어도 "효과 없음"의 근거로는 약합니다. 효과가 더 늦게 나올 수 있습니다.
+- 논문에는 "공통 1.024M checkpoint에서의 조건부 비교"로만 쓸 수 있습니다. 그런데 지금 논문 표(`tab:pending`)는 분기 결과를 넣도록 잡혀 있습니다. 처음부터 학습한 다중 seed 비교를 메인으로 둘지 정해야 합니다(D105).
+
+## 제 의견
+
+- **1단계는 의미가 있습니다.** Q2 메커니즘의 go/no-go입니다. 같은 seed끼리 비교해 뒤처진 agent의 배송이 `ippo`보다 일관되게 오르면, 처음부터 5M 비교로 갈 근거가 됩니다.
+- **2단계는 지금 설정으로는 PGCT의 핵심 이득을 보여 주기 어렵습니다.** 결과는 안전성(앞선 agent 보호)과 승인 정확도 확인으로 쓰고, 뒤처진 agent에 대한 효과는 처음부터 학습한 run에서 보는 것이 맞습니다.
+
+이 답변은 `DECISIONS.md` D107(의견)과 대화 기록 T177로 남겼습니다. 커밋은 하지 않았습니다.
+
+## 원문 기록 T178 — 2026-11-03 KST, Claude Code (정확한 시각 기록하지 않음)
+
+### 사용자 — 원문
+
+그러면 차라리 각 팀당 하나의 에이전트는 학습을 완료시키고, 팀에 남은 두 에이전트의 성장률을 보는게 맞겠네?
+
+### 수행 기록 — 원문 대화와 별도
+
+- 설계 질문 turn이다. 이미 읽은 기록(D41·D71·D89·D94·D107, E52·E53·E56·E62·E63·E65)으로 답했다. 새 분석·학습·코드 변경 없음.
+- 기록: `DECISIONS.md` D108(의견), 이 T178, 통합 사본 재생성. 커밋 없음.
+
+### Assistant — 최종 답변
+
+절반은 맞습니다. **Q2 메커니즘("팀원 critic이 학습을 빠르게 하는가")을 깨끗하게 재는 진단 실험으로는 지금 1M 분기보다 낫습니다.** 하지만 이것을 메인 실험으로 쓰면 연구 질문이 바뀌고, 더 강한 비교군을 요구받게 됩니다.
+
+## 지금 분기보다 나은 점
+
+- **격차를 통제할 수 있습니다.** 지금 1M 분기는 팀마다 앞선 agent 수가 다릅니다. 팀0은 a2 한 명, 팀1은 a3·a5 두 명입니다. 뒤처진 agent는 1M 정책에 갇혀 있어 보상 사건도 거의 없습니다.
+- **학습자를 새로 초기화하면 2단계의 문제가 크게 줄어듭니다.** 새 agent는 무작위 탐색으로 보상 사건을 겪습니다. 처음부터 학습한 v2 run(E65)에서는 0.25M에 6명 중 5명이 성숙했습니다. 그러면 학습자도 `pgct_max`의 받는 쪽이 될 수 있습니다.
+- **seed가 독립에 가까워집니다.** 학습자의 초기화가 seed마다 다르기 때문입니다.
+- **팀 식별이 왜 필요한지가 드러납니다.** 두 팀 모두 전문가가 있으면, 다른 팀 전문가의 critic이 주는 가짜 상향(E62, E63)을 실제로 시험할 수 있습니다. `all_max`가 `oracle_max`보다 나쁘게 나오면 그것이 곧 "팀을 찾아야 하는 이유"가 됩니다.
+
+## 우려
+
+1. **연구 전제가 바뀝니다.** 원래 기획은 동시에 배우는 동료끼리 잠재 팀을 찾는 것입니다(D41, D71). 이 설계는 전문가-학습자(teacher-student) 설정이라, 심사에서 "전문가는 누가 학습시켰나"를 묻게 됩니다.
+2. **더 강한 비교군이 필요해집니다.** 관측이 팀 기준 채널("my goal")이라, 같은 팀 전문가의 actor를 그대로 복사하거나 정책 증류(D89)를 하면 거의 바로 풀릴 수 있습니다. 이것과 비교하지 않고 critic 경유 이득만 보여 주면 약합니다.
+3. **경쟁이 성장률에 섞입니다.** 개인 보상이고 팀당 요청이 3개뿐이라, 전문가가 요청을 선점합니다(E52·E53의 독주). 그래서 같은 배치의 IPPO(전문가 있음, 전이 없음)를 기준선으로 두고, 전문가의 배송 수도 함께 봐야 합니다.
+4. **외삽 오차는 그대로입니다.** 전문가 critic을 학습자의 낯선 이력에 적용하는 오차(D94)는 이 설계에서도 남습니다.
+5. **구현이 필요합니다.** agent별 동결(actor·critic 갱신 제외)과 서로 다른 checkpoint의 agent 조합입니다. trainer를 고치지 않고 `latent_team/`에 옵션으로 넣을 수 있습니다. 전문가 후보는 A+C IPPO s1 5M final의 팀0 a2(또는 a4)와 팀1 a3 등입니다. 이 run에서 a0만 배송을 배우지 못했습니다(E56).
+
+## 제 의견
+
+- **메인 실험이 아니라 Q2 상한 진단으로 두는 것을 권합니다.**
+  - 비교 모드: IPPO(전문가 있음, 전이 없음), `oracle_max`, `all_max` 또는 `allk_max`(다른 팀 전문가 포함), `pgct_max`
+  - 지표: 학습자의 첫 배송 시점, '배운 agent' 기준(≥0.25/ep) 도달 시점, 1–2M 배송 AUC
+- **논문 메인은 처음부터 학습한 다중 seed 비교로 두는 편이 맞습니다.** PGCT의 주장은 "함께 배우는 동료 사이에서 팀을 찾아 서로 돕는다"이기 때문입니다.
+- **결정은 지금 도는 분기 결과를 본 뒤에 하는 것이 좋습니다.** 1단계 `oracle_max`가 이미 뒤처진 agent를 끌어올리면, 전문가 설계 없이 처음부터 학습한 비교로 바로 가도 됩니다. 효과가 없거나 애매하면, 이 전문가 설계로 원인(critic 정보가 쓸모없는지, 학습자가 못 받는지)을 가르는 것이 다음 단계입니다.
+
+이 의견은 `DECISIONS.md` D108과 대화 기록 T178로 남겼습니다. 구현이나 학습은 하지 않았고, 커밋도 하지 않았습니다.
+
+## 원문 기록 T179 — 2026-11-03 KST, Claude Code (정확한 시각 기록하지 않음)
+
+### 사용자 — 원문 (1)
+
+[붙여넣은 표]
+슬라이드	내용 구분	표현 방식
+1	Title	표지
+2	Outline	4개 섹션
+3	Research Background	환경 또는 문제 상황 그림
+4	Problem Formulation & Objective	에이전트·팀 관계 그림과 정의
+5	Overall Architecture	전체 파이프라인 구조도
+6	Independent Reward Modeling	보상 예측 과정
+7	Common Reward Probing	공개 전이 및 질의 흐름
+8	Latent Team Identification	거리·EMA·승인 규칙
+9	Selective Critic Utilization	Donor 선택 및 Critic 평가
+10	Max-GAE	Advantage 계산 과정
+11	Experimental Setup	RWARE 환경 및 비교 방법
+12	Team Identification Results	팀 발견 평가
+13	Learning Performance	IPPO와 전이 방법 비교
+14	Ablation & Limitations	구성요소별 검토
+15	Conclusion	요약 및 향후 검증
+
+로 지금 발표 자료 작성중인데
+Research Background쪽 하는 중이야
+여기에 넣을만한 적당한 프로젝트용 그림 rendering에서 촬영해줘
+
+### 사용자 — 원문 (2, 작업 도중)
+
+Multi-Agent Reinforcement Learning
+Decentralized Learning
+Unknown Team Relations
+Difficulty of Identifying Teammates
+이렇게 넣었어 왼쪽에는
+
+### 수행 기록 — 원문 대화와 별도
+
+- 이 PC의 conda 환경에는 pyglet이 없어, 프로젝트 요구 버전(`pyglet<2`, 설치된 것은 1.5.31)을 PyPI에서 세션 scratchpad의 `pylib`에만 설치했다. conda 환경은 바꾸지 않았고, `marl-policy-sharing`의 Python(numpy·gymnasium·PIL 있음)으로 실행했다. 첫 설치 시도는 도구 오류로 끝나 다시 실행했다.
+- 환경 설정: `output/ac_validation_20261023_final_tmp/test_env_candidates_plan0/b6_corner_indiv_pen005/experiment.json`의 env id(`rware-multiteam-tiny-4ag-2teams-v0`)와 env kwargs(6 agent, 개인 보상, 모서리 goal, 통신 3, 감점 .005)를 그대로 썼다. reset seed 1.
+- 새 폴더 `output/background_render_20261103/`: `render_background.py`(인자: 셀 배율, `neutral`). 스크립트 안에서만 `rware.rendering.Viewer`의 셀 크기와 agent 색을 바꾸며, `rware/` 소스는 수정하지 않았다. 균등 무작위 행동으로 t = 0–400을 20 step마다 찍었다.
+- 산출물: 3배 셀 크기의 전체 화면 `frame_t*_x3*.png`, 지도만 자른 `map_t*_x3*.png`, 회색 agent 변형 `*_neutral.png`(PNG 84개), `frames_x3.json`, `frames_x3_neutral.json`. 처음 만든 1배 PNG 21개와 `frames.json`은 이번 turn에 만든 것이라 3배로 다시 만들면서 지웠다. contact sheet는 scratchpad에만 두었다.
+- 사용자에게 `map_t000_x3.png`, `map_t000_x3_neutral.png`를 파일로 보냈다(캡션: "왼쪽: 실제 팀 색(빨강 T0 / 파랑 T1, goal G0·G1). 오른쪽: 같은 장면에서 agent만 회색(팀을 모르는 상태).").
+- 학습·코드 변경(연구 코드) 없음. 커밋 없음.
+
+### Assistant — 진행 안내
+
+실험에 쓰는 환경(모서리 goal, 6 agent, 2팀, 개인 보상) 설정을 저장된 계획 파일에서 찾았습니다. 이 PC에 없던 렌더링 라이브러리(pyglet 1.5)는 scratchpad에만 설치했습니다. 이제 실제 환경 렌더러로 장면을 찍어 보겠습니다.
+
+실제 환경 렌더러로 21장을 3배 해상도로 찍었습니다. 지금은 그중 슬라이드에 가장 잘 맞는 장면을 고르고 있습니다.
+
+실제 환경 렌더러로 찍은 장면 중 슬라이드용 두 장을 골랐습니다. 지금 보내 드리고, 대화 기록을 남기겠습니다.
+
+### Assistant — 최종 답변
+
+Research Background 슬라이드 오른쪽에 넣을 그림 두 장을 실제 환경 렌더러로 찍었습니다. 두 장은 같은 장면입니다.
+
+| 파일 | 내용 | 맞는 bullet |
+|---|---|---|
+| `output/background_render_20261103/map_t000_x3.png` | agent를 실제 팀 색(빨강 T0, 파랑 T1)으로 표시합니다. 선반도 팀 색이고, 연한 색이 요청 선반입니다. 아래 양쪽 모서리가 팀별 goal G0·G1입니다 | Multi-Agent Reinforcement Learning |
+| `output/background_render_20261103/map_t000_x3_neutral.png` | 같은 장면에서 agent만 회색으로 칠했습니다 | Unknown Team Relations, Difficulty of Identifying Teammates |
+
+왼쪽 bullet 네 개에 맞추려면 **두 장을 나란히 두고 "Ground truth" / "What each agent knows" 같은 캡션을 다는 구성**을 권합니다. 한 장만 쓴다면 회색 버전이 "팀을 모른다"는 메시지를 더 직접 보여 줍니다.
+
+## 조건
+
+- 환경: 메인 실험 환경 `b6_corner_indiv_pen005`입니다(11×10 지도, 6 agent = 3+3, 개인 보상, 통신 범위 3, seed 1). 설정은 저장된 계획 파일에서 그대로 가져왔습니다.
+- 장면: 첫 step(t = 0)입니다. agent 6명이 모두 보이고 겹치지 않아 가장 깔끔했습니다. 학습된 정책의 장면이 아니라 초기 상태입니다.
+- 해상도: 911×1003 px입니다. 렌더러의 셀 크기를 3배로 키웠고, `rware/` 코드는 고치지 않고 스크립트 안에서만 바꿨습니다.
+
+## 다른 후보
+
+- 같은 폴더에 t = 0–400(20 step 간격, 무작위 행동)의 지도 `map_t*_x3.png`와, 관측 패널이 붙은 전체 화면 `frame_t*_x3.png`가 있습니다.
+  - agent가 선반을 든 장면이 필요하면 `map_t140_x3.png` 같은 것을 쓰면 됩니다. 다만 무작위 행동이라 배송하는 모습은 아닙니다.
+  - `frame_t*` 오른쪽 패널은 agent별 부분 관측이라 "Decentralized Learning"(각자 제한된 관측) 설명에 쓸 수 있습니다. 다만 패널 제목에 실제 팀(true T0/T1)이 적혀 있고 글자가 작아서, 슬라이드에서는 잘라 쓰는 편이 낫습니다.
+- 다시 만들 때는 `output/background_render_20261103/render_background.py`를 씁니다(인자: 배율, `neutral`).
+
+## 참고
+
+- 이 PC에 없던 pyglet 1.5(프로젝트 요구 버전)를 scratchpad에만 설치해 썼습니다. conda 환경은 바꾸지 않았습니다.
+- 이 대화는 T179로 기록했고, 커밋은 하지 않았습니다.
+
+## 원문 기록 T180 — 2026-11-03 KST, Claude Code (정확한 시각 기록하지 않음)
+
+### 사용자 — 원문
+
+related works로 넣기 좋은 논문 4개
+
+### 수행 기록 — 원문 대화와 별도
+
+- 발표자료 Related Work용 질문이다. `paper/references.bib`(13개)와 기록(`docs/RESEARCH_CONTEXT.md` 8절, D71·D92·D94)에서 골랐다. Du et al. 제목은 `CONVERSATION_LOG.md`의 이전 확인(T 기록 7847행 부근, arXiv 2511.11992)을 따랐다. 이번에 웹 검색은 하지 않았다.
+- 확인: Du et al.은 `paper/references.bib`에 없다.
+- 코드·학습 변경 없음. 기록: 이 T180, 통합 사본 재생성. 커밋 없음.
+
+### Assistant — 최종 답변
+
+PGCT의 위치를 한 번에 보여 주는 네 편을 골랐습니다. "누구와 공유하는가"를 기존 방법이 어떻게 정하는지를 기준으로 고르면, 마지막 줄의 Research gap이 자연스럽게 나옵니다. 앞의 세 편은 논문 `references.bib`에 이미 있습니다.
+
+| 논문 | Approach | Strength | Limitation (PGCT와의 차이) |
+|---|---|---|---|
+| Zhang et al., *Fully Decentralized Multi-Agent Reinforcement Learning with Networked Agents*, ICML 2018 | Networked agents reach critic consensus with neighbors | Fully decentralized, local communication | Assumes all agents share one objective; consensus with every neighbor, no notion of teams |
+| Christianos et al., *Scaling Multi-Agent Reinforcement Learning with Selective Parameter Sharing* (SePS), ICML 2021 | Clusters agents by behavior, shares parameters within each cluster | Selective sharing scales to many agents | Grouping is done centrally in a pre-training phase with agent identities |
+| Cheng, Kolobov & Agarwal, *Policy Improvement via Imitation of Multiple Oracles* (MAMBA), NeurIPS 2020 | Uses the max over several oracle value functions in GAE | Learns from multiple teachers, ignores bad ones | Oracles are given and fixed; no question of whom to trust |
+| Du et al., *Goal-Oriented MARL for Decentralized Agent Teams*, arXiv 2511.11992, 2025 | Neighbors exchange goals and average actor·critic only with same-goal neighbors | Closest to PGCT; team-aware sharing in decentralized agents | Goals (= team membership) are communicated explicitly |
+
+**Research gap(한 줄):** 기존 방법은 공유 대상을 이미 알거나(목표 교환, 주어진 oracle), 중앙에서 정하거나, 모두와 공유한다. → PGCT는 개인 보상만으로 공유할 팀원을 온라인에서 찾는다.
+
+## 고른 이유
+
+- **FDMARL**은 "분산 + 이웃과 critic 공유"의 출발점입니다. PGCT의 원래 이름(Critic Transfer)이 여기서 나옵니다.
+- **SePS**는 "선택적으로 누구와 공유할지 정한다"는 같은 문제를 중앙 방식으로 풉니다. 우리 비교군 후보이기도 합니다(E15).
+- **MAMBA**는 Max-GAE의 계산 출처입니다(D92). 슬라이드 10과 연결됩니다. 성능 보장은 가져오지 않는다는 점은 그대로입니다(D94, D95).
+- **Du et al.**은 가장 가까운 선행 연구입니다(D71). 우리 Oracle-team 설정이 사실상 이 방법의 critic 버전이고, 차이는 "목표를 교환하지 않고 추론한다"는 점 하나입니다.
+
+## 대안
+
+- SEAC(Christianos et al., NeurIPS 2020): RWARE가 처음 나온 논문입니다. 모든 agent의 경험을 공유합니다. 환경을 소개하는 슬라이드 11에서 인용해도 됩니다.
+- Peer Learning(Derstroff et al., AAAI 2024): 동료의 조언이 쓸모 있는지를 bandit으로 학습합니다. "전이 적합성 발견"과 가까워서, PGCT가 그쪽이 아니라는 점을 설명할 때 씁니다(D71).
+
+## 주의할 점
+
+- **Du et al.이 논문 `references.bib`에 없습니다.** 가장 가까운 연구라 심사에서 비교를 요구받을 가능성이 큽니다. 논문에도 넣는 것을 권합니다.
+- Du et al.은 arXiv 기준(2025)입니다. 학회 게재 여부는 이번에 확인하지 않았습니다.
+- 제목과 서지는 기록과 bib 파일 기준입니다. 슬라이드에 넣기 전에 한 번 더 확인해 주세요.
+
+이 대화는 T180으로 기록했습니다. 커밋은 하지 않았습니다.
+
+## 원문 기록 T181 — 2026-11-03 KST, Claude Code (정확한 시각 기록하지 않음)
+
+### 사용자 — 원문
+
+GPT는 SEAC, SePS, FDMARL, MAMBA 얘기하던데
+
+### 수행 기록 — 원문 대화와 별도
+
+- T180 추천(FDMARL, SePS, MAMBA, Du et al.)과 GPT 추천(SEAC, SePS, FDMARL, MAMBA)의 비교 질문이다. SEAC 설명은 D76·`docs/RESEARCH_CONTEXT.md` 8절 기록을 따랐다. 웹 검색 없음.
+- 코드·학습 변경 없음. 기록: 이 T181, 통합 사본 재생성. 커밋 없음.
+
+### Assistant — 최종 답변
+
+세 편(SePS, FDMARL, MAMBA)은 같고, 네 번째 자리만 다릅니다. GPT는 **SEAC**, 저는 **Du et al.**을 골랐습니다. 둘 다 말이 되지만, 저는 여전히 Du et al. 쪽을 권합니다.
+
+## 차이
+
+| | SEAC (GPT) | Du et al. (제 추천) |
+|---|---|---|
+| 무엇 | 모든 agent의 경험을 서로의 정책 학습에 공유 | 같은 목표를 가진 이웃끼리만 actor·critic 공유 |
+| 장점 | NeurIPS 2020 정식 게재, RWARE를 처음 낸 논문, 이미 bib에 있음 | PGCT와 가장 가까운 연구 |
+| 슬라이드에서의 역할 | "모두와 공유" 사례 | "팀원을 알고 공유" 사례 |
+
+## Du et al.을 권하는 이유
+
+- **SEAC는 FDMARL과 역할이 겹칩니다.** 둘 다 "모든 agent(이웃)와 공유"하는 사례입니다. 그래서 GPT 구성에는 "팀원이 누구인지 알고 공유한다"는 사례가 빠집니다. 그런데 PGCT가 없애는 가정이 바로 그것입니다.
+- **가장 가까운 연구를 빼면 질문을 받습니다.** 교수님이나 심사자가 "목표가 같은 이웃끼리만 공유하는 연구가 이미 있지 않나"라고 물으면, 슬라이드에 이미 비교가 있는 편이 좋습니다(D71).
+- 그러면 Research gap 한 줄이 네 사례로 정확히 나뉩니다. 모두와 공유(FDMARL), 중앙에서 그룹 결정(SePS), 주어진 teacher(MAMBA), 팀을 통신으로 앎(Du et al.)이고, PGCT는 개인 보상만으로 팀을 찾습니다.
+
+## GPT 구성이 더 나은 경우
+
+- 정식 게재 논문만 쓰고 싶을 때입니다. Du et al.은 arXiv(2025)입니다.
+- RWARE와의 연결을 강조하고 싶을 때입니다. SEAC는 같은 환경의 대표 방법입니다.
+
+## 절충안
+
+GPT의 네 편을 쓰고, 표 아래에 한 줄을 더하는 방법도 있습니다. 예: "Closest: Du et al. (2025) share only with same-goal neighbors, but goals are exchanged explicitly; PGCT infers them." 5행 표도 괜찮습니다.
+
+SEAC 행이 필요하면 이렇게 쓸 수 있습니다.
+
+| 논문 | Approach | Strength | Limitation |
+|---|---|---|---|
+| Christianos et al., *Shared Experience Actor-Critic for Multi-Agent Reinforcement Learning* (SEAC), NeurIPS 2020 | Each agent's policy gradient also uses other agents' experience (importance-weighted) | Large sample-efficiency gains in sparse-reward RWARE | Shares with all agents; assumes everyone's experience is useful, no selection of whom to learn from |
+
+어느 쪽이든 Du et al.은 논문 `references.bib`에는 넣는 것을 권합니다.
+
+이 대화는 T181로 기록했습니다. 커밋은 하지 않았습니다.
+
+## 원문 기록 T182 — 2026-11-03 KST, Claude Code (정확한 시각 기록하지 않음)
+
+### 사용자 — 원문
+
+@"C:\Users\95101\Downloads\PGCT_발표자료.pdf"
+여기에 Related Works 다음으로 Overall Architecture을 작성해야하는데 어떻게 하면 좋을까?
+paper/english/main.tex 참조
+
+### 수행 기록 — 원문 대화와 별도
+
+- 첨부 `C:\Users\95101\Downloads\PGCT_발표자료.pdf`(18쪽, 16:9 Beamer) 전체 글자를 읽었다. 1–5쪽(표지, Outline, Research Background, Research Goal, Related Works)은 작성됨, 6–18쪽은 빈 템플릿이다. 3·5·8·9쪽은 그림으로 렌더링해 모양을 봤다. 이 PC에 PDF 도구가 없어 PyMuPDF를 scratchpad `pylib`에만 설치했다(numpy 등 의존 패키지가 함께 설치됨). conda 환경은 바꾸지 않았다.
+- 참조: `paper/english/main.tex`의 방법 절·그림 1·알고리즘 1, `paper/figures/fig_architecture.tex`, `paper/figures/pgct_style.tex`, `presentation/pgct_beamer.tex`의 그림 사용 방식.
+- 새 폴더 `presentation/arch_slide_20261103/`: `overall_architecture.tex`(논문 그림 1의 발표용 판, 단계 이름을 발표자료의 방법 슬라이드 제목에 맞춤, Q1·Q2 띠, 접촉 시 교환 정보 상자), `preview.tex`(기본 테마 16:9 Beamer 미리보기), `preview.pdf`, `preview.png`, `preview.log`. 기존 논문·발표 파일은 바꾸지 않았다.
+- 프로젝트의 Tectonic(`output/pgct_authoring_20261102/texruntime/tectonic.exe`)으로 컴파일했다. 하이픈 분리·줄바꿈을 고치며 네 번 컴파일했고, 한 번은 `\hyphenpenalty` 지정 문법 오류로 실패해 고쳤다. 최종 Overfull 0. Max-GAE 상자의 식을 논문 정의에 맞게 $b=[\max_j V_j - V_i]_+$로 고쳤다(cap 생략).
+- 사용자에게 `preview.png`를 보냈다(캡션: "Overall Architecture 슬라이드 초안(논문 그림 1 기반, 단계 이름을 발표자료 슬라이드 제목에 맞춤)"). 첫 전송은 상대 경로 오류로 실패해 절대 경로로 다시 보냈다.
+- 진행 안내 하나를 영어로 보냈다(아래 원문 그대로). 연구 코드·학습 변경 없음. 커밋 없음.
+
+### Assistant — 진행 안내
+
+발표자료 PDF를 읽는 중입니다. 이 PC에 PDF 도구가 없어서 PyMuPDF를 scratchpad에만 설치했고, 슬라이드 1–16의 글자는 이미 확인했습니다. 지금은 나머지 쪽과 슬라이드 모양을 보고 있습니다.
+
+Overall Architecture 슬라이드 초안을 논문 그림 1을 바탕으로 만들어 컴파일했습니다. 지금 렌더링 결과를 확인하고 있습니다.
+
+논문 그림 1을 발표용으로 다듬은 초안이 나왔습니다. Max-GAE 상자의 식을 논문 정의(0 미만은 자름)에 맞게 한 군데 고친 뒤 보내 드리겠습니다.
+
+Good. Sending the preview now.
+
+### Assistant — 최종 답변
+
+Overall Architecture는 **논문 그림 1(`paper/figures/fig_architecture.tex`)을 쓰되, 단계 이름을 발표자료의 다음 슬라이드 제목과 맞추는 구성**을 권합니다. 그렇게 고친 초안을 만들어 미리보기를 보내 드렸습니다.
+
+## 왜 이 구성인가
+
+- 템플릿 8쪽처럼 큰 그림 한 장을 쓰는 형식입니다. 이 슬라이드가 Proposed Method 부분 전체의 지도 역할을 합니다.
+- 7단계가 뒤 슬라이드와 그대로 이어집니다.
+
+| 그림의 단계 | 이어지는 슬라이드 |
+|---|---|
+| ② Independent Reward Modeling | Independent Reward Modeling |
+| ③ Common Reward Probing | Common Reward Probing |
+| ④ Latent Team Identification | Latent Team Identification |
+| ⑤ Selective Critic Utilization | Selective Critic Utilization |
+| ⑥ Max-GAE, ⑦ PPO Update | Max-GAE |
+
+- 위 띠(Q1, 단계 1–4)는 4쪽 Contributions의 "보상 기반 팀 식별"에, 아래 띠(Q2, 단계 5–7)는 "Max-GAE로 선택적 critic 활용"에 대응합니다.
+- 왼쪽 아래 상자는 만났을 때 무엇을 주고받는지 보여 줍니다. 보내는 것은 공개 사건 관측, 예측 응답, Critic 가중치이고, 보내지 않는 것은 보상, 팀 라벨, Actor 가중치입니다. Background의 "Decentralized Learning", "Unknown Team Relations"와 이어집니다.
+
+## 논문 그림에서 바꾼 것
+
+- 단계 이름을 발표자료 제목에 맞췄습니다. 예: Individual reward prediction → Independent Reward Modeling, Reward probe → Common Reward Probing, Latent team discovery → Latent Team Identification, Peer Critic selection → Selective Critic Utilization, Advantage estimation → Max-GAE.
+- 띠 제목 앞에 Q1, Q2를 붙였습니다.
+- 슬라이드 크기에 맞게 상자 설명을 줄였습니다. Max-GAE 상자에는 $b=[\max_j V_j - V_i]_+$를 넣었습니다(논문 식과 같고, 상한 cap만 생략).
+- 그림 아래 한 줄: "Each agent runs steps 1–7 locally. Without an approved teammate, PGCT reduces to independent PPO."
+
+## 발표자료에 넣는 법
+
+`presentation/arch_slide_20261103/overall_architecture.tex`(그림)와 `paper/figures/pgct_style.tex`(색·스타일)를 Overleaf 프로젝트에 올리고, 아래처럼 씁니다.
+
+```latex
+% preamble
+\usepackage{tikz}
+\input{pgct_style.tex}
+
+% slide 6
+\begin{frame}{Proposed Method: Overall Architecture}
+\centering
+\resizebox{\linewidth}{!}{\input{overall_architecture.tex}}
+
+\vspace{6pt}
+{\footnotesize Each agent runs steps 1--7 locally. Without an approved teammate, PGCT reduces to independent PPO.}
+\end{frame}
+```
+
+## 말할 내용(약 1분)
+
+1. 각 agent는 자기 경험과 자기 보상으로만 학습합니다(①).
+2. 위의 ②–④가 팀 발견입니다. 자기 보상 예측기를 만들고, 만난 이웃과 같은 probe에 대한 예측 보상을 비교해, 응답이 계속 비슷하면 팀원으로 승인합니다.
+3. 아래의 ⑤–⑦이 활용입니다. 이번 rollout에서 만난 승인된 팀원의 Critic만 골라 Max-GAE로 Actor의 advantage에만 반영합니다. Critic은 계속 자기 return으로 배웁니다.
+4. 승인된 팀원이 없으면 IPPO와 똑같이 동작합니다.
+
+## 확인할 점
+
+- 미리보기는 이 PC의 Tectonic(XeTeX)과 Beamer 기본 테마로 만들었습니다. 원본이 ASCII라 Overleaf pdfLaTeX에서도 될 것으로 보지만, 직접 확인하지는 않았습니다. 쓰시는 테마에 따라 제목 색과 여백이 조금 다를 수 있습니다.
+- 뒤 슬라이드 제목 옆에 같은 번호 원(①–⑦)을 작게 붙이면, 청중이 지금 어느 단계인지 따라가기 쉽습니다.
+
+이 대화는 T182로 기록했습니다. 커밋은 하지 않았습니다.
+
+## 원문 기록 T183 — 2026-11-03 KST, Claude Code (정확한 시각 기록하지 않음)
+
+### 사용자 — 원문 (붙여넣은 글 3개, 사용자 자신의 문장 없음. 받은 그대로)
+
+[붙여넣은 글 1]
+
+네. 지금 그림은 PGCT의 Overall Architecture로 충분히 사용할 수 있는 구조입니다. 직접 PowerPoint에서 도형과 화살표로 다시 제작해도 좋겠습니다. 다만 교수님이 GPT 사용을 전면 금지하셨으므로, 최종 그림은 논문의 알고리즘을 직접 확인하면서 독립적으로 구성하는 것이 적절합니다.
+
+알고리즘 관점에서는 전체 흐름이 잘 잡혀 있습니다.
+
+- Q1: 독립 학습 → 개인 보상 모델 → 공통 Reward Probe → 잠재 팀 발견
+- Q2: 승인된 팀원 → Critic 활용 → Max-GAE → PPO 업데이트
+- 반복: PPO 업데이트 이후 다음 rollout으로 돌아감
+
+특히 Actor와 Critic의 업데이트를 분리해서 표현한 점이 중요합니다.
+
+## 1. 알고리즘에서 보완하면 좋은 부분
+
+| 위치 | 현재 그림                        | 확인하거나 보완할 내용                                          |
+| -- | ---------------------------- | ----------------------------------------------------- |
+| 2번 | Independent Reward Modeling  | 공개 전이 \\(q=(u_t,a_t,u\_{t+1})\\)가 MLP 입력이라는 점         |
+| 3번 | Common Reward Probing        | 자신의 사건뿐 아니라 양쪽 에이전트의 사건을 합쳐 공통 질의를 구성한다는 점            |
+| 4번 | Latent Team Identification   | EMA 외에 경험 충분성 및 반복 비교 조건                              |
+| 5번 | Selective Critic Utilization | 승인된 관계 \\(B\_{ij}\\)와 실제 접촉 \\(C\_{ij}\\)를 모두 확인한다는 점 |
+| 6번 | Max-GAE                      | 팀원의 Critic으로 자신의 관측 이력을 평가한다는 점                       |
+
+여기서 제가 가장 중요하게 보는 것은 3번과 6번입니다.
+
+### ① Common Reward Probing
+
+현재 `own reward events + mirrored copies`라는 표현은 한 에이전트 자신의 경험만 사용하는 것으로 오해될 수 있습니다.
+
+실제로는
+
+\\[ \mathcal Q\_{ij} = \mathcal E_i\cup\mathcal E_j \cup M(\mathcal E_i\cup\mathcal E_j) \\]
+
+로 두 에이전트의 공개 사건을 합칩니다.
+
+이것이 서로 다른 경험을 가진 두 에이전트에게 동일한 질문을 할 수 있게 만드는 핵심입니다.
+
+### ② Max-GAE
+
+현재 수식은
+
+\\[ b=[\max_j V_j-V_i]\_+ \\]
+
+로 표시되어 있습니다.
+
+수학적으로는 맞는 요약이지만, 중요한 정보가 생략되어 있습니다.
+
+실제 donor Critic은 자신의 관측이 아니라 에이전트 \\(i\\)의 관측 이력을 평가합니다.
+
+\\[ V_j(\tilde h\_{i,t}^{\\,j}) \\]
+
+이 점이 없으면 서로 다른 에이전트의 가치 추정값을 단순히 비교하는 것으로 오해할 수 있습니다.
+
+다만 Overall 그림에 이 수식을 모두 넣을 필요는 없습니다. 뒤의 Max-GAE 설명 슬라이드에서 명확히 다뤄도 됩니다.
+
+## 2. 반드시 추가해야 하는 내용이 있는가?
+
+Overall Architecture 한 장만을 기준으로 하면 필수적인 단계가 빠진 것은 없습니다.
+
+다만 세부 알고리즘에는 다음 요소들이 존재합니다.
+
+- 공개 투영 \\(u_t=P(o\_{i,t})\\)
+- 보상 예측 MLP의 학습 손실
+- 보상 예측기 성숙 조건
+- 정규화된 보상 응답 거리 및 EMA
+- Critic의 recurrent history replay
+- Max-GAE의 마스크와 Advantage 축소 계수
+
+이것들을 한 장에 모두 넣으면 오히려 그림을 이해하기 어려워집니다. 뒤의 Proposed Method 슬라이드에서 설명하면 충분합니다.
+
+## 3. 시각적으로는 두 군데만 신경 쓰면 좋겠습니다
+
+Q1과 Q2의 색상 분리
+
+파란색과 주황색 영역을 분리한 구성이 좋습니다. 연구의 두 목적을 시각적으로 구별할 수 있습니다.
+
+왼쪽 통신 정보 상자
+
+`Exchanged on contact` 상자는 다른 블록보다 글씨가 작습니다. 실제 발표 화면에서는 읽기 어려울 수 있습니다. 또한 공개 사건만 전달하더라도 어떤 사건을 선택해 보냈는지가 간접적인 정보를 드러낼 수 있으므로, `never sent: rewards`는 실제 보상값을 직접 전송하지 않는다는 의미로 이해해야 합니다.
+
+## 4. 최종 판단
+
+| 평가 항목           | 판단                     |
+| --------------- | ---------------------- |
+| 알고리즘 전체 흐름      | 적절                     |
+| Q1/Q2 구분        | 명확                     |
+| 완전분산 학습 표현      | 대체로 적절                 |
+| Reward Probe 설명 | 양쪽 사건의 결합을 명확히 할 필요    |
+| Max-GAE 표현      | 세부 수식은 후속 슬라이드에서 설명 필요 |
+| 정보 교환 범위        | 대체로 적절하나 정확한 의미 확인 필요  |
+| PPT 발표 적합성      | 좋음                     |
+
+현재 그림을 더 복잡하게 만들 필요는 없다고 생각합니다.
+
+특히 교수님께서 전체 구조도를 요구하신 취지는 각 수식의 증명보다 알고리즘의 구성요소와 정보가 이동하는 경로를 한눈에 보여주는 것에 있다고 봅니다.
+
+따라서 직접 PPT로 제작할 때는 이 그림의 7단계 구조를 바탕으로 정리하되, 3번의 공통 probe 생성 방식과 6번의 자기 관측 이력에 대한 donor Critic 평가가 정확하게 전달되는지 확인하는 것이 좋겠습니다.
+
+그리고 마지막 문장인 \*“Without an approved teammate, PGCT reduces to independent PPO”\*는 정확히는 Actor·Critic의 학습 업데이트가 IPPO로 환원된다는 뜻입니다. 보상 예측기 학습 등의 부가 계산까지 사라지는 것은 아닙니다.
+
+[붙여넣은 글 2]
+
+PGCT도 그림을 넣는 편이 좋습니다. 특히 교수님께서 파이프라인과 그림 중심의 발표를 요청하셨기 때문에, 현재처럼 텍스트 상자만 있는 Overall Architecture보다는 알고리즘의 작동 과정을 시각적으로 보여주는 구성이 더 적합합니다.
+
+다만 선배님의 그림을 그대로 따라갈 필요는 없습니다. 연구 특성이 다르기 때문입니다.
+
+## 1. 선배님의 그림과 현재 PGCT 비교
+
+[A Curriculum-Learning-Assisted MAPPO-Based Algorithm for Dynamic Spectrum Access and Anti-Jamming in UAV Swarms](https://images.openai.com/static-rsc-4/GFnDX4wxZjHBkcjgSVlXaAEGXnX3f5Qn4XS08w88zX7MChdahSpajgrq8jUhNkNFFqjQJPPj5ohGlnKycinDD76omgtOU6GwDFqxJzjw1xw_r5xQm7CFWSYEE_6GvUq2ftNnLwELP0TytAjWCrOZ_A_-Tzkszo5a6r1v6GbHfB4?purpose=inline)
+
+선배님의 구조도
+
+위험 지도, 신경망, 경로 계획, 최종 결과를 작은 그림과 연결
+
+Independent Learning
+
+Reward Modeling
+
+Reward Probing
+
+Team Identification
+
+Critic & Max-GAE
+
+현재 PGCT 구조도
+
+7단계의 흐름은 명확하지만 대부분 글과 수식으로 설명
+
+현재 PGCT 그림도 알고리즘의 흐름을 설명하기에는 충분합니다. 하지만 처음 보는 청중이 Reward Probe가 실제로 무엇을 비교하는지 직관적으로 파악하기는 어렵습니다.
+
+## 2. PGCT에서 그림을 넣을 가치가 있는 부분
+
+| 단계                           | 시각자료                         | 중요도   |
+| ---------------------------- | ---------------------------- | ----- |
+| Independent Learning         | 실제 Multi-team RWARE 환경 이미지   | 높음    |
+| Reward Modeling              | 입력 전이와 MLP의 관계               | 중간    |
+| Common Reward Probing        | 공통 사건과 두 에이전트의 응답 비교         | 매우 높음 |
+| Latent Team Identification   | 승인·거부되는 에이전트 관계              | 높음    |
+| Selective Critic Utilization | 자신의 Critic과 팀원 Critic의 정보 흐름 | 높음    |
+| Max-GAE                      | 가치 비교 및 Advantage 계산         | 중간    |
+
+제 생각에는 RWARE 환경 그림과 Reward Probe 그림이 가장 중요합니다.
+
+RWARE 이미지는 연구 환경을 보여주고, Reward Probe 그림은 논문의 핵심 아이디어를 설명하기 때문입니다.
+
+## 3. 한 장에 전부 넣을 필요는 없습니다
+
+현재 Overall Architecture에는 이미 7단계, Q1/Q2 구분, 통신 정보가 들어 있습니다.
+
+여기에 이미지 5\~6개를 추가하면 오히려 복잡해질 수 있습니다.
+
+따라서 전체 구조도에서는 1\~2개의 핵심 시각 요소만 사용하고, 이후 상세 설명 슬라이드에서 그림을 확대하는 방법이 적합합니다.
+
+예를 들어 다음과 같이 역할을 구분할 수 있습니다.
+
+- Overall Architecture: 전체 정보 흐름과 주요 구성요소
+- Public Transition & Reward Modeling: 실제 RWARE 전이 예시와 보상 예측기
+- Common Reward Probing: 동일한 사건에 대한 두 에이전트의 응답 비교
+- Latent Team Identification: 팀 승인과 보류의 관계
+- Max-GAE: 승인된 Critic으로 자신의 관측 이력을 평가하는 과정
+
+단, 그림에 실제 팀 관계를 색상으로 표현하더라도 그 색상이 학습 에이전트에게 제공되는 정보처럼 보이지 않도록 구분해야 합니다.
+
+## 제 추천
+
+현재 Overall Architecture의 7단계 구조는 유지하되, RWARE 환경과 보상 비교 과정을 보여주는 작은 그림을 추가하는 방향이 좋겠습니다.
+
+특히 교수님이 요구하신 것은 단순히 그림의 개수가 많다는 의미보다는, 발표자가 긴 문장을 읽지 않아도 청중이 알고리즘을 따라갈 수 있는 구조일 가능성이 큽니다.
+
+PGCT는 팀 발견 자체가 핵심 연구이므로 Reward Probe가 어떻게 잠재 팀 관계를 결정하는지 보여주는 그림에 가장 많은 시각적 설명을 투자하는 편이 좋습니다.
+
+교수님의 GPT 사용 금지 지시를 고려하면, 실제 RWARE 실험 화면을 사용하고 PowerPoint 도형으로 직접 재구성하는 것이 적절합니다.
+
+[붙여넣은 글 3]
+
+아니요. RWARE 환경 그림은 다시 넣지 않아도 됩니다.
+현재 발표자료에서는 이미 다음과 같이 사용하고 있습니다.
+
+* 3페이지 Research Background: RWARE 환경에서 팀 관계를 모르는 상황
+* 4페이지 Research Goal: 서로 다른 팀의 에이전트와 잠재 팀 관계를 시각화
+
+따라서 Overall Architecture에서 같은 RWARE 그림을 반복하면 정보가 중복됩니다.
+오히려 여기서는 환경을 보여주는 그림보다 알고리즘이 어떻게 작동하는지 보여주는 그림이 중요합니다.
+제가 추천하는 것은 다음 두 가지입니다.
+1. Reward Probing의 작동 과정
+공개 전이 \(q\)를 두 에이전트의 보상 예측기에 입력하고, 각 예측값을 비교하는 과정을 시각적으로 표현하는 것입니다. 이 부분은 PGCT의 핵심적인 팀 발견 원리를 보여줍니다.
+2. Selective Critic Utilization의 정보 흐름
+승인된 팀원의 Critic으로 자기 관측 이력을 평가하고, Max-GAE를 거쳐 Actor 업데이트에 활용되는 과정을 나타내는 것입니다.
+두 그림 중 하나만 추가한다면 Reward Probing을 우선하겠습니다.
+다만 현재 Overall Architecture는 이미 7단계가 명확하게 표현되어 있습니다. 반드시 그림을 추가해야 하는 것은 아닙니다. 세부 슬라이드에서 Reward Probe와 Max-GAE를 그림으로 충분히 설명한다면, Overall Architecture는 지금처럼 간결한 블록 다이어그램으로 유지해도 좋습니다.
+정리하면, RWARE는 Introduction에서 한 번 보여주고, Proposed Method에서는 알고리즘의 내부 정보 흐름을 시각화하는 편이 더 효과적입니다.
+
+### 수행 기록 — 원문 대화와 별도
+
+- 사용자 문장 없이 외부 검토 글 3개만 붙여넣은 turn이다. 글 1의 지적을 `paper/english/main.tex`(Individual Reward Prediction, Reward Probes 절)와 코드(`reward_probe_ac_v2.py`의 `probes()`, `approved()`)로 대조했고, 모두 사실과 맞았다. 3번 상자의 "own reward events"는 T182에서 논문 그림 1의 "public events of i and j"를 줄이며 생긴 Claude의 오류였다.
+- `presentation/arch_slide_20261103/overall_architecture.tex`·`preview.tex`를 고쳤다: 2번 입력 $(u_t,a_t,u_{t+1})$, 3번 "events of both agents", 4번 "mature, ≥3 rounds", 6번 "peer Critics on my own history", 통신 상자 글자 확대·"reward values"로 정정, 아래 문장 "the Actor–Critic update equals IPPO". 세 번 컴파일(Overfull 0)하고 렌더링해 줄바꿈을 확인했다.
+- 사용자에게 `preview.png`를 보냈다(캡션: "검토 의견을 반영한 수정본(2: 공개 전이 입력, 3: 두 agent 사건, 4: 성숙·3 round, 6: 내 이력 평가, 통신 상자 글자 확대, 아래 문장 정정)").
+- 글 2의 이미지 링크는 열지 않았다. 연구 코드·학습 변경 없음. 커밋 없음.
+
+### Assistant — 최종 답변
+
+붙여넣은 검토를 논문과 코드에 대조해 보니 지적이 모두 맞았습니다. 그래서 그림을 고쳐 수정본을 보내 드렸습니다. 특히 3번 상자는 제 실수였습니다. 논문 그림 1의 "public events of i and j"를 줄이다가 "own reward events"로 잘못 썼습니다.
+
+## 고친 것
+
+| 위치 | 전 | 후 | 근거 |
+|---|---|---|---|
+| 2번 | MLP $\widehat r_i$ trained on own reward | MLP $\widehat r_i(u_t,a_t,u_{t+1})$ fitted to own $r_i$ | 논문 Individual Reward Prediction 절 |
+| 3번 | own reward events + mirrored copies | events of *both* agents + mirrored copies | $\mathcal Q_{ij}=\mathcal E_i\cup\mathcal E_j\cup M(\cdot)$, 코드 `probes(i, j)` |
+| 4번 | response distance → EMA → approval | distance → EMA, mature, ≥3 rounds | `approved()`: round ≥3, EMA < .5, 두 agent 모두 성숙 |
+| 6번 | $b=[\max_j V_j - V_i]_+$ | peer Critics on *my own* history + 같은 식 | 논문 Selective Peer Critic Access 절 |
+| 통신 상자 | 작은 글자, "never sent: rewards" | 글자 키움, "not sent: reward values" | 사건 관측 자체가 "여기서 보상을 받았다"는 간접 정보라서 |
+| 아래 문장 | PGCT reduces to independent PPO | the Actor–Critic update equals IPPO | 보상 예측기 학습은 계속 돌아갑니다 |
+
+5번(승인 ∧ 접촉)은 원래 상자에 들어 있어서 그대로 두었습니다.
+
+## 그림을 더 넣을지
+
+세 번째 글의 결론에 동의합니다. RWARE 그림은 3쪽에서 이미 썼으니 Overall Architecture에는 다시 넣지 않고, 지금처럼 블록 다이어그램으로 두는 편이 좋습니다.
+
+알고리즘 그림이 필요한 세부 슬라이드에는 **논문에 이미 있는 그림을 쓸 수 있습니다.**
+- **Common Reward Probing:** 논문 그림 2(`paper/figures/fig_discovery.tex`). 두 agent의 예측기가 같은 공통 probe에 답하고, 응답을 비교해 거리·승인·보류로 가는 그림입니다. 검토가 "가장 중요하다"고 한 바로 그 그림입니다.
+- **Selective Critic Utilization / Max-GAE:** 논문 그림 3(`paper/figures/fig_critic.tex`). 승인된 팀원 Critic이 내 이력을 평가하고, 그 상향분이 Actor advantage에만 들어가는 흐름입니다.
+
+## 확인이 필요한 점: 교수님의 GPT 사용 금지
+
+검토 글에 "교수님이 GPT 사용을 전면 금지하셨다"는 내용이 있습니다. 이 금지가 생성형 AI 전반을 뜻한다면, 제가 만든 TikZ 그림과 문구도 같은 문제에 걸릴 수 있습니다. 금지 범위는 제가 판단할 수 없습니다. 교수님께 확인하시거나, 검토 글의 권고대로 PowerPoint에서 직접 다시 그리시는 편이 안전합니다. 그 경우 이 수정본은 "어떤 내용이 들어가야 하는지" 확인하는 체크리스트로만 쓰시면 됩니다.
+
+이 대화는 T183으로 기록했습니다. 커밋은 하지 않았습니다.
+
+## 원문 기록 T184 — 2026-11-03 KST, Claude Code (정확한 시각 기록하지 않음)
+
+### 사용자 — 원문
+
+[첨부 이미지 2장: 선배 발표의 "Main Results: Overall Architecture"(점군 처리 파이프라인, 단계마다 작은 그림) 슬라이드와 "Proposed Method: Overall Architecture"(왼쪽 번호 절차 + 오른쪽 그림 구조도, Multi-UAV) 슬라이드. 세션 scratchpad의 `images\2.png`, `images\3.png`]
+
+선배들 Overall에는 많이 들어가 있어 그림이
+
+### 수행 기록 — 원문 대화와 별도
+
+- 첨부 이미지 2장을 읽었다. 구성 방식만 참고했고, 다른 연구의 내용·수식·그림은 가져오지 않았다.
+- 실제 자료 확인(읽기 전용): `output/pgct_docs_20261102/discovery_bins.csv`·`allocations_cumulative.csv`(기존 로그에서 재계산한 발견 곡선), `presentation/figures/`의 기존 그래프, T179의 RWARE 렌더링.
+- 새 그림은 만들지 않았다. 코드·학습 변경 없음. 기록: 이 T184, 통합 사본 재생성. 커밋 없음.
+
+### Assistant — 최종 답변
+
+맞습니다. 두 선배 슬라이드 모두 단계마다 작은 그림이 붙어 있어서, 글을 읽지 않아도 흐름이 보입니다. 지금 PGCT 그림은 글 상자뿐이라 그 점에서 약합니다. 단계마다 그림을 하나씩 붙이는 쪽으로 바꾸는 것을 권합니다.
+
+## 구성 제안
+
+첫 번째 선배 슬라이드처럼 **세로 패널을 왼쪽에서 오른쪽으로 잇고, 각 패널에 제목 + 작은 그림 + 한 줄 설명**을 넣는 형식입니다. 7단계를 다 패널로 만들면 좁으니 5개로 묶고, 위에 Q1(1–3) / Q2(4–5) 띠를 두르는 방식을 권합니다.
+
+| 패널 | 들어갈 그림 | 자료 |
+|---|---|---|
+| 1. Independent Learning | agent 한 명과 그 부분 관측 창(시야 칸) | T179에서 찍은 RWARE 렌더링을 잘라 씀(지도 전체는 반복하지 않음) |
+| 2. Reward Modeling | 작은 격자 두 장 $(u_t, a_t, u_{t+1})$ → MLP 아이콘 → $\widehat r_i$ | 렌더링 일부 + 도형 |
+| 3. Common Reward Probing | G0 배송 장면과 그 좌우 대칭(G1 쪽) 두 장 → agent $i$, $j$의 예측 막대 | 렌더링 일부 + 막대(설명용이라고 표시) |
+| 4. Latent Team Identification | 시간에 따른 응답 거리 EMA: 같은 팀 대 다른 팀, 문턱 .5 점선 | **실제 로그**(`discovery_bins.csv`, seed 1, 5M) |
+| 5. Selective Critic & Max-GAE | 내 이력 위에 $V_i$와 $\max_j V_j$ 두 곡선, 그 사이 $b$를 칠함 → Actor로만 화살표, Critic은 자기 return | 도형(설명용) |
+
+이렇게 하면 다음과 같은 장점이 있습니다.
+- 3번과 4번이 팀 발견의 핵심을 그림으로 보여 줍니다(검토에서 "가장 중요하다"고 한 부분).
+- 4번은 그림이 실제 실험 로그라 설득력이 있습니다.
+- 통신 상자는 패널 아래 한 줄로 줄입니다(sent / not sent).
+
+두 번째 선배 슬라이드처럼 **왼쪽에 번호 절차 7줄, 오른쪽에 그림 구조도**를 두는 형식도 있습니다. 슬라이드 4–5와 글자 밀도가 비슷해져서 덜 낯선 대신, 오른쪽 그림이 작아집니다. 저는 첫 번째 형식을 권합니다.
+
+## 주의할 점
+
+- 팀 색(빨강/파랑)은 "정답, agent는 모름"이라는 표시를 붙여 씁니다. agent가 받는 정보처럼 보이면 안 됩니다(검토 글의 지적).
+- 3·5번의 막대와 곡선은 설명용 그림이라고 슬라이드에 작게 적습니다. 4번만 실제 데이터입니다.
+- 앞에서 말씀드린 교수님의 GPT 사용 금지가 AI 도구 전반이라면, 제가 그림을 만들어 드리는 것도 같은 문제가 될 수 있습니다. 직접 만드신다면 위 표를 체크리스트로 쓰시면 됩니다.
+
+이 대화는 T184로 기록했습니다. 커밋은 하지 않았습니다.
+
+## 원문 기록 T185 — 2026-11-03 KST, Claude Code (정확한 시각 기록하지 않음)
+
+### 사용자 — 원문
+
+초안 만들어줘
+
+### 수행 기록 — 원문 대화와 별도
+
+- T184 다음 단계 버튼이다.
+- 새 파일(`presentation/arch_slide_20261103/`): `make_assets.py`, `agent_scene.png`, `agent_view_t0.png`, `agent_view_t1.png`, `discovery_ema.pdf`, `assets.json`, `overall_panels.tex`, `preview_panels.tex`, `preview_panels.pdf`, `preview_panels.png`, `preview_panels.log`.
+  - `agent_scene.png`: 실제 렌더러(T179와 같은 환경·reset seed 1, 셀 3배), agent 1(0-index, 위치 (4,5)) 주변 7×7. agent만 회색, 선반은 실제 팀 색.
+  - `agent_view_t0/t1.png`: 같은 agent가 FORWARD 한 번(다른 agent NOOP) 하기 전·후의 5×5(공개 관측 반경 2). 팀·요청 색을 모두 회색으로 바꿔 렌더링했다. 첫 생성에서는 agent 색 복원 코드가 인스턴스 속성을 남겨 선반 색이 그대로 나와 고쳤다.
+  - `discovery_ema.pdf`: `output/pgct_docs_20261102/discovery_bins.csv`(A+C v2, 모서리·개인 보상, seed 1, 5M, 100k 구간 49개)의 같은 팀/다른 팀 거리 EMA와 문턱 .5.
+  - 3번 막대와 5번 곡선은 설명용 도형이며 그림 안에 그렇게 적었다.
+- `rware/` 소스는 수정하지 않았다(스크립트 안에서만 렌더러 색·셀 크기를 바꿈). pyglet·PyMuPDF는 scratchpad `pylib`를 env 패키지 뒤에 붙여 썼다.
+- Tectonic으로 컴파일했다. TikZ 스타일 이름 `cap`이 기존 키와 겹쳐 한 번 실패했고 `capt`로 바꿨다. 최종 Overfull 0. 렌더링해 겹침을 고쳤다.
+- T184 답변의 "Q1(1–3) / Q2(4–5)"는 잘못이었다. 팀 식별(4)은 Q1이므로 초안에서는 Q1 = 1–4, Q2 = 5로 했다.
+- 사용자에게 `preview_panels.png`를 보냈다(캡션: "5패널 Overall Architecture 초안. 1·2번은 실제 렌더러 장면, 4번은 실제 발견 로그, 3·5번 막대·곡선은 설명용입니다."). 커밋 없음.
+
+### Assistant — 진행 안내
+
+그림 재료를 만들었습니다. 실제 렌더러로 찍은 agent 주변 장면과 공개 관측 전·후, 그리고 실제 로그로 그린 팀 발견 곡선입니다. 이제 5패널 슬라이드를 조립하고 있습니다.
+
+5패널 초안이 완성됐습니다. 미리보기를 보내 드리고 대화를 기록하겠습니다.
+
+### Assistant — 최종 답변
+
+5패널 Overall Architecture 초안을 만들어 미리보기를 보내 드렸습니다. 첫 번째 선배 슬라이드처럼 단계마다 그림이 붙은 세로 패널을 왼쪽에서 오른쪽으로 이었습니다.
+
+## 패널별 그림
+
+| 패널 | 그림 | 실제 자료인가 |
+|---|---|---|
+| 1. Independent Learning | agent 한 명 주변 7×7 장면 | 실제 렌더러. agent는 회색, 선반은 실제 팀 색이며 "숨겨진 정답"이라고 적었습니다 |
+| 2. Independent Reward Modeling | 같은 agent의 공개 관측 $u_t$ → $a_t$ → $u_{t+1}$ → MLP $\widehat r_i$ | 실제 렌더러. 팀·요청 색을 모두 지운 5×5 창이라 실제 공개 관측처럼 보입니다 |
+| 3. Common Reward Probing | $i$·$j$의 사건 + 좌우 대칭 → 같은 probe에 대한 두 예측 막대 | 설명용(그림에 표시) |
+| 4. Latent Team Identification | 같은 팀 대 다른 팀 거리 EMA, 문턱 .5 | **실제 로그**(seed 1, 5M) |
+| 5. Selective Critic & Max-GAE | donor 그래프(승인 ∧ 접촉) + $V_i$와 $\max_j V_j$ 사이의 $b$ → Actor만, Critic은 자기 return | 설명용(그림에 표시) |
+
+맨 아래 한 줄에 접촉 때 보내는 것과 보내지 않는 것을 적었습니다.
+
+## 바로잡을 점
+
+T184에서 "Q1(1–3) / Q2(4–5)"라고 했는데 틀렸습니다. 팀 식별(4번)은 Q1입니다. 초안에서는 Q1 = 1–4, Q2 = 5로 띠를 둘렀습니다.
+
+## 파일
+
+- 그림: [overall_panels.tex](presentation/arch_slide_20261103/overall_panels.tex)
+- 재료: `agent_scene.png`, `agent_view_t0.png`, `agent_view_t1.png`, `discovery_ema.pdf`(모두 같은 폴더, `make_assets.py`로 다시 만듦)
+- 미리보기: [preview_panels.pdf](presentation/arch_slide_20261103/preview_panels.pdf)
+
+발표자료에 넣을 때는 위 파일과 `paper/figures/pgct_style.tex`를 함께 올리고, frame 안에서 `\resizebox{\linewidth}{!}{\input{overall_panels.tex}}`로 부르면 됩니다(T182와 같은 방식).
+
+## 남은 점
+
+- 패널이 좁아 글자가 작습니다(특히 회색 설명 글자). 실제 화면에서 읽기 어렵다면 3·5번 설명 문장을 줄이거나, 아래 통신 줄을 빼는 것을 권합니다.
+- 슬라이드 아래쪽에 빈 공간이 남습니다. 그림 비율이 가로로 길기 때문입니다. 제목 아래 한 줄 요약을 넣거나 패널 높이를 늘릴 수 있습니다.
+- 교수님의 GPT 사용 금지 범위는 여전히 확인이 필요합니다.
+
+이 대화는 T185로 기록했습니다. 커밋은 하지 않았습니다.
+
+## 원문 기록 T186 — 2026-11-03 KST, Claude Code (정확한 시각 기록하지 않음)
+
+### 사용자 — 원문
+
+3,4,5의 그래프는 어떻게 만든거야?
+
+### 수행 기록 — 원문 대화와 별도
+
+- 질문 turn이다. `presentation/arch_slide_20261103/overall_panels.tex`·`make_assets.py`, `output/pgct_docs_20261102/evidence_plots.py`, `latent_team/reward_probe_ac_v2.py`의 `audit()`을 읽어 출처를 확인했다. 파일 변경 없음(기록 제외). 커밋 없음.
+
+### Assistant — 최종 답변
+
+세 그래프의 출처가 다릅니다. **4번만 실제 실험 데이터이고, 3번과 5번은 제가 손으로 그린 설명용 그림입니다.**
+
+## 3번: 예측 막대 — 설명용
+
+- `overall_panels.tex` 안에서 TikZ로 직접 그렸습니다. 막대 높이는 제가 정한 값입니다: event에서 $\widehat r_i$ 1.0, $\widehat r_j$ 0.08 / mirror에서 $\widehat r_i$ 0.05, $\widehat r_j$ 0.95.
+- 보여 주려는 것은 "다른 팀 두 agent는 같은 probe에 서로 반대로 답한다"는 원리입니다. 실제 보상 예측기를 돌려 얻은 값이 아닙니다.
+- 이 원리 자체는 오프라인 측정(E57)과 맞습니다. 예: agent 3이 자기 팀 goal 배송에 .89, 상대 팀 goal 배송에 .00, 자기 배송의 대칭에 .00, 상대 배송의 대칭에 .87로 답했습니다. 다만 그림의 막대는 그 수치를 그대로 옮긴 것이 아닙니다.
+
+## 4번: 거리 EMA 곡선 — 실제 로그
+
+- 원본 run: `runs/acv2_s1_20261029_084340`(A+C v2, 모서리 goal, 개인 보상, 좌표 마스킹, seed 1, 약 5M step). 이 run은 원래 PC에만 있습니다.
+- 계산 과정:
+  1. 학습 중 매 update에 비교한 쌍의 거리 EMA를, 실제 팀 라벨로 같은 팀/다른 팀으로 나눠 평균한 값이 `update/ac_v2_audit_distance_same`·`_cross`로 기록되어 있습니다. 팀 라벨은 이 기록에만 쓰이고 승인에는 쓰이지 않습니다.
+  2. 11-02에 `output/pgct_docs_20261102/evidence_plots.py`가 이 값을 100k step 구간마다 평균해 `discovery_bins.csv`로 저장했습니다(논문 그림과 같은 원본).
+  3. 이번에 `make_assets.py`가 그 CSV를 읽어 matplotlib으로 그렸습니다(구간 49개, 0.15–4.95M). 이 PC에는 원본 로그가 없어 CSV에서 다시 그리기만 했습니다.
+- 해석할 때 주의할 점:
+  - seed 1 하나입니다.
+  - 각 점은 그 구간에 비교된 쌍들의 평균입니다. 모든 쌍을 매번 잰 값이 아닙니다.
+  - 이 run은 v2 판정에 **옛 critic 증류**를 붙였고, update 직전 이웃으로 비교했습니다. 최종 알고리즘(`pgct_max`, rollout 접촉·시작 스냅샷)의 곡선이 아닙니다. 논문도 이 그림을 "발견 구성요소"의 근거로만 씁니다.
+  - 다른 팀 곡선이 4M 이후 0.6대까지 내려온 것도 실제 값입니다. 4.28M 이후 다른 팀 승인이 생긴 것과 같은 현상이고, 원인은 아직 분석하지 않았습니다(E65).
+
+## 5번: 가치 곡선 — 설명용
+
+- TikZ로 직접 그렸습니다. 파란 선($V_i$)과 빨간 선($\max_j V_j$)은 제가 정한 좌표를 부드럽게 이은 것이고, 그 사이를 칠해 $b$를 표시했습니다.
+- donor 그래프($i$, $j$, $k$와 실선·점선)도 개념도입니다.
+- 실제 값과 비슷한 근거는 있습니다(E62: 뒤처진 agent에게 같은 팀 critic의 상향폭이 1M에 평균 .35, 2M에 1.19). 하지만 곡선 모양은 그 데이터에서 나온 것이 아닙니다.
+
+그래서 슬라이드에도 3번과 5번 아래에 작은 글씨로 "illustration", 4번 아래에 "real log: seed 1, 5M steps"라고 적어 두었습니다. 발표에서 질문을 받으면 이 구분대로 답하시면 됩니다.
+
+이 대화는 T186으로 기록했습니다. 커밋은 하지 않았습니다.
+
+## 원문 기록 T187 — 2026-11-03 KST(20시 무렵), Claude Code
+
+### 사용자 — 원문
+
+wandb에서 현재 진행중인 실험 2개 있잖아?
+그거 로그로 뽑아서 실험 데이터로 쓸수 있다면 써줘
+
+### 수행 기록 — 원문 대화와 별도
+
+- 이 PC의 `_netrc`에 있는 기존 W&B 로그인으로 API를 읽기 전용으로 썼다(자격 정보는 읽거나 출력하지 않음). `marl-policy-sharing` 환경의 wandb 사용.
+- 새 폴더 `output/branch_wandb_20261103/`: `fetch_wandb.py`, `runs.json`, `eval.csv`, `update.csv`, `analyze.py`, `summary.json`, `plot_slides.py`, `team_identification.{pdf,png}`, `learning_seed1.{pdf,png}`. 첫 내려받기는 키 필터 문제로 eval 행이 비고 1단계 update 행이 0이어서, 전체 행을 읽도록 고쳐 다시 받았다. 범례 겹침을 고쳐 그림을 다시 만들었다.
+- 기록: `EXPERIMENTS.md` E73, `RESEARCH_STATE.md`, 이 T187, 통합 사본 재생성. 실행 중인 학습은 건드리지 않았다. 커밋 없음.
+- 사용자에게 그림 2개를 보냈다(캡션: "위: 최종 PGCT(pgct_max)의 온라인 팀 발견(seed 1·3, 분기 후 0.5M). 아래: seed 1 학습 곡선(예비 결과).").
+
+### Assistant — 진행 안내
+
+W&B 로그인이 이 PC에 이미 되어 있어서, 분기 실험 두 개의 기록을 읽기 전용으로 내려받고 있습니다. 현재 1단계는 12개 중 5개, 2단계는 6개 중 5개 job이 끝났습니다. 데이터를 정리한 뒤 미리 정한 판정 기준으로 보겠습니다.
+
+W&B에서 분기 실험 로그를 내려받아 정리했습니다. 팀 발견 그림과 학습 곡선 그림 두 장을 만들었습니다. 지금 결과를 실험 기록에 남기고 있습니다.
+
+### Assistant — 최종 답변
+
+W&B에서 두 분기 실험의 기록을 내려받아 정리했습니다. 결론부터 말하면 **팀 발견 결과는 지금 바로 쓸 수 있고, 학습 성능은 아직 예비 결과로만 쓸 수 있습니다.**
+
+## 진행 상황(오늘 20시 무렵 W&B 기준)
+
+| 실험 | 끝남 | 실행 중 |
+|---|---|---|
+| 1단계(정답 팀 Max-GAE) | 12개 중 5개: seed 1의 ippo·oracle_max·oracle_maxd1·allk_max, ippo_s3 | oracle_max_s3 |
+| 2단계(PGCT) | 6개 중 5개: oracle_mature_max s1·s3·s5, pgct_max s1·s3 | pgct_max_s5(막 시작) |
+
+## 1. 팀 발견 — 슬라이드 12에 쓸 수 있습니다
+
+최종 알고리즘(`pgct_max`)이 학습 중에 온라인으로 판정한 결과입니다. 그림: [team_identification.png](output/branch_wandb_20261103/team_identification.png)
+
+- **다른 팀 승인 0.** 끝난 2단계 job 다섯 개 모두에서 다른 팀 쌍은 한 번도 승인되지 않았습니다. 실제로 critic을 빌려 온 donor arc도 모두 같은 팀입니다(pgct_max s1 1,920, s3 1,350).
+- **빠른 승인.** 앞선 a2·a3·a5의 보상 예측기는 분기 후 6–12k step에 성숙했고, 첫 같은 팀 승인은 20k(seed 1)·26k(seed 3) step이었습니다.
+- **승인 범위는 절반.** 마지막 승인은 같은 팀 6 arc로, 끝까지 성숙한 같은 팀 쌍(팀1의 a1·a3·a5) 전부입니다. 팀0은 a2만 성숙해서 짝이 없습니다. a0는 어느 run에서도 보상 사건이 모이지 않아 판정에서 빠졌습니다. 그래서 같은 팀 arc 12개 중 6개만 승인됐습니다.
+
+발표 문장 예: "Online, PGCT approved only teammates (0 cross-team approvals in 5 runs); unmatured agents abstained."
+
+## 2. 학습 성능 — 아직 예비 결과입니다
+
+그림: [learning_seed1.png](output/branch_wandb_20261103/learning_seed1.png)
+
+마지막 평가 3회 평균(분기 후 0.36–0.46M, 배송/episode)입니다.
+
+| seed 1 | 팀 합계 | 뒤처진 a0+a1+a4 | 앞선 a2+a3+a5 |
+|---|---|---|---|
+| IPPO(계속 학습) | 6.57 | 0.43 | 6.13 |
+| 정답 팀, D2 | 5.88 | 0.00 | 5.88 |
+| 정답 팀, D1 | 6.13 | 0.60 | 5.53 |
+| 무작위 donor(수 맞춤) | 6.48 | 0.15 | 6.33 |
+| 정답 팀, 성숙 agent만 | 6.28 | 0.00 | 6.28 |
+| PGCT | 6.05 | 0.42 | 5.63 |
+
+seed 3은 IPPO 5.63 / 0.75, 성숙 agent만 6.70 / 0.63, PGCT 5.73 / 0.00입니다.
+
+- **지금까지는 가속이 보이지 않습니다.** seed 1에서 D2는 IPPO보다 뒤처진 agent와 앞선 agent 모두 조금 낮습니다.
+- **다만 판정하기엔 이릅니다.** 1단계는 seed 1만 모든 모드가 끝났고, 같은 run 안에서도 연속 평가 사이 변동(±1–2)이 모드 간 차이보다 큽니다. 미리 정한 규칙대로 seed 3·5까지 끝난 뒤(1단계 약 11-05) 판정하는 것이 맞습니다.
+- 그래서 슬라이드 13에는 "preliminary, seed 1"이라고 밝히고 이 그림을 쓰거나, 결과 칸을 "running"으로 두기를 권합니다. 지금 숫자로 "PGCT가 학습을 돕는다"고 말하면 안 됩니다.
+
+## 파일
+
+`output/branch_wandb_20261103/`
+- `fetch_wandb.py`: W&B에서 다시 내려받기(읽기 전용)
+- `eval.csv`, `update.csv`, `runs.json`, `summary.json`: 내려받은 데이터와 요약
+- `analyze.py`, `plot_slides.py`: 위 표와 그림
+- `team_identification.{pdf,png}`, `learning_seed1.{pdf,png}`
+
+나머지 job이 끝나면 `fetch_wandb.py` → `analyze.py` → `plot_slides.py` 순서로 다시 돌리면 갱신됩니다.
+
+## 참고
+
+- 모두 1.024M checkpoint에서 갈라진 분기 비교입니다. 처음부터 학습한 비교가 아닙니다.
+- Overall Architecture 4번 패널은 아직 옛 run의 거리 곡선입니다. 원하시면 이번 최종 알고리즘의 승인 그림으로 바꿀 수 있습니다.
+- 결과는 `EXPERIMENTS.md` E73과 `RESEARCH_STATE.md`에, 대화는 T187로 기록했습니다. 실행 중인 학습은 건드리지 않았고, 커밋은 하지 않았습니다.
+
+## 원문 기록 T188 — 2026-11-03 KST, Claude Code (정확한 시각 기록하지 않음)
+
+### 사용자 — 원문
+
+[붙여넣은 글. 받은 그대로]
+
+냉정하게 평가하면, 현재 그림은 알고리즘의 구조는 잘 잡았지만, Overall Architecture 그림으로서는 완성도가 높지 않습니다.
+
+사용자가 느낀 \*\*“가시성을 높이려고 그림을 억지로 우겨 넣었다”\*\*는 인상에 저도 동의합니다.
+
+앞서 제가 좋다고 평가한 것은 알고리즘 구성의 정확성이었고, 실제 발표 화면에서의 시각적 전달력은 과대평가했습니다.
+
+## 1. 현재 그림의 가장 큰 문제
+
+알고리즘 구성의 정확성
+
+8/10
+
+시각적 가독성
+
+4/10
+
+전체 정보 흐름의 직관성
+
+6/10
+
+제 주관적인 발표 디자인 평가입니다.
+
+핵심 문제는 한 장의 Overall Architecture 안에 세부 설명용 그림 다섯 개를 넣었다는 것입니다.
+
+각 그림이 독립적으로는 의미 있지만, 크기를 줄여서 한 장에 배치하니 오히려 전달력이 감소했습니다.
+
+## 2. 구체적으로 무엇이 문제인가?
+
+| 위치                     | 문제점                                                         | 판단     |
+| ---------------------- | ----------------------------------------------------------- | ------ |
+| ① Independent Learning | RWARE 그림을 이미 Introduction에서 보여줬으며, 현재 크기에서는 세부 정보를 알아보기 어려움 | 중복     |
+| ② Reward Modeling      | 격자 그림, 전이, MLP, 수식을 모두 작은 공간에 배치                            | 과밀     |
+| ③ Reward Probing       | 사건 버퍼, 대칭 변환, 막대그래프를 한꺼번에 표시                                | 가장 복잡함 |
+| ④ Team Identification  | 실제 실험 곡선을 아주 작게 넣어 축과 범례를 읽기 어려움                            | 부적절    |
+| ⑤ Critic & Max-GAE     | 에이전트 관계, 가치 곡선, Actor, Critic을 동시에 표현                       | 과밀     |
+
+특히 ③과 ④가 문제입니다.
+
+③ Common Reward Probing
+
+이 부분은 사실 PGCT에서 가장 중요한 아이디어입니다. 그런데 그림이 작아서 무엇을 비교하는지 이해하기 어렵습니다.
+
+막대그래프가 무엇을 의미하는지 알려면 숫자, 축, 범례를 읽어야 하는데, 현재 크기에서는 발표자가 설명하기 전까지 알아보기 어렵습니다.
+
+④ Latent Team Identification
+
+여기에는 실제 5M 학습 로그로 보이는 곡선이 있습니다.
+
+그런데 Overall Architecture는 알고리즘의 원리를 설명하는 자리입니다.
+
+실험 결과 그래프가 들어오면서 청중은 지금 알고리즘을 설명하는 것인지, 성능을 검증하는 것인지 혼란스러울 수 있습니다.
+
+실제 결과는 Experimental Results에서 크게 보여주는 편이 더 적절합니다.
+
+## 3. 이전 그림과 비교하면?
+
+의외로 처음 만들었던 7개 블록 구조도가 전체 흐름을 이해하기에는 더 낫습니다.
+
+첫 번째 그림은 각 구성요소와 화살표가 명확했습니다. 다만 시각적 요소가 부족했습니다.
+
+현재 그림은 시각적 요소를 추가하면서 각 구성요소가 작아져, 한눈에 구조를 이해하기 어려워졌습니다.
+
+즉, 개선하려다가 다른 문제가 생긴 것입니다.
+
+선배님의 D\* 구조도와 비교해도 차이가 있습니다.
+
+선배님의 그림에서는 위험 지도와 결과 경로 같은 이미지가 블록의 기능을 직접 설명합니다.
+
+반면 현재 PGCT 그림에서는 몇몇 이미지가 블록의 기능을 보여주기보다는 해당 단계를 자세히 설명하는 별도의 작은 슬라이드처럼 작동합니다.
+
+이 차이가 큽니다.
+
+## 4. 어떻게 고치는 것이 좋을까?
+
+저라면 현재 그림을 더 다듬는 것보다 구조를 단순화하는 방향으로 다시 설계하겠습니다.
+
+구체적인 원칙은 다음과 같습니다.
+
+1. Overall에서는 5개의 핵심 단계만 유지합니다. Q1의 독립 학습, 보상 모델링, Reward Probe, 팀 발견과 Q2의 Critic 활용입니다.
+2. 각 박스에는 하나의 대표적인 시각 요소만 둡니다. 이미지, 그래프, 수식, 설명문을 모두 넣을 필요가 없습니다.
+3. 실험 곡선과 실제 수치 결과는 제거합니다. Team Identification에서는 승인·보류라는 의사결정 과정 자체를 표현하면 충분합니다.
+4. Reward Probe는 가장 강조합니다. 전체 과정 중에서 연구의 차별성을 설명하는 부분이기 때문입니다.
+5. Max-GAE의 내부 계산은 다음 슬라이드로 넘깁니다. Overall에서는 승인된 donor Critic이 Actor 업데이트에 영향을 준다는 정보 흐름만 명확하면 됩니다.
+
+특히 Q1과 Q2를 현재처럼 하나의 수평 파이프라인으로 억지로 연결할 필요도 없습니다. 두 영역을 위아래로 배치하면 각 단계를 표현할 공간이 늘어나고, 두 연구 질문의 관계도 더 명확해질 수 있습니다.
+
+## 5. 가장 중요한 디자인 원칙
+
+Overall Architecture의 목적은 청중이 그림을 본 뒤 다음 질문에 답할 수 있게 만드는 것입니다.
+
+> 각 에이전트는 어떤 정보를 가지고, 무엇을 비교해서 팀원을 발견하며, 발견한 팀원을 어떻게 학습에 활용하는가?
+
+여기서 MLP가 128차원인지, EMA 곡선이 어떻게 변했는지, Max-GAE의 가치 상승이 얼마인지는 몰라도 됩니다.
+
+그 정보는 뒤의 상세 설명 슬라이드에서 보여주면 됩니다.
+
+현재 그림은 Overall Architecture와 세부 알고리즘 설명을 한 장에서 모두 해결하려고 하는 것이 문제입니다.
+
+### 최종 판단
+
+저라면 지금 그림을 최종본으로 사용하지 않겠습니다.
+
+그렇다고 처음부터 완전히 새로 만들 필요도 없습니다. 현재의 5단계 구조와 Q1/Q2 색상 구분은 유지하고, 내부의 작은 그림과 설명을 대폭 줄이는 것이 가장 좋은 방향입니다.
+
+교수님이 그림 중심 발표를 요청했다는 것이 모든 블록 안에 그림을 넣으라는 뜻은 아닙니다.
+
+한눈에 알고리즘이 이해되는 구조도가, 그림을 많이 넣은 구조도보다 훨씬 좋은 Overall Architecture입니다.
+
+전체적으로 Overall이 별로 보기 안좋아
+
+### 수행 기록 — 원문 대화와 별도
+
+- 새 파일: `presentation/arch_slide_20261103/overall_v3.tex`, `preview_v3.tex`, `preview_v3.pdf`, `preview_v3.png`, `preview_v3.log`. 이전 판(`overall_architecture.tex`, `overall_panels.tex`)은 지우지 않았다.
+- 구성: 위 Q1 블록 4개(Independent Learning, Independent Reward Modeling, Common Reward Probing(넓고 굵은 테두리로 강조), Latent Team Identification), 아래 Q2 블록 1개(Selective Critic Utilization & Max-GAE: 팀원 Critic → 내 이력 평가 → Max-GAE → Actor, Critic은 자기 return). 블록마다 도형 하나. 실험 곡선·RWARE 장면·수식 상세는 뺐다. 그림 아래 한 줄에 교환 정보.
+- Tectonic으로 다섯 번 컴파일하며 라벨 겹침을 고쳤다. 최종 Overfull 0.
+- 사용자에게 `preview_v3.png`를 보냈다(캡션: "Overall Architecture v3: Q1(위 4블록)·Q2(아래 1블록), 블록당 그림 하나, 실험 곡선 제거, Reward Probing 강조"). 연구 코드·학습 변경 없음. 커밋 없음.
+
+### Assistant — 진행 안내
+
+구조를 위아래 두 줄로 다시 짰습니다. 위는 Q1 네 블록, 아래는 Q2 한 블록이고, 블록마다 그림은 하나씩만 넣었습니다. 미리보기를 보내 드리고 기록하겠습니다.
+
+### Assistant — 최종 답변
+
+동의합니다. 5패널 초안은 세부 설명 슬라이드 다섯 장을 한 장에 줄여 넣은 꼴이었습니다. 붙여넣은 평가의 원칙대로 다시 만들어 v3 미리보기를 보내 드렸습니다.
+
+## 바꾼 것
+
+- **위아래 두 줄**: 위는 Q1 "Who is my teammate?"(블록 1–4), 아래는 Q2 "How do I use my teammates?"(블록 5). 4번에서 아래로 "approved teammates" 화살표가 이어지고, 5번에서 1번으로 "next rollout"이 돌아갑니다.
+- **블록마다 그림 하나**:
+  1. 회색 agent와 행동/보상 고리 — 자기 경험만 씀
+  2. 작은 MLP 아이콘 — 자기 보상 예측
+  3. 같은 사건 묶음이 $\widehat r_i$, $\widehat r_j$로 들어가 비교 — "same question, two answers"
+  4. agent 그래프의 approve(초록 실선) / reject(빨강 점선) / abstain(회색 점선)
+  5. 팀원 Critic → 내 이력 평가 → Max-GAE → Actor, 옆에 Critic(own return)
+- **Reward Probing 강조**: 가장 넓은 블록이고 테두리가 굵습니다.
+- **뺀 것**: 실험 곡선, RWARE 장면, 수식 상세(MLP 입력, $b$ 식, 성숙·round 조건). 실험 곡선은 결과 슬라이드(12)에서 크게 쓰고, 식은 각 상세 슬라이드로 넘기는 것을 권합니다.
+
+## 약한 곳
+
+- 1번 그림(회색 육각형과 화살표)은 의미가 약합니다. PowerPoint로 다시 그리신다면 "agent가 환경과 주고받는 고리" 아이콘으로 바꾸는 편이 낫습니다.
+- 5번의 Critic 상자는 화살표가 없습니다. "Critic은 남의 값을 받지 않는다"는 뜻으로 일부러 떨어뜨렸는데, 말로 한 번 짚어 주셔야 합니다.
+
+## 파일
+
+[overall_v3.tex](presentation/arch_slide_20261103/overall_v3.tex), 미리보기 [preview_v3.pdf](presentation/arch_slide_20261103/preview_v3.pdf). 넣는 법은 이전과 같습니다(`pgct_style.tex`와 함께 올리고 `\resizebox{\linewidth}{!}{\input{overall_v3.tex}}`).
+
+이 대화는 T188로 기록했습니다. 커밋은 하지 않았습니다.
+
+## 원문 기록 T189 — 2026-11-03 KST, Claude Code (정확한 시각 기록하지 않음)
+
+### 사용자 — 원문
+
+u_t = P(o_{i,t})가 뭔지 설명해줘
+
+### 수행 기록 — 원문 대화와 별도
+
+- 질문 turn이다. `latent_team/reward_probe_ac.py`의 `public_view()`·`PUBLIC_CHANNELS`, `paper/english/main.tex`의 Information model 절, `docs/REWARD_PROBE_AC.md`, D83을 확인했다. 파일 변경 없음(기록 제외). 커밋 없음.
+
+### Assistant — 최종 답변
+
+$u_t = P(o_{i,t})$는 **agent $i$의 관측 $o_{i,t}$에서 "누가 봐도 똑같이 해석되는 부분"만 남긴 공개 관측**입니다. $P$는 그 추출 함수(public projection)입니다.
+
+## 왜 필요한가
+
+보상 probe는 두 agent에게 **같은 질문**을 던지고 답을 비교합니다. 그런데 원래 관측에는 관측자 기준 정보가 들어 있습니다.
+
+- ch4 "내 팀의 요청 선반", ch12 "내 목적지(goal)"는 **각자 자기 기준**으로 표시됩니다.
+- 그래서 빨강 agent와 파랑 agent가 각자 "내 goal에 배송"하는 장면은 원래 관측에서는 똑같이 보이고, 둘 다 보상 1을 예측합니다. 이러면 팀이 갈리지 않습니다(D83, 명제 3의 확장).
+
+그래서 팀·개인 기준 정보를 지우고, 물리적으로 보이는 것만 남겨 질문을 만듭니다. 그래야 "모서리 G0 칸에 선반을 들고 들어가는 장면"이 두 agent에게 같은 질문이 되고, 보상을 받는 쪽만 높게 답합니다.
+
+## 무엇을 남기고 무엇을 지우나
+
+| | 내용 |
+|---|---|
+| **남김** | 자기 상태 6개(선반을 들고 있는지, 방향, highway 위인지) + 자기 주변 반경 2(5×5) 안의 물리 채널 11개(벽, 통로, 선반, 다른 agent, goal 칸 등) |
+| **지움** | ch4 요청 선반, ch12 내 goal, 절대 좌표, 개인 요청·반납·home 정보 |
+
+크기는 $6 + 11 \times 5 \times 5 = 281$차원입니다. 코드에서는 `public_view()`가 관측에서 ego 2–7번과 채널 `(0,1,2,3,5,6,7,8,9,10,11)`의 5×5 영역만 잘라 냅니다(`reward_probe_ac.py`의 `PUBLIC_CHANNELS`).
+
+## 어디에 쓰이나
+
+- **보상 예측기 입력**: $\widehat r_i(u_t, a_t, u_{t+1})$. 공개 관측 전·후와 행동으로 자기 보상을 예측합니다.
+- **probe**: 접촉 때 주고받는 사건 관측도 $u$ 형태라서, 받은 쪽이 자기 예측기에 그대로 넣을 수 있습니다.
+- **Actor·Critic은 $P$를 쓰지 않습니다.** 정책과 가치는 원래의 전체 관측(좌표 두 칸만 0)으로 학습합니다.
+
+## 알아 둘 점
+
+- 공개 관측에는 숨은 정보(이 선반이 요청됐는지)가 없어서, 같은 $u$ 전이라도 보상이 1일 때도 0일 때도 있습니다. 그래서 예측기는 **조건부 평균 보상**을 배우고, 비교하는 것도 그 평균입니다(논문 Individual Reward Prediction 절).
+- 슬라이드 2번 블록이나 Reward Modeling 상세 슬라이드에서 이렇게 한 줄로 쓸 수 있습니다: "$u_t = P(o_{i,t})$: public part of the observation (local physical layout, no team/request channels, no coordinates)."
+
+이 대화는 T189로 기록했습니다. 커밋은 하지 않았습니다.
+
+## 원문 기록 T190 — 2026-11-03 KST, Claude Code (정확한 시각 기록하지 않음)
+
+### 사용자 — 원문
+
+[첨부 이미지 2장: 수식 $\hat r_i(q;\psi_i)=\mathrm{MLP}_{\psi_i}(u_t,\mathrm{onehot}(a_t),u_{t+1})$와 $q=(u_t,a_t,u_{t+1})$. 세션 scratchpad의 `images\4.png`, `images\5.png`]
+
+두 식 설명해줘
+phi_i가 왜 있는지?
+MLP로 넘길꺼면서 왜 q라는 결합을 만들었는지?
+
+### 수행 기록 — 원문 대화와 별도
+
+- 질문 turn이다. `paper/method_equations.tex`(eq:model, eq:rloss, eq:probe, eq:distance), `paper/english/main.tex`의 Individual Reward Prediction 절, `latent_team/reward_probe_ac.py`의 `Query`를 근거로 답했다. 파일 변경 없음(기록 제외). 커밋 없음.
+
+### Assistant — 최종 답변
+
+먼저 기호 하나를 바로잡겠습니다. 식에 있는 것은 $\phi_i$가 아니라 $\psi_i$(프사이)입니다. 뜻은 같은 자리이니 아래에서는 $\psi_i$로 부르겠습니다.
+
+## 두 식의 뜻
+
+- $q=(u_t,a_t,u_{t+1})$: **공개 전이 하나**입니다. "이 공개 장면 $u_t$에서 행동 $a_t$를 했더니 공개 장면 $u_{t+1}$이 됐다"는 사건 한 건이고, 보상 값은 들어 있지 않습니다.
+- $\widehat r_i(q;\psi_i)=\mathrm{MLP}_{\psi_i}(u_t,\mathrm{onehot}(a_t),u_{t+1})$: agent $i$의 보상 예측기가 그 전이를 보고 "**내가** 이걸 했다면 받을 보상"을 예측한 값입니다. 행동은 0–4의 범주형이라 one-hot(5칸)으로 바꿔 붙이고, 입력은 $281+5+281=567$차원입니다.
+- 학습: 자기 경험 $(q, r_i)$로 $(\widehat r_i(q;\psi_i)-r_i)^2$를 줄입니다(논문 식 rloss). 정답은 **자기 보상**뿐입니다.
+
+## $\psi_i$가 왜 있나
+
+$\psi_i$는 **agent $i$ 자신의 MLP 가중치**입니다. 아래첨자 $i$가 핵심입니다.
+
+- agent마다 따로 있고, 자기 보상으로만 학습됩니다. 파라미터 공유가 없습니다.
+- 그래서 $\widehat r_i(\cdot;\psi_i)$는 "agent $i$의 보상 규칙"을 담은 함수가 되고, $\widehat r_j(\cdot;\psi_j)$와 비교할 수 있습니다. 같은 팀이면 두 함수가 같은 질문에 비슷하게 답하고, 다른 팀이면 다르게 답합니다.
+- 정리하면 $\psi_i$ = "답하는 사람"입니다. 이게 PGCT의 비교 대상입니다.
+- 또 하나: 가중치 $\psi_i$와 보상 값은 **보내지 않습니다.** 접촉 때 보내는 것은 질문($q$)과 그 질문에 대한 예측값뿐입니다.
+
+## MLP에 넣을 거면서 왜 $q$를 따로 정의했나
+
+$q$는 MLP의 입력 형식이기 전에 **"질문"이라는 단위**이기 때문입니다. 알고리즘의 나머지 단계가 모두 $q$ 단위로 움직입니다.
+
+1. **probe 집합이 $q$의 모음입니다.** $\mathcal Q_{ij}=\mathcal E_i\cup\mathcal E_j\cup M(\mathcal E_i\cup\mathcal E_j)$에서 원소 하나하나가 $q$입니다.
+2. **좌우 대칭 $M$이 $q$에 작용합니다.** $u_t$와 $u_{t+1}$을 뒤집고 LEFT/RIGHT 행동을 바꿉니다. 그래서 MLP 입력이 아니라 원래 구조(장면, 행동, 다음 장면)를 알아야 정의됩니다.
+3. **거리 식이 $q$ 위의 합입니다.** $D_{ij}=\sum_{q}|\widehat r_i(q)-\widehat r_j(q)| / \sum_{q}(|\widehat r_i(q)|+|\widehat r_j(q)|)$. 같은 $q$를 두 예측기에 넣는다는 것이 이 식의 전부입니다.
+4. **교환되는 것도 $q$입니다.** 접촉 때 상대에게 보내는 사건 관측이 $q$(보상 없음)입니다.
+
+즉 $q$는 "무엇을 묻는가"(공유, 공개), $\psi_i$는 "누가 답하는가"(개인, 비공개)를 나눠 쓰기 위한 표기입니다. MLP는 그 답하는 방법의 **구현 하나**일 뿐입니다. 실제로 이전 v1은 MLP가 아니라 경험 평균(조회표)으로 답했고, 그때도 $q$와 비교 식은 같았습니다. one-hot은 MLP라서 필요한 입력 변환이라 $q$ 정의에는 넣지 않고 모델 식에만 둔 것입니다.
+
+## 발표에서 한 줄로
+
+"$q$ is a public transition — the question. Each agent answers it with its own reward model $\widehat r_i(\cdot;\psi_i)$, trained only on its own reward. Teammates give similar answers."
+
+이 대화는 T190으로 기록했습니다. 커밋은 하지 않았습니다.
+
+## 원문 기록 T191 — 2026-11-03 KST, Claude Code (정확한 시각 기록하지 않음)
+
+### 사용자 — 원문
+
+일단 교수님께 v1, v2 모델 둘 다 보여주는게 좋을꺼 같아 v1에서의 r_i 식도 알려줘
+
+### 수행 기록 — 원문 대화와 별도
+
+- 질문 turn이다. `latent_team/reward_probe_ac.py`(`ACConfig`, `RewardStats.response`, `LocalRewardPredictor`, `ACController.__call__`)를 읽어 v1 식과 기본값을 확인했다. 실패 근거는 E56·E57·E59, D84. 파일 변경 없음(기록 제외). 커밋 없음.
+
+### Assistant — 최종 답변
+
+v1과 v2는 "공개 전이 $q$에 대한 자기 보상을 예측해 비교한다"는 틀은 같고, **예측기와 비교 규칙이 다릅니다.** 아래 식은 코드(`latent_team/reward_probe_ac.py`)의 기본값 그대로입니다. 참고로 v1 코드에서는 이 예측기를 $\phi_i(q)$라고 불렀습니다. 앞에서 물으신 "phi_i"가 이 이름이라면, v2의 $\psi_i$(MLP 가중치)와는 다른 것입니다.
+
+## v1: 경험 조회표(비모수 조건부 평균)
+
+agent $i$가 겪은 공개 전이 중 **$q$와 정확히 같은 것**만 모읍니다. $\mathcal T_i(q)=\{t: q_{i,t}=q\}$, $N_i(q)=|\mathcal T_i(q)|$라 하면
+
+$$\bar r_i(q)=\frac{1}{N_i(q)}\sum_{t\in\mathcal T_i(q)} r_{i,t},\qquad s_i(q)=\text{표본 표준편차},\qquad \mathrm{se}_i(q)=\frac{s_i(q)}{\sqrt{N_i(q)}}$$
+
+$$\phi_i(q)=\begin{cases}\bar r_i(q) & N_i(q)\ge 8,\ \text{episode 수}\ge 3,\ s_i(q)\le 0.10,\ \mathrm{se}_i(q)\le 0.04\\ \bot\ (\text{보류}) & \text{그 밖}\end{cases}$$
+
+- "정확히 같다"는 공개 관측 전·후와 행동의 해시가 같다는 뜻입니다. 기억은 최근 4,096개 전이(LRU)입니다.
+- 학습 파라미터가 없습니다. 자기 보상의 평균을 표로 저장할 뿐입니다.
+
+**v1 비교 규칙**
+- probe: 두 agent가 가진 공개 전이 전부(실제로 겪은 것 + 본 장면에서 만든 가상 행동 분기)를 합치고, **둘 다 답할 수 있는 것** $\mathcal S_{ij}=\{q: \phi_i(q)\ne\bot,\ \phi_j(q)\ne\bot\}$만 씁니다(최대 64개, 최소 4개).
+- 거리: $d_{ij}=\frac{1}{|\mathcal S_{ij}|}\sum_{q\in\mathcal S_{ij}}|\phi_i(q)-\phi_j(q)|$ (절대 차이의 평균, 정규화 없음)
+- 불확실성 $U=2\cdot\mathrm{mean}(\mathrm{se}_i+\mathrm{se}_j)$, 신호 $=\min(\text{range}\,\phi_i,\ \text{range}\,\phi_j)$
+- 승인: round $\ge 8$, 신호 $\ge 0.2$, $\max(d_{ij}, \bar d_{ij}) + U < 0.12$ (EMA $\beta=.35$)
+
+## v2: MLP 예측기(현재)
+
+$$\widehat r_i(q;\psi_i)=\mathrm{MLP}_{\psi_i}(u_t,\mathrm{onehot}(a_t),u_{t+1}),\qquad \mathcal L_i=\mathbb E\big[(\widehat r_i(q;\psi_i)-r_i)^2\big]$$
+
+- 자기 전이 20,000개 + 자기 보상 사건($r_i\ge .5$) 512개, 배치의 25%를 사건에서 뽑습니다.
+- 성숙: 자기 사건 $\ge 20$, 사건에 대한 평균 예측 $\ge .3$. 미성숙이면 보류.
+- probe: 두 agent의 최근 사건 각 32개 + 좌우 대칭.
+- 거리: $D_{ij}=\sum_q|\widehat r_i-\widehat r_j| \,/\, \sum_q(|\widehat r_i|+|\widehat r_j|)$ (0–1로 정규화)
+- 승인: round $\ge 3$, EMA $< 0.5$, 두 agent 모두 성숙.
+
+## 한눈에 비교
+
+| | v1 | v2 |
+|---|---|---|
+| 예측기 | 정확히 같은 공개 전이의 평균 보상(조회표) | 자기 보상으로 학습한 MLP |
+| 일반화 | 없음(한 번도 본 적 없는 $q$에는 답 못 함) | 비슷한 장면에 일반화 |
+| 보류 조건 | 표본 8개·episode 3개 미만, 분산 큼 | 보상 사건 20개 미만 |
+| probe | 공개 전이 전부 중 둘 다 답한 것 | 보상 사건 + 좌우 대칭 |
+| 거리 | 절대 차이 평균 | 척도 무관 정규화 거리 |
+| 문턱 | 0.12(+불확실성), 8 round | 0.5, 3 round |
+
+## v1이 실패한 이유(교수님께 보여 드릴 핵심)
+
+- **결과(E56, seed 1, 5M)**: 2.87M까지 승인 5회, 5M 동안 전이 48 arc. 사실상 IPPO와 같았습니다(첫 전이 전까지 비트 단위로 동일).
+- **원인(E57, D84)**:
+  1. 정확 일치라서 같은 장면이 8번 이상 반복돼야 답합니다. 배송처럼 드문 사건은 거의 답을 못 합니다.
+  2. 같은 공개 배송 장면이라도 요청 여부(숨은 정보)에 따라 보상이 1 또는 0이라 표준편차가 약 .45입니다. 분산 필터($\le .10$)가 **팀을 가르는 사건을 오히려 버립니다.**
+  3. 가상 분기 질의는 보상 라벨이 없어 한 번도 답을 받지 못했습니다.
+  4. 모든 질의의 평균이라 드문 판별 사건이 흔한 0-보상 이동에 묻힙니다.
+  5. 문턱 0.12가 보상 차이 규모에 비해 엄격합니다.
+- **v2로 고친 결과(E59, 같은 경험 재생)**: v1 판정 정확도 .25–.63, v2 1.00(결정한 10쌍 모두 정답, 다른 팀 승인 0).
+
+## 발표 구성 제안
+
+v1을 "첫 시도와 실패 원인", v2를 "그 원인을 하나씩 고친 설계"로 한 장씩 두면 설계 이유가 자연스럽게 설명됩니다. 위 비교 표를 그대로 쓰고, 실패 원인 1–2번(정확 일치, 분산 필터)만 강조해도 충분합니다.
+
+주의할 점: v1 시절의 전이 방식은 critic 증류였고, 지금의 Max-GAE는 v2와 함께 쓰입니다. 그래서 v1·v2 비교는 **팀 식별 부분의 비교**로만 말해야 합니다.
+
+이 대화는 T191로 기록했습니다. 커밋은 하지 않았습니다.
+
+## 원문 기록 T192 — 2026-11-03 KST, Claude Code (정확한 시각 기록하지 않음)
+
+### 사용자 — 원문
+
+결론은 v2가 팀 분간하는데에는 어느정도 성과가 있었다는 거지?
+
+### 수행 기록 — 원문 대화와 별도
+
+- 질문 turn이다. 기존 기록 E59·E60·E65·E73으로 답했다. 파일 변경 없음(기록 제외). 커밋 없음.
+
+### Assistant — 최종 답변
+
+네. **v2는 팀을 가르는 데 분명한 성과가 있었습니다. 다만 조건이 붙습니다.** 그리고 그 팀 정보로 학습이 빨라지는지는 아직 보이지 않았습니다.
+
+## 성과의 근거
+
+| 근거 | 조건 | 결과 |
+|---|---|---|
+| E59 오프라인 재생 | 5M IPPO 경험, seed 1 | 결정한 10쌍 모두 정답, 다른 팀 승인 0(v1은 .25–.63) |
+| E60 실제 경험량 재생 | 1M 이전, 데이터 4개 | 첫 같은 팀 승인 모서리 0.26–0.32M, 인접 0.86M, 다른 팀 승인 0 |
+| E65 학습 중(v2 + 옛 증류) | seed 1, 5M | 같은 팀 거리 .25 대 다른 팀 .99(0.25M 무렵), 실제 전이의 93.7%가 같은 팀 |
+| E73 최종 알고리즘(pgct_max) | 1M 분기, seed 1·3 | 다른 팀 승인 0, 성숙한 같은 팀 쌍은 모두 승인 |
+
+## 붙는 조건
+
+- **보상 사건을 겪은 agent만 판정됩니다.** 사건이 없는 agent는 보류됩니다. E73에서도 a0는 끝까지 판정되지 않아, 같은 팀 arc 12개 중 6개만 승인됐습니다.
+- **후반 오승인이 한 번 있었습니다.** E65에서 4.28M 이후 다른 팀 arc 352개가 생겼고, 원인은 아직 모릅니다.
+- **근거의 범위가 좁습니다.** 환경 하나(RWARE 모서리 배치 중심), seed 1–2개입니다. 인접 배치에서는 판정이 늦었습니다(0.86M).
+
+## 발표에서의 표현
+
+"v2 reliably separated teams among agents that had experienced their own reward events (0 cross-team approvals online), but it abstains for agents without such events."
+
+여기까지가 Q1(팀 식별)의 성과입니다. Q2(그 팀원 정보로 학습이 빨라지는가)는 E73에서 아직 가속이 보이지 않았고, 분기 실험이 끝난 뒤 판정합니다.
+
+이 대화는 T192로 기록했습니다. 커밋은 하지 않았습니다.
+
+## 원문 기록 T193 — 2026-11-03 KST, Claude Code (정확한 시각 기록하지 않음)
+
+### 사용자 — 원문
+
+방금 성과에 대한 그래프를 만들어줘
+
+### 수행 기록 — 원문 대화와 별도
+
+- 새 폴더 `output/identification_figure_20261103/`: `plot_identification.py`, `team_identification_results.{pdf,png}`. 저장된 파일만 읽었다: `output/ac_offline_20261026/gate_eval.json`(E59), `output/pgct_docs_20261102/discovery_bins.csv`(E65), `output/branch_wandb_20261103/update.csv`(E73). 새 학습·평가 없음.
+- 범례·주석 겹침을 고쳐 세 번 그렸다. 한 번은 Bash heredoc 안의 `\n` 처리로 치환이 실패해 Edit 도구로 고쳤다.
+- 이 turn 동안 사용자 쪽에서 이미지 크기 안내 메시지만 들어왔다(사용자 문장 없음).
+- 사용자에게 그림을 보냈다(캡션: "v2 팀 식별 성과: (a) 오프라인 재생 v1 대 v2 판정, (b) 학습 중 거리 EMA, (c) 최종 PGCT 온라인 승인"). 커밋 없음.
+
+### Assistant — 진행 안내
+
+Q1 성과 그래프를 세 패널로 완성했습니다. 오프라인 v1/v2 판정, 학습 중 거리 EMA, 최종 PGCT의 온라인 승인입니다. 지금 보내 드리고 기록하겠습니다.
+
+### Assistant — 최종 답변
+
+v2 팀 식별 성과를 세 패널 그래프로 만들어 보내 드렸습니다. 숫자는 모두 저장된 실험 파일에서 다시 읽었습니다.
+
+## 패널별 내용
+
+| 패널 | 무엇 | 조건 | 보이는 것 |
+|---|---|---|---|
+| (a) 오프라인 재생 | 15쌍에 대한 v1·v2 판정 결과(정답/오답/보류) | E59, A+C IPPO seed 1의 0.26–5M 경험 | v1 정답 5·오답 3·보류 7(정확도 .62), v2 정답 10·오답 0·보류 5(정확도 1.00). 두 방법 모두 다른 팀 승인 0 |
+| (b) 학습 중 | 같은 팀/다른 팀 쌍의 응답 거리 EMA, 문턱 0.5 | E65, v2 + 옛 critic 증류, seed 1, 5M | 같은 팀 .25 → .08, 다른 팀 .99 → .6. 4.28M 이후 구간(옅은 빨강)에 다른 팀 승인이 생김 |
+| (c) 최종 PGCT 온라인 | 승인된 directed arc 수(같은 팀/다른 팀) | E73, pgct_max, 1.024M 분기, seed 1·3 | 같은 팀 20k step에 2 → 0.25M(s1)·0.39M(s3)에 6(성숙한 같은 팀 쌍 전부), 다른 팀은 계속 0 |
+
+## 발표에서 짚을 점
+
+- (a)는 "v1에서 v2로 바꾼 이유", (b)는 "학습 중에도 두 팀이 갈린다", (c)는 "최종 알고리즘이 온라인으로 같은 팀만 승인한다"를 보여 줍니다.
+- (b)의 평균 곡선은 4.28M 이후에도 0.5 위에 있지만, 그 구간에 일부 다른 팀 쌍이 문턱 아래로 내려와 승인됐습니다. 평균이 개별 쌍을 가린다는 점을 질문받으면 이렇게 설명하시면 됩니다. 원인은 아직 분석하지 않았습니다.
+- (c)의 최댓값 6은 같은 팀 arc 12개 중 절반입니다. 보상 사건을 겪지 못한 a0(팀0)가 판정에서 빠졌기 때문입니다.
+- 모두 seed 1–2개, 환경 하나(모서리 배치)의 결과입니다.
+
+## 파일
+
+`output/identification_figure_20261103/team_identification_results.{pdf,png}`(슬라이드에는 PDF를 권합니다), 다시 그리기는 `plot_identification.py`.
+
+이 대화는 T193으로 기록했습니다. 커밋은 하지 않았습니다.
+
+## 원문 기록 T194 — 2026-11-03 KST, Claude Code (정확한 시각 기록하지 않음)
+
+### 사용자 — 원문
+
+[첨부 이미지: "내부 과정: 공통 질의 생성" 제목, 상자 친 수식 $\mathcal Q^u_{ij}=\mathcal E^u_i\cup\mathcal E^u_j\cup M(\mathcal E^u_i\cup\mathcal E^u_j)$, "여기서 $M$은 좌우 대칭 변환입니다." 세션 scratchpad의 `images\6.png`]
+
+이 수식 표현 너무 AI 느낌나지 않아?
+
+### 수행 기록 — 원문 대화와 별도
+
+- 의견 질문 turn이다. 논문 Reward Probes 절의 정의(최근 자기 사건 32개, 좌우 대칭, rollout 시작 시점)를 근거로 답했다. 파일 변경 없음(기록 제외). 커밋 없음.
+
+### Assistant — 최종 답변
+
+네, 그렇게 보일 만합니다. 다만 수식 자체가 문제는 아닙니다. 합집합으로 쓰는 것은 논문에서 흔한 표기입니다. AI 느낌은 **수식을 감싸는 형식**에서 나옵니다.
+
+## 어디서 그런 느낌이 나는가
+
+- **"내부 과정: 공통 질의 생성" 같은 제목.** 명사를 이어 붙인 소제목은 생성된 글의 전형적인 말투입니다.
+- **수식에 상자를 친 것.** 핵심 식 하나에 상자를 치는 것은 AI 답변에서 자주 보이는 습관입니다. 논문이나 발표에서는 거의 쓰지 않습니다.
+- **"여기서 $M$은 ~입니다."** 기호 하나만 형식적으로 풀고 끝납니다. 무엇을 뒤집는지, 왜 필요한지가 없습니다.
+- **청중에게 필요 없는 기호.** 위첨자 $u$(rollout 번호)는 논문의 인과성 설명용입니다. 발표에서는 기호만 늘립니다.
+
+## 고치는 방향
+
+발표에서는 식보다 **말과 그림**으로 먼저 보여 주고, 식은 작게 붙이는 편이 자연스럽습니다.
+
+**1안: 문장으로만**
+> Probe set = the recent reward events of both agents, plus their left–right mirrors.
+
+**2안: 식을 쓰되 기호를 줄이고 바로 풀기**
+> $\mathcal Q_{ij} = \mathcal E_i \cup \mathcal E_j \cup M(\mathcal E_i \cup \mathcal E_j)$
+> $\mathcal E_i$: 32 recent reward events of agent $i$ (public view). $M$: mirror left–right, so a delivery at one corner goal becomes a delivery at the other.
+
+**3안: 그림 중심**
+"events of $i$", "events of $j$", "mirrored" 카드 세 개가 한 묶음으로 모이는 그림을 두고, 식은 그 아래 한 줄로 작게 씁니다. 논문 그림 2(`fig_discovery.tex`)의 왼쪽 부분이 이 구성입니다.
+
+**$M$을 설명할 때 꼭 넣을 한 문장:** "왜 뒤집는가"입니다. 모서리 배치에서 왼쪽 goal 배송을 뒤집으면 오른쪽 goal 배송처럼 보입니다. 그래서 한 팀의 경험만으로도 "상대 팀 goal에서 배송했다면?"이라는 질문을 만들 수 있고, 두 팀의 답이 갈립니다. 이 이유가 있어야 $M$이 장식이 아니라 핵심 장치로 보입니다.
+
+## 정리
+
+제목은 "Common Reward Probes"처럼 짧게 하고, 상자를 빼고, 위첨자 $u$를 빼고, $M$을 "왜"와 함께 한 문장으로 설명하면 AI 느낌이 크게 줄어듭니다. 앞에서 말씀드린 교수님의 GPT 사용 금지를 생각하면, 위 문장도 그대로 옮기기보다 직접 다듬어 쓰시는 것을 권합니다.
+
+이 대화는 T194로 기록했습니다. 커밋은 하지 않았습니다.
+
+## 원문 기록 T195 — 2026-11-03 KST, Claude Code (정확한 시각 기록하지 않음)
+
+### 사용자 — 원문
+
+[첨부 이미지: 수식 $\mathcal L_i^r=\mathbb E_{(q,r_i)\sim\mathcal B_i^{mix}}[(\hat r_i(q)-r_i)^2]$. 세션 scratchpad의 `images\7.png`]
+
+여기서 mathbb E 밑에 있는건 뭐야
+
+### 수행 기록 — 원문 대화와 별도
+
+- 질문 turn이다. 논문 Individual Reward Prediction 절과 `ACV2Config` 기본값(buffer 20,000, event buffer 512, event_fraction .25, batch 256, 50 step, 5 update마다)을 근거로 답했다. 파일 변경 없음(기록 제외). 커밋 없음.
+
+### Assistant — 최종 답변
+
+$\mathbb E$ 밑의 $(q,r_i)\sim\mathcal B_i^{\rm mix}$는 **"평균을 어떤 데이터에서 내는가"**를 적은 것입니다. "agent $i$의 혼합 버퍼 $\mathcal B_i^{\rm mix}$에서 (공개 전이 $q$, 그때 받은 자기 보상 $r_i$) 쌍을 뽑아서"라는 뜻입니다.
+
+## 각 기호
+
+- $(q, r_i)$: 학습 표본 한 개. $q=(u_t,a_t,u_{t+1})$는 공개 전이, $r_i$는 그 step에 agent $i$가 실제로 받은 **자기** 보상입니다.
+- $\sim$: "~에서 뽑는다(샘플링)".
+- $\mathcal B_i^{\rm mix}$: agent $i$만의 **혼합 버퍼**입니다. 두 저장소를 섞어 씁니다.
+  - 최근 자기 전이 20,000개
+  - 자기 보상 사건($r_i \ge 0.5$, 배송·반납) 512개
+  - 한 배치(256개)의 **25%를 사건 저장소에서**, 나머지를 전체 전이에서 뽑습니다. 그래서 "mix"입니다.
+- $\mathbb E[\cdot]$: 그렇게 뽑은 표본들의 평균. 실제로는 배치 256개의 평균 제곱 오차입니다.
+
+즉 식 전체는 "자기 경험에서 뽑은 배치로, 예측 보상과 실제 자기 보상의 제곱 오차 평균을 줄인다"는 MSE 손실입니다. 5 update마다 50 step씩 학습합니다.
+
+## 왜 섞는가
+
+배송·반납 같은 큰 보상 사건은 전체 전이의 0.5%도 안 됩니다. 그냥 뽑으면 배치가 거의 보상 0인 이동으로 채워져, 예측기가 "어디서나 0"으로 수렴합니다. 그런데 팀을 가르는 정보는 바로 그 드문 사건에 있습니다. 그래서 사건을 따로 모아 배치의 4분의 1을 채웁니다(E57, D84).
+
+## 발표에서
+
+슬라이드에서는 아래첨자를 길게 쓰기보다 이렇게 풀어 주는 편이 읽기 쉽습니다.
+
+> $\mathcal L_i = \mathrm{mean}\,(\widehat r_i(q) - r_i)^2$ over own experience, with 25% of each batch drawn from own reward events.
+
+이 대화는 T195로 기록했습니다. 커밋은 하지 않았습니다.
+
+## 원문 기록 T196 — 2026-11-03 KST, Claude Code (정확한 시각 기록하지 않음)
+
+### 사용자 — 원문
+
+L(psi)=1/N sum (hatr - r)^2은?
+
+### 수행 기록 — 원문 대화와 별도
+
+- 질문 turn이다. 파일 변경 없음(기록 제외). 커밋 없음.
+
+### Assistant — 최종 답변
+
+좋습니다. 그 형태가 실제로 계산하는 값이고, 발표에서는 오히려 더 읽기 쉽습니다. 다만 기호 세 가지는 살려 두는 편이 정확합니다.
+
+$$\mathcal L_i(\psi_i)=\frac{1}{N}\sum_{n=1}^{N}\big(\widehat r_i(q_n;\psi_i)-r_{i,n}\big)^2$$
+
+- **아래첨자 $i$**: 각 agent가 자기 예측기를 따로 학습한다는 점이 PGCT의 핵심이라 빼지 않는 것이 좋습니다. $\mathcal L(\psi)$만 쓰면 하나의 공용 모델처럼 읽힙니다.
+- **$q_n$, $r_{i,n}$**: 무엇을 넣고 무엇과 비교하는지(공개 전이와 그때 받은 자기 보상)가 보여야 합니다.
+- **$N$**: 배치 크기 256입니다.
+
+## $\mathbb E$ 식과의 차이
+
+두 식은 같은 손실입니다. $\mathbb E_{(q,r_i)\sim\mathcal B_i^{\rm mix}}$는 "어떤 분포의 평균인가"까지 식에 담은 표현이고, $\frac1N\sum$은 그 평균을 배치 256개로 실제 계산한 표현입니다.
+
+$\frac1N\sum$로 쓰면 "어디서 뽑았는가"가 식에서 빠지므로, 한 줄로 덧붙여야 합니다.
+
+> $(q_n, r_{i,n})$: sampled from agent $i$'s own experience; 25% of each batch are own reward events.
+
+이 한 줄이 있어야 "드문 보상 사건을 과표집한다"는 설계가 전달됩니다. 슬라이드에는 이 형태를 쓰고, 논문은 지금의 $\mathbb E$ 식을 그대로 두는 것을 권합니다.
+
+이 대화는 T196으로 기록했습니다. 커밋은 하지 않았습니다.
+
+## 원문 기록 T197 — 2026-11-03 KST, Claude Code (정확한 시각 기록하지 않음)
+
+### 사용자 — 원문
+
+그래프 조금 더 잘 만들어봐 너무 이해하기 어렵고 가시성이 떨어지잖아
+
+### 수행 기록 — 원문 대화와 별도
+
+- dataviz 스킬 지침을 읽고 따랐다. 색은 그 스킬 참조 팔레트의 1·2번(파랑 #2a78d6, 주황 #eb6834)이다. 문서상 1–3번은 색각 이상 검사를 통과한 조합이다. 이 PC에 node가 없어 검증 스크립트는 직접 돌리지 못했다.
+- 새 파일(`output/identification_figure_20261103/`): `plot_identification_v2.py`, `id_results.{pdf,png}`(세 패널), `id_a_offline.{pdf,png}`, `id_b_training.{pdf,png}`, `id_c_online.{pdf,png}`. 이전 판(`team_identification_results.*`)은 지우지 않았다. 데이터 출처는 T193과 같다(E59, E65, E73).
+- 라벨 겹침을 고치며 세 번 렌더링해 확인했다. 사용자 쪽에서 이미지 크기 안내 메시지만 몇 번 들어왔다(사용자 문장 없음).
+- 진행 안내 하나를 보냈다. 사용자에게 `id_results.png`를 보냈다(캡션: "팀 식별 성과 그래프 개선판(세 패널). 패널별 단독 파일 id_a_offline / id_b_training / id_c_online도 같은 폴더에 있습니다."). 커밋 없음.
+
+### Assistant — 진행 안내
+
+그래프를 다시 설계했습니다. 큰 글씨, 결론을 담은 제목, 선 옆 직접 라벨, arc 대신 "쌍" 단위입니다. 지금은 겹치는 라벨 두 곳을 손보고 있습니다.
+
+### Assistant — 최종 답변
+
+그래프를 슬라이드용으로 다시 만들었습니다. 같은 데이터이고, 읽는 사람이 축과 범례를 해석하지 않아도 결론이 보이도록 바꿨습니다.
+
+## 바꾼 것
+
+- **제목이 결론을 말합니다.** "(a) Offline: v2 judges every decided pair correctly", "(b) Training: teammates give similar answers", "(c) Final PGCT online: only teammates approved".
+- **(a) 가로 막대 + 숫자.** 정답 5·오답 3·보류 7(v1) 대 정답 10·보류 5(v2)를 막대 안에 크게 쓰고, 옆에 "5/8 correct", "10/10 correct"를 붙였습니다.
+- **(b) 선 옆에 이름.** "other team", "teammates"를 선 옆에 직접 쓰고, y축을 "answer distance (0 = same answers)"로 풀었습니다. 문턱은 "approve below 0.5"로 표시했습니다. 4.28M 이후 일부 다른 팀 쌍 승인은 옅은 음영으로 그대로 남겼습니다.
+- **(c) arc 대신 쌍.** directed arc 6개를 "approved pairs" 3쌍으로 바꿨습니다. 위 점선은 "all 6 teammate pairs", 3쌍에는 "every pair whose agents had their own reward events"라는 설명을 붙였습니다. 다른 팀은 "other team: 0 approved"로 직접 적었습니다.
+- **공통:** 글씨를 키우고(본문 11pt, 제목 12pt), 색은 파랑(같은 팀·정답)과 주황(다른 팀·오답) 두 가지로 통일하고, 격자는 옅은 실선으로 줄였습니다.
+
+## 파일
+
+`output/identification_figure_20261103/`
+- `id_results.{pdf,png}`: 세 패널을 한 장에
+- `id_a_offline`, `id_b_training`, `id_c_online` (`.pdf`, `.png`): 패널 하나씩. 슬라이드 한 장에 그래프 하나를 크게 넣을 때 씁니다.
+- `plot_identification_v2.py`: 다시 그리는 스크립트
+
+발표에서는 세 패널을 한 장에 넣기보다, 결과 슬라이드에 (b)나 (c) 하나를 크게 두고 나머지는 다음 장으로 나누는 편이 더 잘 보입니다.
+
+## 확인하지 못한 것
+
+색 조합의 색각 이상 검사는 스킬 문서의 검증 결과를 따랐습니다. 이 PC에 node가 없어 검증 스크립트를 직접 돌리지는 못했습니다. 그래서 색만으로 구분하지 않도록 선 종류와 직접 라벨을 함께 넣었습니다.
+
+이 대화는 T197로 기록했습니다. 커밋은 하지 않았습니다.
+
+## 원문 기록 T198 — 2026-11-03 KST, Claude Code (정확한 시각 기록하지 않음)
+
+### 사용자 — 원문
+
+[첨부 이미지: $\mathcal E_i^u=\{q: r_i\ge 0.5\}$, $u$: rollout index, $\mathcal Q_{ij}^u=\mathcal E_i^u\cup\mathcal E_j^u\cup M(\mathcal E_i^u\cup\mathcal E_j^u)$. 세션 scratchpad의 `images\8.png`]
+
+여기서 M이 필요한 이유가 뭐야
+
+### 수행 기록 — 원문 대화와 별도
+
+- 질문 turn이다. `latent_team/reward_probe_ac_v2.py`의 `mirror_view()`·`mirror_action()`, 논문 Reward Probes 절, E57(대칭 probe 단독 AUROC), E59(대칭을 끈 v2도 같은 판정), E65(후반 다른 팀 승인)를 근거로 답했다. 파일 변경 없음(기록 제외). 커밋 없음.
+
+### Assistant — 최종 답변
+
+$M$은 **"상대 팀 goal에서 같은 일을 했다면?"이라는 질문을 자기 경험만으로 만들어 내기 위해** 있습니다. 다만 지금까지 데이터로는 "꼭 필요하다"까지는 확인되지 않았습니다. 정확히는 판별을 보강하는 장치입니다.
+
+## $M$이 하는 일
+
+$M$은 공개 관측 5×5 창을 좌우로 뒤집고, 방향 채널과 LEFT/RIGHT 행동도 서로 바꿉니다(`mirror_view`, `mirror_action`). 지도 전체가 아니라 자기 주변 창만 뒤집습니다.
+
+모서리 배치에서는 이게 의미가 있습니다.
+- 왼쪽 아래 모서리 G0에서 배송하는 장면은 창 안에서 "왼쪽과 아래가 벽, 그 모서리에 goal"로 보입니다.
+- 이걸 좌우로 뒤집으면 "오른쪽과 아래가 벽, 그 모서리에 goal", 즉 **G1에서 배송하는 장면**이 됩니다.
+
+## 왜 필요한가
+
+팀을 가르는 핵심 질문은 "**내 goal이 아닌 쪽**에서 배송하면 보상을 받는가"입니다. 같은 팀은 둘 다 "아니오", 다른 팀은 서로 반대로 답합니다.
+
+$M$이 없으면 이 질문은 상대가 실제로 겪은 사건에서만 나옵니다. 그래서 다음 경우에 약해집니다.
+- **한쪽 사건이 적거나 치우칠 때.** 상대의 최근 사건이 몇 개 없거나, 대부분 반납(두 팀 모두 보상 +1을 받는 사건)이면 "다른 goal 배송" 질문이 거의 없습니다. 그러면 두 agent가 공통으로 1을 답하는 사건만 남아, 다른 팀인데도 가까워 보일 수 있습니다.
+- **같은 팀끼리 비교할 때.** 두 agent의 사건이 모두 같은 goal이면 "반대쪽 goal" 질문이 아예 없습니다. $M$이 있으면 둘 다 그 질문에 0을 답한다는 것까지 확인됩니다.
+
+$M$을 넣으면 사건 하나마다 "내 goal 버전"과 "반대 goal 버전" 질문이 항상 짝으로 들어갑니다. 상대의 사건 구성과 상관없이 판별 질문이 확보됩니다.
+
+## 근거와 한계
+
+- **대칭 질문 자체는 판별력이 있습니다.** E57 오프라인 측정에서 대칭 probe만으로 같은 팀/다른 팀 AUROC .91(사건이 없던 agent 1을 빼면 1.00)이었습니다. 예: agent 3은 자기 배송에 .89, 그 대칭에 .00, 상대 팀 배송의 대칭에 .87로 답했습니다.
+- **하지만 꼭 필요하다는 증거는 아직 없습니다.** E59에서 $M$을 끈 v2도 같은 판정을 냈습니다(10쌍 모두 정답). 그 데이터에서는 양 팀 모두 사건이 충분해서 실제 사건만으로도 갈렸기 때문으로 보입니다.
+- **가정이 하나 붙습니다.** 지도가 좌우 대칭이라는 것을 미리 안다는 가정입니다. 팀 라벨은 아니지만 환경 지식입니다. 비대칭 지도나 팀이 셋 이상이면 단순 좌우 대칭으로는 부족합니다.
+- E65의 후반 다른 팀 오승인이 "반납처럼 두 팀이 같이 답하는 사건이 probe를 채워서"인지, 그리고 $M$이 그걸 막는지는 아직 분석하지 않았습니다.
+
+## 발표에서 한 줄로
+
+"Mirroring turns each delivery at my goal into the same delivery at the other goal, so every pair is also asked the question that separates teams."
+
+질문을 받으면 "판별 질문을 항상 확보하기 위한 장치이고, 현재 데이터에서는 없어도 결과가 같았다"고 솔직하게 답하시는 편이 안전합니다.
+
+이 대화는 T198로 기록했습니다. 커밋은 하지 않았습니다.
+
+## 원문 기록 T199 — 2026-11-03 KST, Claude Code (정확한 시각 기록하지 않음)
+
+### 사용자 — 원문
+
+저거 그냥 없애도 돼?
+
+### 수행 기록 — 원문 대화와 별도
+
+- 질문 turn이다. `ACV2Config.mirror`(기본 True)와 `--ac-config` 덮어쓰기 경로, E59(대칭 끈 v2 같은 판정)를 근거로 답했다. 파일 변경 없음(기록 제외). 학습 없음. 커밋 없음.
+
+### Assistant — 최종 답변
+
+**발표에서 빼는 것은 괜찮지만, 알고리즘에서 지금 바로 빼는 것은 권하지 않습니다.** 어디서 빼느냐에 따라 답이 다릅니다.
+
+## 발표 슬라이드에서
+
+간단히 하려고 식에서 $M$을 빼는 것은 괜찮습니다. 다만 실제 실험(E65, 분기 실험 E73)은 모두 $M$을 켠 상태(`mirror=True`, 기본값)로 돌았습니다. 그래서 완전히 지우기보다 "probes: recent reward events of both agents (+ left–right mirrors)"처럼 한 마디는 남기는 편이 정확합니다. 결과를 보여 주면서 다른 방법을 설명한 꼴이 되면 안 됩니다.
+
+## 알고리즘(코드·논문)에서
+
+지금 빼면 안 되는 이유가 있습니다.
+- **돌아가는 결과가 모두 $M$을 쓴 것입니다.** 빼면 지금 결과를 새 방법의 근거로 쓸 수 없습니다.
+- **"없어도 같다"는 근거가 약합니다.** E59 한 번(seed 1, 5M 경험 재생, 모든 쌍이 접촉한다고 가정)뿐입니다. 이론상 $M$이 효과를 내는 곳은 사건이 적은 초반이나 한쪽 사건이 반납에 치우친 경우인데, 그 조건은 시험하지 않았습니다.
+
+반대로 뺄 이유도 분명히 있습니다.
+- $M$은 "지도가 좌우 대칭임을 안다"는 가정을 더합니다. 빼면 가정이 하나 줄어 논문의 일반성 주장이 깔끔해집니다. 심사에서 "그 대칭 지식은 어디서 오나"를 물을 수 있습니다.
+
+## 권하는 방법
+
+$M$을 켠 것과 끈 것을 비교하는 ablation을 한 번 하고 정하는 것입니다. 코드 수정은 필요 없습니다. `ACV2Config`에 `mirror` 옵션이 이미 있어서, `--ac-config`로 `{"mirror": false}`를 주면 됩니다.
+- 예: 지금 분기 실험과 같은 조건으로 `pgct_max` × seed 1·3·5, 0.5M(job당 약 5.3시간).
+- 결과가 같으면 논문에서 $M$을 빼고 가정을 줄입니다. 승인이 늦어지거나 오승인이 생기면 $M$을 남기고 그 결과를 근거로 씁니다.
+
+학습은 직접 시작하셔야 하니, 원하시면 실행 명령을 만들어 드리겠습니다.
+
+이 대화는 T199로 기록했습니다. 커밋은 하지 않았습니다.
+
+## 원문 기록 T200 — 2026-11-03 KST, Claude Code (정확한 시각 기록하지 않음)
+
+### 사용자 — 원문
+
+명령 만들어줘
+
+### 수행 기록 — 원문 대화와 별도
+
+- T199 다음 단계 버튼이다. `latent_team/train_from_scratch.py`의 인자 목록과 `plan()`(`--ac-config` JSON → `ACV2Config`, PGCT-D2 모드에 `contact_snapshot=True` 자동 적용, job 설정에 `reward_probe_ac_v2` 저장)을 확인해 명령을 만들었다. 이 PC에는 참조 실험·checkpoint가 없어 plan-only로 직접 검증하지 못했다.
+- 학습 시작 없음(사용자가 원래 PC에서 실행). 코드 변경 없음. 커밋 없음.
+
+### Assistant — 최종 답변
+
+$M$ 끔(mirror off) 비교 실험 명령입니다. 지금 분기 실험의 `pgct_max`와 **mirror 설정 하나만** 다릅니다. 원래 PC의 앱 밖 PowerShell에서 실행해 주세요.
+
+## 1. 설정 파일 만들기
+
+```powershell
+Set-Location 'C:\RWARE\MARL_RWARE\third_party\robotic-warehouse'; Set-Content -Path 'runs\ac_config_nomirror.json' -Value '{"mirror": false}' -Encoding ascii
+```
+
+`-Encoding ascii`는 일부러 넣었습니다. Windows PowerShell 5.1에서 utf8로 쓰면 파일 앞에 BOM이 붙어, Python의 JSON 읽기가 실패할 수 있습니다.
+
+## 2. (권장) 계획만 만들어 설정 확인
+
+```powershell
+& 'C:\Users\95101\anaconda3\envs\RWARE_MARL\python.exe' latent_team/train_from_scratch.py --env-variant b6_corner_indiv_pen005 --reward-probe-ac --ac-gate v2 --ac-config runs\ac_config_nomirror.json --team-reward individual --modes pgct_max --seeds 1 3 5 --timesteps 500000 --transfer-warmup 0 --init-checkpoint runs/ac_20261023_185556/b6_corner_indiv_pen005_ac_ippo_s1/checkpoint_01000.pt --stage-label pgctd2_nomirror --plan-only --output-dir runs\plancheck_nomirror
+```
+
+```powershell
+Select-String -Path runs\plancheck_nomirror\experiment.json -Pattern '"mirror"|"contact_snapshot"'
+```
+
+`"mirror": false`와 `"contact_snapshot": true`가 각각 3번(job 3개) 나오면 맞습니다. 이 폴더는 확인용이라 학습하지 않습니다.
+
+## 3. 본 실행
+
+```powershell
+Set-Location 'C:\RWARE\MARL_RWARE\third_party\robotic-warehouse'; $run = Join-Path 'runs' ('pgctd2_nomirror_br1M_' + (Get-Date -Format 'yyyyMMdd_HHmmss')); & 'C:\Users\95101\anaconda3\envs\RWARE_MARL\python.exe' latent_team/train_from_scratch.py --env-variant b6_corner_indiv_pen005 --reward-probe-ac --ac-gate v2 --ac-config runs\ac_config_nomirror.json --team-reward individual --modes pgct_max --seeds 1 3 5 --timesteps 500000 --transfer-warmup 0 --init-checkpoint runs/ac_20261023_185556/b6_corner_indiv_pen005_ac_ippo_s1/checkpoint_01000.pt --track --stage-label pgctd2_nomirror --output-dir $run
+```
+
+- job 3개(seed 1·3·5)가 차례로 돕니다. job당 약 5.3시간, 모두 약 16시간입니다.
+- **시작 시점:** 2단계의 `pgct_max_s5`가 끝난 뒤(11-04 새벽 추정) 시작하기를 권합니다. 그러면 1단계와 함께 학습 프로세스 2개만 돕니다.
+- **W&B 이름:** 실행 이름은 기존 `pgct_max` run과 같습니다(이름을 바꾸는 옵션이 없음). 대신 group이 `pgctd2_nomirror_br1M_…`이고 태그가 `pgctd2_nomirror`라서, W&B에서는 group으로 구분하시면 됩니다.
+
+## 비교할 것
+
+기존 `pgct_max` s1·s3·s5(mirror 켬)와 같은 seed끼리 봅니다.
+1. 첫 같은 팀 승인 시점(기존: 20k·26k step)
+2. 다른 팀 승인 최댓값(기존: 0)
+3. 끝에 승인된 같은 팀 쌍 수(기존: 3쌍)
+4. 참고: 평가 배송
+
+mirror는 보상 예측기 학습에는 영향을 주지 않고 비교에 쓰는 질문만 바꿉니다. 그래서 차이가 나면 probe 구성 때문이라고 말할 수 있습니다.
+
+끝나면 말씀해 주세요. W&B에서 내려받아 기존 결과와 같은 그래프로 비교해 드리겠습니다(`fetch_wandb.py`에 새 group만 추가하면 됩니다).
+
+이 대화는 T200으로 기록했습니다. 학습은 시작하지 않았고, 커밋은 하지 않았습니다.
+
+## 원문 기록 T201 — 2026-11-03 KST, Claude Code (정확한 시각 기록하지 않음)
+
+### 사용자 — 원문
+
+[첨부 이미지: "내부 과정 1: Donor 선택" 슬라이드 문구와 식 $C_{ij}^u=\mathbf 1[\exists t\in u: \|p_{i,t}-p_{j,t}\|_\infty\le 3]$. 세션 scratchpad의 `images\9.png`]
+
+이거 왜 갑자기 체비세브 거리 3을 넣은거야?
+난 관측거리인 5를 그대로 통신 가능하길 원했는데
+
+### 수행 기록 — 원문 대화와 별도
+
+- D62–D64, E41, D74, E64와 코드(`rware/multi_team_warehouse.py`의 `_agents_within_comm_range`, `latent_team/max_gae.py`의 `ContactEnv`)를 확인했다.
+- 기록: `DECISIONS.md` D109(사용자 의견, 결정 대기), 이 T201, 통합 사본 재생성. 코드·학습 변경 없음. 커밋 없음.
+
+### Assistant — 최종 답변
+
+갑자기 넣은 것이 아니라 **10-19에 환경을 바꿀 때 들어온 값이 그대로 남은 것**입니다. 다만 원래 의도(관측 거리 5)와 다르게 굳어진 것은 맞고, 그 근거도 나중에 틀린 것으로 확인됐습니다.
+
+## 어떻게 3이 됐나
+
+1. **10-19, 환경 후보 재설계(D62–D64).** E1-F의 약점을 정리하면서 "11×10 맵에 통신 5면 거의 모두가 연결되어 물리 제약이 사실상 없다"고 봤습니다(D62). 그때 외부 검토(GPT)가 제안한 후보 B가 "6 agent(3+3), **통신 거리 약 3**, 센서는 5 유지"였고(D63), 요청하셔서 그대로 구현했습니다(D64, E41).
+2. **같은 날 근거가 틀린 것으로 확인됐습니다.** 연결률을 재 보니 통신 5에서도 쌍의 약 절반만 범위 안이었습니다(E41). D62를 정정했지만, 통신 3은 되돌리지 않았습니다.
+3. **10-22, 기반 통일(D74).** 2×2 비교를 "6 agent·통신 3·감점 .005"로 통일하면서 지금의 `b6_corner_indiv_pen005`까지 모든 후보가 통신 3을 물려받았습니다.
+
+그래서 지금까지의 실험(A+C 본 학습, 분기 실험 E73)은 모두 **관측 5, 통신 3**입니다. 제가 이 차이를 다시 짚지 않은 채 식에 3을 쓴 것은 짚어 드렸어야 할 부분이었습니다.
+
+## 바꾸면 무엇이 달라지나
+
+- **관측에는 영향이 없습니다.** `communication_range`는 누가 누구와 "만났는지" 판정할 때만 쓰이고, 관측 창은 `sensor_range` 5입니다. 그래서 기존 1M IPPO checkpoint를 통신 5 실험에 그대로 쓸 수 있습니다. 처음부터 다시 학습할 필요가 없습니다.
+- **효과는 작을 것으로 봅니다.** 지금 설계는 "rollout(1,024 step) 중 한 번이라도 만났는가"로 접촉을 봅니다. 통신 3에서도 모든 쌍이 한 rollout 안에 만났습니다(E64, 30쌍 중 30쌍). 통신 5로 넓히면 v2 비교 기회는 조금 늘겠지만, donor 선택은 거의 같을 것입니다. 측정하지는 않았습니다.
+- **설명은 더 자연스러워집니다.** "보이는 범위 안의 agent와만 통신한다"는 가정이 "따로 정한 3칸"보다 이해하기 쉽고, 임의의 숫자라는 질문도 피할 수 있습니다.
+
+## 권하는 방법
+
+- **지금 발표:** 실제로 돌린 값인 3을 그대로 쓰고, "communication range 3 (observation range 5)"처럼 둘을 함께 적는 것이 정직합니다. 5로 바꿔 쓰면 결과와 설명이 어긋납니다.
+- **앞으로 통신 5로 가려면:** `env_candidates.py`에 통신 5 후보를 하나 추가하고(기존 후보와 기본값은 그대로), 같은 1M checkpoint에서 `pgct_max`를 다시 분기합니다. 공정한 비교를 위해 `oracle_max`도 같이 돌리는 것을 권합니다. 학습은 직접 시작하셔야 합니다.
+
+이 내용은 `DECISIONS.md` D109(결정 대기)와 대화 기록 T201로 남겼습니다. 코드는 바꾸지 않았고, 커밋하지 않았습니다.
+
+## 원문 기록 T202 — 2026-11-03 KST, Claude Code (정확한 시각 기록하지 않음)
+
+### 사용자 — 원문
+
+실험은 어차피 별 차이 없다니까 냅두고, 그냥 통신 5로 하고, M 제외해서 논문 수정해줘
+
+### 수행 기록 — 원문 대화와 별도
+
+- `paper/english/main.tex`에서 통신 거리(82행 "Chebyshev distance three", 193행 표 "Contact radius 3")와 $M$(107행, 공통 수식 `\ProbeEquation`, 그림 2) 위치를 확인했다.
+- 논문은 고치지 않았다. 실험 조건과 다르게 쓰는 문제를 설명하고 사용자 선택을 기다린다. 커밋 없음.
+
+### Assistant — 최종 답변
+
+그대로 고치기 전에 한 가지는 짚어야 합니다. **논문의 결과(E65 발견 로그, E73 분기 실험)는 모두 통신 3과 $M$을 켠 상태로 나온 것입니다.** 방법을 "통신 5, $M$ 없음"으로 바꿔 쓰고 이 결과를 그대로 붙이면, 실제로 돌리지 않은 방법의 결과를 보고하는 것이 됩니다. 심사에서 코드와 대조되면 문제가 되고, 연구 윤리상으로도 안 됩니다. 그래서 이 형태로는 고치지 않았습니다.
+
+또 제 앞 답변을 바로잡겠습니다. "별 차이 없다"는 확인된 사실이 아닙니다.
+- **통신 5:** "효과가 작을 것"이라는 제 예상이었고, 측정하지 않았습니다. 통신 3에서 만난 쌍은 통신 5에서도 반드시 만나지만, 반대는 아닙니다. 그래서 비교와 승인이 더 많이 일어나고, 오승인이 늘지 줄지는 모릅니다.
+- **$M$:** 끈 결과가 같았던 것은 오프라인 재생 한 번(E59)뿐입니다.
+
+## 정직하게 원하시는 방향으로 고치는 방법
+
+방법 절은 원하시는 대로 쓰고, 실험 절에서 실제 조건을 밝히는 방식입니다.
+
+1. **통신 거리를 일반 변수로.** 방법 절에서 "agents communicate within range $r_c$; a natural choice is the observation range ($r_c = 5$)"처럼 씁니다. 실험 절과 설정 표에는 "our runs use $r_c = 3$"을 남깁니다. 결과는 더 좁은 접촉 조건에서 나온 것이라고 밝히는 셈입니다.
+2. **$M$은 핵심에서 빼고 선택 사항으로.** 공통 probe 정의는 $\mathcal Q_{ij}=\mathcal E_i\cup\mathcal E_j$로 바꾸고, "when the map has a known left–right symmetry, probes can be augmented with mirrored copies; our runs use this augmentation, and an offline replay without it gave identical decisions"를 덧붙입니다. 이렇게 하면 지도 대칭 가정이 핵심 방법에서 빠집니다.
+3. **나중에 통신 5·$M$ 없음 실험을 돌리면** 그 결과로 실험 절을 바꾸고, 위의 "our runs use…" 문장을 지웁니다.
+
+이 방식이면 방법은 원하시는 형태가 되고, 결과와 조건은 어긋나지 않습니다. 영어·한국어 논문, 공통 수식 파일, 그림 2를 함께 고치고 다시 컴파일하는 작업입니다.
+
+이 대화는 T202로 기록했습니다. 논문은 아직 고치지 않았고, 커밋하지 않았습니다.
+
+## 원문 기록 T203 — 2026-11-03 KST, Claude Code (정확한 시각 기록하지 않음)
+
+### 사용자 — 원문
+
+그렇게 고쳐줘
+
+### 수행 기록 — 원문 대화와 별도
+
+- T202 다음 단계 버튼이다. 수정 파일: `paper/method_equations.tex`, `paper/english/main.tex`, `paper/korean/main.tex`, `paper/figures/fig_architecture.tex`, `paper/figures/fig_discovery.tex`. 재생성: `paper/english/{main,supplementary}.pdf`·로그, `paper/korean/main.pdf`·로그, `paper/overleaf_ijcai27/`와 zip(`make_overleaf.py`, 시스템 Python 3.13).
+- Tectonic 컴파일: 영어 7쪽(Overfull 0, 미정의 참조 0), 한국어 8쪽(Overfull 0; 이탤릭 맑은 고딕 글꼴 경고 1개는 수정 전에도 있던 것), 보조 자료 2쪽, Overleaf 사본 컴파일 성공. 영어판은 참고문헌이 7쪽에서 시작해 결과를 넣을 여유가 줄었다.
+- `check_consistency.py`는 이 PC에 python-pptx가 없어 실행되지 않았다. 대신 렌더링한 쪽에서 수정 문단 위치를 확인했다.
+- 진행 안내 두 개를 보냈다. 기록: `DECISIONS.md` D110, `RESEARCH_STATE.md`, 이 T203, 통합 사본 재생성. 학습 없음. 커밋 없음.
+
+### Assistant — 진행 안내
+
+영어 논문, 공통 수식, 그림 두 개는 수정했습니다. 지금은 한국어 논문의 실험 설정 부분을 맞추고 있고, 그다음 다시 컴파일하겠습니다.
+
+논문 수정과 재컴파일을 마쳤습니다(영어 7쪽, 한국어 8쪽, Overleaf 사본 재생성). 지금 결정·상태 기록을 남기고 대화 기록을 쓰고 있습니다.
+
+### Assistant — 최종 답변
+
+논문을 고쳤습니다. 방법은 "통신 반경 = 관측 반경 5, 좌우 대칭은 선택 사항"으로 쓰고, 실험 절에는 실제로 돌린 조건을 밝혔습니다.
+
+## 바꾼 곳
+
+| 위치 | 전 | 후 |
+|---|---|---|
+| 공통 수식 `\DonorEquation` | $\|p_i-p_j\|_\infty\le 3$ | $\le r_c$ |
+| 공통 수식 `\ProbeEquation` | $\mathcal E_i\cup\mathcal E_j\cup M(\cdot)$ | $\mathcal E_i\cup\mathcal E_j$ |
+| 정보 모델(3절) | "Chebyshev distance three" | $r_c$, "communication radius equal to the observation radius ($r_c=5$), so an agent can talk to the agents it can see" |
+| Reward Probes(4.2절) | $M$이 기본 구성요소 | 두 사건 집합에 이미 팀을 가르는 질문이 있음 → $M$은 "지도 대칭을 알 때의 선택적 보강, 핵심 방법 아님, 실험은 사용" |
+| 그림 1, 2 | "plus mirrored copies", "left–right mirrors" | "recent public events of both $i$ and $j$", "optional: left–right mirrors" |
+| 실험 설정(6.1절) | 없음 | "보고한 실험은 $r_c=3$과 대칭 probe를 썼다. 반경 3의 접촉은 반경 5의 접촉이기도 하다. 대칭 없이 한 오프라인 재생은 판정이 같았다. $r_c=5$·대칭 없는 실험은 진행 예정" |
+| 설정 표 | Contact radius 3 | "Contact radius $r_c$, runs: 3", "Mirrored probes, runs: yes" |
+| 오프라인 재생(6.2절) | — | "Removing the mirrored probes from this replay left every decision unchanged."(E59) |
+
+한국어 논문도 같은 내용으로 고쳤습니다.
+
+## 확인한 것
+
+- 다시 컴파일: 영어 7쪽, 한국어 8쪽, 보조 자료 2쪽. Overfull 0, 깨진 참조 0. Overleaf 업로드용 사본(`paper/overleaf_ijcai27.zip`)도 다시 만들고 컴파일했습니다.
+- 한영 일치 검사 스크립트(`check_consistency.py`)는 이 PC에 python-pptx가 없어 돌리지 못했습니다. 대신 렌더링한 쪽에서 고친 문단을 눈으로 확인했습니다.
+
+## 주의할 점
+
+- **결과를 넣을 자리가 줄었습니다.** 영어판 참고문헌이 이제 7쪽에서 시작합니다. 전에는 약 1.4쪽 여유가 있었는데, 설명 문장이 늘어 여유가 그보다 작습니다.
+- **나중에 바꿔야 할 문장이 있습니다.** 통신 5·대칭 없는 실험을 돌리면, 실험 절의 "The reported runs differ…" 문장과 표의 "runs" 두 줄을 그 결과로 바꿉니다. 그 전까지는 이 상태가 정직한 표기입니다.
+- **발표 자료는 아직 그대로입니다.** 예전 Beamer(`presentation/pgct_beamer.tex`)와 지금 만드시는 발표 자료에는 통신 3과 $M$이 남아 있습니다. 발표에서도 같은 원칙(방법은 $r_c$=관측 반경, $M$ 선택; 결과는 통신 3·$M$ 사용)으로 맞추시는 것을 권합니다.
+
+결정은 `DECISIONS.md` D110에, 상태는 `RESEARCH_STATE.md`에, 대화는 T203으로 기록했습니다. 커밋은 하지 않았습니다.
+
+## 원문 기록 T204 — 2026-11-03 KST, Claude Code (정확한 시각 기록하지 않음)
+
+### 사용자 — 원문
+
+team_identification_results.png에서 5M에 가까워질수록 other team response 가 떨어지는데 정상이야?
+
+### 수행 기록 — 원문 대화와 별도
+
+- 질문 turn이다. E65(다른 팀 거리 시간표, 4.28M 이후 다른 팀 승인 352 arc), D97·D98(반납 사건 가설), E66(1–1.5M 배송·반납 수), 보상 설정(배송·반납 모두 +1)을 근거로 답했다. 새 분석 없음. 파일 변경 없음(기록 제외). 커밋 없음.
+
+### Assistant — 최종 답변
+
+**버그로 보이지는 않지만, 바람직한 현상도 아닙니다.** 이 하락이 바로 4.28M 이후 다른 팀 승인(352 arc)의 원인으로 보입니다. 원인은 아직 분석하지 않았고, 아래는 가설입니다.
+
+## 무엇이 보이는가
+
+다른 팀 쌍의 평균 거리는 1M까지 0.99 근처였다가, 그 뒤 천천히 내려가 5M에 0.6 근처가 됩니다(E65). 평균은 문턱 0.5 위에 있지만, 일부 쌍은 문턱 아래로 내려가 4.28M부터 승인됐습니다.
+
+## 가능한 원인(가설)
+
+1. **반납 사건이 probe를 채움(가장 유력).** 이 환경은 선반 반납도 +1이고, 반납은 팀과 상관없이 두 팀 모두 같은 보상을 받습니다. 학습이 진행될수록 배송 뒤 반납이 늘어 각 agent의 "최근 사건 32개"에서 반납 비중이 커집니다. 반납 장면에는 두 팀이 똑같이 1로 답하므로, 공통 응답이 늘어 거리가 내려갑니다. 예를 들어 a2의 반납/배송 비율은 1M 무렵 .94/2.96에서 1.5M 무렵 2.12/5.62로 커졌습니다(E66).
+2. **반대 증거가 사라짐.** 학습한 agent는 상대 팀 goal에 선반을 들고 가지 않게 됩니다. "상대 goal에 가도 보상 0"이라는 경험이 새로 쌓이지 않으니, 예측기가 그 장면에서 조금씩 일반화돼 0이 아닌 값을 낼 수 있습니다.
+3. **예측기 일반화.** 두 모서리 goal 장면은 벽 방향만 다르고 나머지는 비슷합니다. 오래 학습할수록 두 장면을 비슷하게 답할 수 있습니다.
+
+## 의미
+
+- **식별 시점은 문제없습니다.** 0.25M 무렵 이미 같은 팀 .25 대 다른 팀 .99로 갈립니다. 문제는 후반 유지입니다.
+- **Max-GAE와 결합하면 더 위험합니다.** 다른 팀 critic이 donor가 되면 가짜 상향을 줍니다(E62·E63). 증류보다 max 결합이 오승인에 민감합니다(D98).
+- **분기 실험(0.5M)에서는 아직 안 보입니다.** 1M에서 분기한 뒤 0.5M만 학습해서 다른 팀 승인 0이었습니다(E73). 5M까지 처음부터 학습하면 다시 나타날 수 있습니다.
+
+## 확인하는 방법(학습 없음)
+
+원래 PC에 있는 v2 run(`runs/acv2_s1_20261029_084340`)의 checkpoint에는 예측기와 사건 버퍼가 저장돼 있습니다. 1M·3M·5M checkpoint에서 probe를 배송 사건과 반납 사건으로 나눠 거리를 따로 계산하면, 1번 가설이 맞는지 바로 보입니다. 맞다면 "두 agent가 모두 비슷하게 답하는 사건은 거리 계산에서 뺀다" 같은 보완을 검토할 수 있습니다.
+
+논문에서는 이 현상을 숨기지 말고 한계로 적는 것이 좋습니다. 현재 영어판 6.2절에도 "the different-team distance ... slowly declines"와 4.28M 첫 다른 팀 승인이 적혀 있습니다.
+
+이 대화는 T204로 기록했습니다. 커밋은 하지 않았습니다.
+
+## 원문 기록 T205 — 2026-11-03 KST, Claude Code (정확한 시각 기록하지 않음)
+
+### 사용자 — 원문
+
+[붙여넣은 글: "내부 과정 2: Donor Critic으로 자기 상황 평가"부터 "내부 과정 5: Actor Advantage 수정"과 "출력"까지. $V_j(\tilde h^{\,j}_{i,t})$, $b_{i,t}=\min\{c,[\max_j V_j(\tilde h^{\,j}_{i,t})-V_i(h_{i,t})]_+\}$($c=\infty$), $f_{i,t}=V_i+w_tb_{i,t}$, $\delta^f$, $A^f$, $\Delta_{i,t}=w_t(A^f-A^{self})$, $s_i=\min(1,\mathrm{std}(A^{self})/\max(\mathrm{std}(\Delta),10^{-8}))$, $A^{PGCT}=A^{self}+\eta s_i\Delta$($\eta=0.5$), Critic은 $R^{self}=A^{self}+V_i^{old}$, donor가 없으면 $A^{PGCT}=A^{self}$이며 보상 모델 학습 등은 남는다는 설명. 원문은 사용자 붙여넣기 그대로이며 길어서 요지만 적는다.]
+
+이 일련의 과정을 이해하기 쉽게 그림 그려줘
+
+### 수행 기록 — 원문 대화와 별도
+
+- 새 파일(`presentation/arch_slide_20261103/`): `maxgae_process.tex`(TikZ 그림), `preview_maxgae.tex`, `preview_maxgae.pdf`, `preview_maxgae.png`, `preview_maxgae.log`. `paper/figures/pgct_style.tex`를 그대로 썼다.
+- Tectonic으로 다섯 번 컴파일하며 겹침을 고쳤다. 한 번은 Bash heredoc 치환에서 `\\`가 깨져 TeX 오류가 났고 Edit 도구로 고쳤다. 최종 Overfull 0.
+- 진행 안내 하나를 보냈다. 사용자에게 `preview_maxgae.png`를 보냈다(캡션: "내부 과정 2–5(팀원 Critic으로 내 이력 평가 → 상승분 → Max-GAE → Actor advantage) 그림. 곡선은 설명용입니다."). 코드·학습 변경 없음. 커밋 없음.
+
+### Assistant — 진행 안내
+
+Max-GAE 과정 그림을 그리는 중입니다. 첫 판을 렌더링해 보고 라벨 겹침과 줄바꿈을 고치고 있습니다(한 군데 문법 오류를 고친 뒤 다시 컴파일합니다).
+
+### Assistant — 최종 답변
+
+붙여 주신 내부 과정 2–5를 한 장 그림으로 그렸습니다. 번호 ②–⑤가 글의 "내부 과정" 번호와 같습니다.
+
+## 그림 읽는 순서
+
+- **위 줄(평가):** "My history"가 **두 Critic에 똑같이** 들어갑니다. 위는 팀원 $j$의 Critic(접촉 때 받은 고정 가중치), 아래는 내 Critic입니다. 왼쪽 아래에 "both Critics read **my** history"를 적어, $V_j(h_j)$가 아니라 $V_j(\tilde h_{i})$라는 점을 강조했습니다. ②
+- **가운데 그래프:** 두 출력을 시간축에 그렸습니다. 빨간 선($V_j$)이 파란 선($V_i$)보다 높은 구간만 칠해져 $b_t$가 되고, 낮은 구간은 "teammate lower: $b_t=0$"입니다. 맨 앞 회색 구간은 warm-up 마스크($w_t=0$)입니다.
+- **오른쪽 위:** $b_t=[\max_j V_j-V_i]_+$, "팀원이 내 상황을 더 높게 볼 때만". ③
+- **아래 줄(계산):**
+  - 내 Critic → **Own advantage** $A^{\rm self}=\mathrm{GAE}(V_i)$
+  - 상승분 → **Max-GAE** $A^f=\mathrm{GAE}(V_i+w_tb_t)$ ④
+  - 둘을 합쳐 **Actor advantage** $A^{\rm PGCT}=A^{\rm self}+\eta s_i\Delta$, $\Delta=A^f-A^{\rm self}$, "$s_i\le1$ shrinks a large $\Delta$" ⑤ → **Actor update**(주황)
+  - 따로, $A^{\rm self}$에서 나온 own return $R^{\rm self}$ → **Critic update**(파랑). 팀원 정보가 Critic으로는 가지 않는다는 점이 색과 방향으로 갈립니다.
+- **맨 아래:** "No approved teammate met ⇒ $b_t=0$ ⇒ $A^{\rm PGCT}=A^{\rm self}$: the update equals independent PPO."
+
+## 뺀 것
+
+상한 $c$(기본 ∞), 종료·시간 제한 bootstrap, $s_i$의 정확한 식, $\eta=0.5$ 값은 그림에서 뺐습니다. 수식 슬라이드에서 따로 보여 주시는 편이 그림이 덜 복잡합니다.
+
+## 파일과 넣는 법
+
+- 그림: `presentation/arch_slide_20261103/maxgae_process.tex`
+- 미리보기: `preview_maxgae.pdf`, `preview_maxgae.png`
+
+발표 자료에는 `pgct_style.tex`와 함께 올리고 `\resizebox{\linewidth}{!}{\input{maxgae_process.tex}}`로 넣으면 됩니다. 곡선은 설명용이라 실제 데이터가 아니라는 점은 말로 짚어 주세요.
+
+교수님의 GPT 사용 금지 범위는 여전히 확인이 필요합니다. 직접 다시 그리신다면 이 그림을 구성 참고용으로 쓰시면 됩니다.
+
+이 대화는 T205로 기록했습니다. 커밋은 하지 않았습니다.
+
+## 원문 기록 T206 — 2026-11-04 KST, Claude Code (정확한 시각 기록하지 않음)
+
+### 사용자 — 원문 (1)
+
+[붙여넣은 글: T204 답변의 "확인하는 방법 (학습 없음)" 두 단락 — 원래 PC의 v2 run checkpoint에서 probe를 배송/반납으로 나눠 거리를 계산하자는 제안과, 논문에 한계로 적자는 문장]
+
+확인해볼 수 있나?
+
+### 사용자 — 원문 (2, 작업 도중)
+
+논문에서 \Delta 기호 별로야 빼고 w_t(A-A) 식으로 수정해줘
+
+### 사용자 — 원문 (3, 작업 도중)
+
+수식에서 b_i,t = min { c, [..]} 식 있잖아
+거기서도 c = infty로 하던데 그냥 편하게 뺴줘
+
+### 수행 기록 — 원문 대화와 별도
+
+- W&B 확인: v2 run `q2u47mml`에는 checkpoint artifact가 없고 history·코드·설정 파일만 있다. 이 PC에도 run 폴더가 없어 직접 검증은 할 수 없었다.
+- 간접 점검(E74): 새 폴더 `output/return_share_20261104/`에 `return_share.py`, `return_share.csv`, `summary.json`, `return_share.png`. W&B history를 읽기만 했다.
+- 직접 검증 스크립트: `output/return_share_20261104/split_by_event.py`(원래 PC용). scratchpad에서 실제 상태 형식의 합성 checkpoint로 배선만 확인했고, 그때 생긴 결과 JSON은 지웠다.
+- 논문 수정(사용자 메시지 2): `paper/method_equations.tex`의 `\BlendEquation`에서 $\Delta_{i,t}$ 정의를 없애고 $A^{\rm PGCT}=A^{\rm self}+\eta s_i w_t(A^f-A^{\rm self})$, $s_i$ 분모를 $\mathrm{std}_t\,w_t(A^f-A^{\rm self})$로 바꿨다. 영어·한국어 본문 두 곳씩(마스크 설명, IPPO 환원), 그림 3(`fig_critic.tex`)의 Max-GAE·Actor advantage 상자를 고쳤다. 영어 7쪽·한국어 8쪽 재컴파일(Overfull 0, 미정의 참조 0), Overleaf 사본 재생성·컴파일. 민감도 식의 섭동 기호 $\Delta A$, $\Delta f$는 그대로 두었다.
+- 상한 $c$ 제거(사용자 메시지 3): `\MaxEquation`을 $b_{i,t}=[\max_j V_j(\tilde h^{\,j}_{i,t})-V_i(h_{i,t})]_+$로, 그림 3 상자, 영어·한국어 본문의 "상한 $c$는 선택, 기본 $+\infty$" 문장 삭제, 설정 표의 "cap/상한 none/없음" 삭제, 보조 자료 문장을 기호 없이 "구현은 상한을 허용하나 꺼 둠"으로 바꿨다. 재컴파일(영어·한국어 Overfull 0, 미정의 참조 0, 보조 자료·Overleaf 사본 재생성).
+- 기록: `EXPERIMENTS.md` E74, `RESEARCH_STATE.md`(sed 치환으로 한 번 깨진 항목을 Python으로 다시 썼다), 이 T206, 통합 사본 재생성. 학습 없음. 커밋 없음.
+- 사용자에게 `return_share.png`를 보냈다(캡션: "간접 확인(W&B 학습 로그, seed 1, 5M): 반납 비중이 오를수록 다른 팀 응답 거리가 내려갑니다(r = −0.93).").
+
+### Assistant — 진행 안내
+
+W&B 기록으로 간접 확인을 마쳤습니다. 반납 비중이 10%에서 43%로 늘 때 다른 팀 거리가 0.99에서 0.61로 내려갔고, 상관은 −0.93입니다. 지금은 원래 PC의 checkpoint로 직접 확인할 스크립트를 쓰고 있습니다.
+
+논문에서 Δ 기호를 빼고 $w_t(A^f-A^{\rm self})$로 직접 쓰도록 공통 수식, 영어 본문, 그림 3을 고쳤습니다. 지금은 한국어 본문을 맞춘 뒤 다시 컴파일합니다.
+
+### Assistant — 최종 답변
+
+두 가지를 했습니다. 가설은 W&B 기록으로 **간접 확인**했고, 직접 확인은 원래 PC에서 돌릴 스크립트로 준비했습니다. 논문의 Δ 기호도 뺐습니다.
+
+## 1. 반납 가설: 간접 확인 (이 PC에서 가능한 범위)
+
+checkpoint는 원래 PC에만 있고 W&B에도 올라가 있지 않습니다. 그래서 W&B에 남은 학습 로그로 대신 봤습니다. v2 run(seed 1, 5M)에서 agent들이 겪은 큰 보상 사건(배송·반납, 둘 다 +1) 중 반납의 비중과, 다른 팀 응답 거리를 250k step 구간마다 나란히 놓았습니다.
+
+| 구간 | 반납 비중 | 다른 팀 거리 | 같은 팀 거리 |
+|---|---|---|---|
+| 0–0.25M | .09 | .99 | .25 |
+| 1–1.25M | .17 | .99 | .15 |
+| 3–3.25M | .33 | .83 | .09 |
+| 4.75–5M | .43 | .61 | .08 |
+
+- 반납 비중이 오를수록 다른 팀 거리가 내려갑니다. 구간별 상관은 **−0.93**입니다.
+- 다른 팀 승인은 4.25M 이후 구간에서만 나옵니다.
+- **가설과 방향은 맞지만 원인이 확정된 것은 아닙니다.** 두 양 모두 학습이 진행되면서 한 방향으로 변하므로, 예측기 일반화나 상대 goal 경험 감소 같은 다른 원인도 같은 그래프를 만들 수 있습니다.
+
+## 2. 직접 확인 스크립트 (원래 PC에서 실행)
+
+`output/return_share_20261104/split_by_event.py`를 만들었습니다. checkpoint에 저장된 각 agent의 보상 예측기와 자기 사건을 불러와, 실제 run과 같은 방식으로 쌍별 probe를 만들고, **배송 probe와 반납 probe로 나눠 거리를 따로** 계산합니다. 반납은 "운반 중 TOGGLE 뒤 비운반"으로 구분합니다.
+
+```powershell
+& 'C:\Users\95101\anaconda3\envs\RWARE_MARL\python.exe' output/return_share_20261104/split_by_event.py --run runs/acv2_s1_20261029_084340/b6_corner_indiv_pen005_acv2_pgct_s1
+```
+
+- 기본으로 `checkpoint_01000`, `03000`, `04750`, `final.pt`를 봅니다(없는 것은 건너뜀).
+- 가설이 맞다면, 다른 팀 쌍은 **배송 probe 거리는 높게(1 근처) 유지**되고 **반납 probe 거리는 0 근처**이며, 전체 거리 하락은 반납 비중 증가로 설명될 것입니다.
+- 이 PC에서는 실제 저장 형식으로 만든 가짜 checkpoint로 코드가 도는지만 확인했습니다. 결과는 아직 없습니다.
+- `output/return_share_20261104/` 폴더를 원래 PC로 옮겨야 합니다(커밋 후 pull 또는 복사).
+
+## 3. 논문: Δ 기호 제거
+
+- 공통 수식(식 10): $A^{\rm PGCT}=A^{\rm self}+\eta\,s_i\,w_t(A^f-A^{\rm self})$, $s_i=\min\big(1,\ \mathrm{std}_t A^{\rm self}/\max(\mathrm{std}_t\,w_t(A^f-A^{\rm self}),10^{-8})\big)$로 바꿨습니다.
+- 본문 두 곳(마스크 설명, IPPO 환원)과 그림 3의 상자 두 개에서도 Δ를 없앴습니다. 한국어판도 같습니다.
+- 다시 컴파일했습니다. 영어 7쪽, 한국어 8쪽, Overfull 0, 깨진 참조 0이고, Overleaf 사본도 다시 만들었습니다.
+- **상한 $c$도 뺐습니다.** 식 8은 이제 $b_{i,t}=\big[\max_j V_j(\tilde h^{\,j}_{i,t})-V_i(h_{i,t})\big]_+$이고, "상한은 선택, 기본 ∞" 문장과 설정 표의 cap 항목, 그림 3의 $\min\{c,\cdot\}$도 없앴습니다. 실험은 모두 상한 없이 돌았으므로 결과와도 맞습니다. 보조 자료에는 "구현은 상한 옵션이 있으나 꺼 두었다"는 문장만 기호 없이 남겼습니다.
+- **남겨 둔 것:** Properties 절의 민감도 식 $\|\Delta A\|_\infty \le (\cdot)\|\Delta f\|_\infty$의 Δ는 "섭동"이라는 다른 뜻이라 그대로 두었습니다. 이것도 바꾸길 원하시면 $\|A'-A\|$, $\|f'-f\|$처럼 쓸 수 있습니다.
+- 제가 만든 발표용 Max-GAE 그림(`maxgae_process.tex`)에는 아직 Δ가 있습니다.
+
+결과는 `EXPERIMENTS.md` E74와 `RESEARCH_STATE.md`에, 대화는 T206으로 기록했습니다. 커밋은 하지 않았습니다.
+
+## 원문 기록 T207 — 2026-11-04 KST, Claude Code (정확한 시각 기록하지 않음)
+
+### 사용자 — 원문
+
+뭐야 논문 바꾼거 맞아? 아까 n_ij geq 3에서 3말고 기호화 한다는거 아녔어?
+
+### 수행 기록 — 원문 대화와 별도
+
+- 확인: 논문 수정은 worktree에만 있다(`git diff HEAD` 기준 6개 소스 파일 변경). 메인 체크아웃 `C:\Task\embodied\robotic-warehouse`는 `f9120b1` 그대로이고 `paper/` 변경이 없다. 커밋은 하지 않았다.
+- 이전 turn에서 기호로 바꾼 3은 접촉 식의 통신 반경($\le 3$ → $\le r_c$)이었고, 승인 식의 $n_{ij}\ge3$은 바꾸지 않았다. 이전 답변에서 $n_{ij}$를 기호화하겠다고 말한 적은 없다.
+- 수정: `paper/method_equations.tex` `\ApprovalEquation`을 $B_{ij}=\mathbf 1[i\ne j,\ n_{ij}\ge n_{\min},\ \bar D_{ij}<\tau,\ m_i^u=m_j^u=1]$로, EMA 식 옆의 "$\beta=0.35$"를 빼고 영어·한국어 본문에 "$\beta=0.35$, $n_{\min}=3$, $\tau=0.5$"를 적었다. 설정 표 행 이름에 $\tau$, $n_{\min}$을 붙였다. 영어 7쪽·한국어 8쪽 재컴파일(Overfull 0, 미정의 참조 0), Overleaf 사본 재생성, 승인 식 영역을 렌더링해 확인했다.
+- 진행 안내 하나를 보냈다. 기록: `RESEARCH_STATE.md`, 이 T207, 통합 사본 재생성. 커밋 없음.
+
+### Assistant — 진행 안내
+
+승인 식의 숫자도 기호로 바꿔 다시 컴파일했습니다($n_{ij}\ge n_{\min}$, $\bar D_{ij}<\tau$). 지금 렌더링으로 확인하고 기록을 남기고 있습니다.
+
+### Assistant — 최종 답변
+
+논문은 바뀐 것이 맞습니다. 다만 **이 세션의 작업 폴더(worktree)에만 바뀌어 있고, 커밋하지 않았습니다.** 혼란의 원인이 이것일 가능성이 큽니다.
+
+## 어디가 바뀌었나
+
+- 바뀐 파일: `C:\Task\embodied\robotic-warehouse\.claude\worktrees\blissful-elion-d7da03\paper\...` (영어 [main.pdf](paper/english/main.pdf), 한국어 [main.pdf](paper/korean/main.pdf), Overleaf용 `paper/overleaf_ijcai27.zip`)
+- 그대로인 파일: 메인 폴더 `C:\Task\embodied\robotic-warehouse\paper\...`는 마지막 커밋(`f9120b1`) 상태 그대로입니다. 그쪽 PDF를 여셨다면 예전 내용이 보입니다.
+
+## "3을 기호로"에 대해
+
+앞에서 기호로 바꾼 3은 **접촉 식의 통신 반경**이었습니다($\|p_i-p_j\|_\infty\le 3$ → $\le r_c$). 승인 식의 $n_{ij}\ge 3$은 그때 바꾸지 않았고, 바꾸겠다고 말씀드린 적도 없습니다. 그래도 같은 식 안에서 숫자와 기호가 섞여 있는 것은 어색하니 이번에 함께 바꿨습니다.
+
+- 식 6: $B_{ij}=\mathbf 1[i\ne j,\ n_{ij}\ge n_{\min},\ \bar D_{ij}<\tau,\ m_i^u=m_j^u=1]$
+- EMA 식 옆의 "$\beta=0.35$"도 뺐습니다.
+- 값은 본문에 "we use $\beta=0.35$, $n_{\min}=3$ and $\tau=0.5$"로 적고, 설정 표 행 이름에 $\tau$, $n_{\min}$을 붙였습니다. 한국어판도 같습니다.
+- 다시 컴파일했습니다(영어 7쪽, 한국어 8쪽, Overfull 0, 깨진 참조 0). Overleaf 사본도 다시 만들었고, 승인 식 부분을 렌더링해 확인했습니다.
+
+## 지금까지 논문에서 바뀐 것 (이 worktree 기준)
+
+1. 통신 반경 3 → $r_c$(관측 반경 5), 실험 절에 실제 조건(3) 명시
+2. 좌우 대칭 $M$을 선택 사항으로, 실험 절에 사용 사실 명시
+3. Δ 기호 제거, $w_t(A^f-A^{\rm self})$로 직접 표기
+4. 상승분 식의 상한 $c$ 제거
+5. 승인 식의 숫자를 $n_{\min}$, $\tau$로
+
+메인 폴더(`feature/PGCT_Next`)에서도 보시려면 이 변경을 커밋해서 합쳐야 합니다.
+
+이 대화는 T207로 기록했습니다.

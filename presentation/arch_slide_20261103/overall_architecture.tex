@@ -1,0 +1,26 @@
+% Slide version of paper Figure 1 (paper/figures/fig_architecture.tex), stage names aligned with the deck's
+% method slides. Needs tikz and paper/figures/pgct_style.tex (colours, styles, \stagetitle).
+\begin{tikzpicture}[pg]
+\tikzset{stage/.append style={text width=2.95cm,minimum height=1.75cm},
+         every node/.append style={execute at begin node={\hyphenpenalty10000\relax}}}
+\node[stage] (s1) at (0,0)     {\stagetitle{Independent}\\\stagetitle{Learning}\\[2pt]own rollout, own reward $r_i$};
+\node[stage] (s2) at (3.75,0)  {\stagetitle{Independent}\\\stagetitle{Reward Modeling}\\[2pt]MLP $\widehat r_i(u_t,a_t,u_{t+1})$\\fitted to own $r_i$};
+\node[stage] (s3) at (7.5,0)   {\stagetitle{Common}\\\stagetitle{Reward Probing}\\[2pt]events of \emph{both} agents\\+ mirrored copies};
+\node[stage] (s4) at (11.25,0) {\stagetitle{Latent Team}\\\stagetitle{Identification}\\[2pt]distance $\to$ EMA\\mature, $\ge$3 rounds};
+\node[stage] (s5) at (11.25,-3.0) {\stagetitle{Selective Critic}\\\stagetitle{Utilization}\\[2pt]approved \emph{and} met\\in this rollout};
+\node[stage] (s6) at (7.5,-3.0)   {\stagetitle{Max-GAE}\\[2pt]peer Critics on\\\emph{my own} history\\$b=[\max_j V_j{-}V_i]_+$};
+\node[stage] (s7) at (3.75,-3.0)  {\stagetitle{PPO Update}\\[2pt]Actor: $A^{\rm PGCT}$\\Critic: own return};
+\foreach \k [count=\n] in {s1,s2,s3,s4,s5,s6,s7} {\node[num] at (\k.north west) {\n};}
+\draw[flow] (s1) -- (s2); \draw[flow] (s2) -- (s3); \draw[flow] (s3) -- (s4);
+\draw[flow] (s4) -- (s5); \draw[flow] (s5) -- (s6); \draw[flow] (s6) -- (s7);
+\draw[flow] (s7.south) -- ++(0,-0.45) -| ($(s1.west)+(-0.45,0)$)
+  node[lbl,pos=.75,rotate=90,above]{next rollout} -- (s1.west);
+\node[card,text width=3.05cm,align=left,font=\sffamily\footnotesize] (info) at (0,-3.0)
+  {\textbf{On contact}\\[1pt]
+   \textcolor{pggreen}{\textbf{sent:}} event views,\\predictions, Critic weights\\[2pt]
+   \textcolor{pgorange}{\textbf{not sent:}} reward\\values, team labels,\\Actor weights};
+\begin{scope}[on background layer]
+\node[band,fill=pgsky,fit=(s1)(s4),label={[font=\sffamily\small\bfseries,text=pgblue,anchor=south east]north east:Q1. Discover latent teammates from own reward}] {};
+\node[band,fill=pgsand,fit=(s5)(s7),label={[font=\sffamily\small\bfseries,text=pgorange,anchor=north east]south east:Q2. Use discovered teammates in learning}] {};
+\end{scope}
+\end{tikzpicture}

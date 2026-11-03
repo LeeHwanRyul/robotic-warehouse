@@ -1,0 +1,239 @@
+{
+ "env_id": "rware-multiteam-tiny-4ag-2teams-v0",
+ "seed": 1,
+ "policy": "uniform random",
+ "scale": 3,
+ "frames": [
+  {
+   "step": 0,
+   "loaded": 0,
+   "file": "frame_t000_loaded0_x3.png",
+   "map_file": "map_t000_x3.png",
+   "shape": [
+    1003,
+    1495,
+    3
+   ]
+  },
+  {
+   "step": 20,
+   "loaded": 3,
+   "file": "frame_t020_loaded3_x3.png",
+   "map_file": "map_t020_x3.png",
+   "shape": [
+    1003,
+    1495,
+    3
+   ]
+  },
+  {
+   "step": 40,
+   "loaded": 2,
+   "file": "frame_t040_loaded2_x3.png",
+   "map_file": "map_t040_x3.png",
+   "shape": [
+    1003,
+    1495,
+    3
+   ]
+  },
+  {
+   "step": 60,
+   "loaded": 3,
+   "file": "frame_t060_loaded3_x3.png",
+   "map_file": "map_t060_x3.png",
+   "shape": [
+    1003,
+    1495,
+    3
+   ]
+  },
+  {
+   "step": 80,
+   "loaded": 5,
+   "file": "frame_t080_loaded5_x3.png",
+   "map_file": "map_t080_x3.png",
+   "shape": [
+    1003,
+    1495,
+    3
+   ]
+  },
+  {
+   "step": 100,
+   "loaded": 3,
+   "file": "frame_t100_loaded3_x3.png",
+   "map_file": "map_t100_x3.png",
+   "shape": [
+    1003,
+    1495,
+    3
+   ]
+  },
+  {
+   "step": 120,
+   "loaded": 3,
+   "file": "frame_t120_loaded3_x3.png",
+   "map_file": "map_t120_x3.png",
+   "shape": [
+    1003,
+    1495,
+    3
+   ]
+  },
+  {
+   "step": 140,
+   "loaded": 4,
+   "file": "frame_t140_loaded4_x3.png",
+   "map_file": "map_t140_x3.png",
+   "shape": [
+    1003,
+    1495,
+    3
+   ]
+  },
+  {
+   "step": 160,
+   "loaded": 4,
+   "file": "frame_t160_loaded4_x3.png",
+   "map_file": "map_t160_x3.png",
+   "shape": [
+    1003,
+    1495,
+    3
+   ]
+  },
+  {
+   "step": 180,
+   "loaded": 4,
+   "file": "frame_t180_loaded4_x3.png",
+   "map_file": "map_t180_x3.png",
+   "shape": [
+    1003,
+    1495,
+    3
+   ]
+  },
+  {
+   "step": 200,
+   "loaded": 4,
+   "file": "frame_t200_loaded4_x3.png",
+   "map_file": "map_t200_x3.png",
+   "shape": [
+    1003,
+    1495,
+    3
+   ]
+  },
+  {
+   "step": 220,
+   "loaded": 4,
+   "file": "frame_t220_loaded4_x3.png",
+   "map_file": "map_t220_x3.png",
+   "shape": [
+    1003,
+    1495,
+    3
+   ]
+  },
+  {
+   "step": 240,
+   "loaded": 4,
+   "file": "frame_t240_loaded4_x3.png",
+   "map_file": "map_t240_x3.png",
+   "shape": [
+    1003,
+    1495,
+    3
+   ]
+  },
+  {
+   "step": 260,
+   "loaded": 4,
+   "file": "frame_t260_loaded4_x3.png",
+   "map_file": "map_t260_x3.png",
+   "shape": [
+    1003,
+    1495,
+    3
+   ]
+  },
+  {
+   "step": 280,
+   "loaded": 4,
+   "file": "frame_t280_loaded4_x3.png",
+   "map_file": "map_t280_x3.png",
+   "shape": [
+    1003,
+    1495,
+    3
+   ]
+  },
+  {
+   "step": 300,
+   "loaded": 4,
+   "file": "frame_t300_loaded4_x3.png",
+   "map_file": "map_t300_x3.png",
+   "shape": [
+    1003,
+    1495,
+    3
+   ]
+  },
+  {
+   "step": 320,
+   "loaded": 4,
+   "file": "frame_t320_loaded4_x3.png",
+   "map_file": "map_t320_x3.png",
+   "shape": [
+    1003,
+    1495,
+    3
+   ]
+  },
+  {
+   "step": 340,
+   "loaded": 4,
+   "file": "frame_t340_loaded4_x3.png",
+   "map_file": "map_t340_x3.png",
+   "shape": [
+    1003,
+    1495,
+    3
+   ]
+  },
+  {
+   "step": 360,
+   "loaded": 4,
+   "file": "frame_t360_loaded4_x3.png",
+   "map_file": "map_t360_x3.png",
+   "shape": [
+    1003,
+    1495,
+    3
+   ]
+  },
+  {
+   "step": 380,
+   "loaded": 5,
+   "file": "frame_t380_loaded5_x3.png",
+   "map_file": "map_t380_x3.png",
+   "shape": [
+    1003,
+    1495,
+    3
+   ]
+  },
+  {
+   "step": 400,
+   "loaded": 6,
+   "file": "frame_t400_loaded6_x3.png",
+   "map_file": "map_t400_x3.png",
+   "shape": [
+    1003,
+    1495,
+    3
+   ]
+  }
+ ]
+}

@@ -1,0 +1,18 @@
+{
+ "views": {
+  "agent_index": 1,
+  "before": [
+   4,
+   5
+  ],
+  "after": [
+   4,
+   6
+  ]
+ },
+ "ema": {
+  "bins": 49,
+  "first_step": 0.15,
+  "last_step": 4.95
+ }
+}

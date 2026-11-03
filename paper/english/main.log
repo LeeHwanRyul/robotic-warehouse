@@ -807,43 +807,41 @@ LaTeX Font Info:    Trying to load font information for U+msb on input line 79.
  (umsb.fd
 File: umsb.fd 2013/01/14 v3.01 AMS symbols B
 )
-Underfull \hbox (badness 1688) in paragraph at lines 83--85
-\TU/texgyretermes(0)/m/n/10 or private trajectories. A public projection $\OML/
-cmm/m/it/10 P$ \TU/texgyretermes(0)/m/n/10 removes
- []
-
 (../figures/fig_architecture.tex) (../figures/fig_discovery.tex) [2]
-Package hyperref Info: bookmark level for unknown algorithm defaults to 0 on in
-put line 132.
-
 Underfull \vbox (badness 10000) has occurred while \output is active []
 
  [3]
+Package hyperref Info: bookmark level for unknown algorithm defaults to 0 on in
+put line 132.
+
 (../figures/fig_critic.tex)
 Underfull \hbox (badness 1152) in paragraph at lines 169--170
 \TU/texgyretermes(0)/m/n/10 available to the agents, no rule that sees only the
 se re-
  []
 
-
-Underfull \hbox (badness 2961) in paragraph at lines 201--202
+[4]
+Underfull \hbox (badness 2961) in paragraph at lines 202--203
  []\TU/texgyretermes(0)/b/n/10 Protocol and metrics.[] \TU/texgyretermes(0)/m/n
 /10 Evaluation uses 20 determinis-
  []
 
 
-Underfull \hbox (badness 1924) in paragraph at lines 201--202
+Underfull \hbox (badness 1924) in paragraph at lines 202--203
 \TU/texgyretermes(0)/m/n/10 tic episodes of 500 steps with fixed reset seeds. T
 he
  []
 
-[4]
 File: ../figures/discovery_log.pdf Graphic file (type pdf)
 <use ../figures/discovery_log.pdf>
+
+Underfull \vbox (badness 3701) has occurred while \output is active []
+
  [5]
 File: ../figures/baseline_ippo.pdf Graphic file (type pdf)
 <use ../figures/baseline_ippo.pdf>
- (main.bbl
+
+[6] (main.bbl
 Underfull \hbox (badness 1412) in paragraph at lines 4--8
 []\TU/texgyretermes(0)/m/n/10 Stefano V. Albrecht and Peter
  []
@@ -853,7 +851,7 @@ Underfull \hbox (badness 1983) in paragraph at lines 11--16
 []\TU/texgyretermes(0)/m/n/10 André Barreto, Will Dabney, Rémi
  []
 
-[6]
+
 Underfull \hbox (badness 10000) in paragraph at lines 26--31
 []\TU/texgyretermes(0)/m/n/10 Filippos Christianos, Lukas
  []
@@ -900,4 +898,4 @@ Underfull \hbox (badness 3281) in paragraph at lines 74--79
 Package rerunfilecheck Info: File `main.out' has not changed.
 (rerunfilecheck)             Checksum: A15BFDECF1280F9A1E52DF4D06BEA00B;2752.
  )
-Output written on main.xdv (7 pages, 404504 bytes).
+Output written on main.xdv (7 pages, 414876 bytes).

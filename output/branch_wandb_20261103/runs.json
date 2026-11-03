@@ -1,0 +1,230 @@
+[
+ {
+  "name": "b6_corner_indiv_pen005_acv2_br01000_ippo_s1",
+  "id": "lsc5a60j",
+  "group": "maxgae_br1M_20261102_165216",
+  "state": "finished",
+  "mode": "ippo",
+  "seed": 1,
+  "last_step": 500736,
+  "final_eval": {
+   "eval/deliveries": 7,
+   "eval/returns_home": 2.45,
+   "eval/agent_1_delivery_count": 0,
+   "eval/agent_2_delivery_count": 15,
+   "eval/agent_3_delivery_count": 58,
+   "eval/agent_4_delivery_count": 32,
+   "eval/agent_5_delivery_count": 0,
+   "eval/agent_6_delivery_count": 35
+  }
+ },
+ {
+  "name": "b6_corner_indiv_pen005_acv2_br01000_oracle_mature_max_s1",
+  "id": "c3xgqrt5",
+  "group": "pgctd2_br1M_20261102_180212",
+  "state": "finished",
+  "mode": "oracle_mature_max",
+  "seed": 1,
+  "last_step": 500736,
+  "final_eval": {
+   "eval/deliveries": 6.15,
+   "eval/returns_home": 2.85,
+   "eval/agent_1_delivery_count": 0,
+   "eval/agent_2_delivery_count": 0,
+   "eval/agent_3_delivery_count": 57,
+   "eval/agent_4_delivery_count": 26,
+   "eval/agent_5_delivery_count": 1,
+   "eval/agent_6_delivery_count": 39
+  }
+ },
+ {
+  "name": "b6_corner_indiv_pen005_acv2_br01000_oracle_max_s1",
+  "id": "8rsh8ii3",
+  "group": "maxgae_br1M_20261102_165216",
+  "state": "finished",
+  "mode": "oracle_max",
+  "seed": 1,
+  "last_step": 500736,
+  "final_eval": {
+   "eval/deliveries": 7.15,
+   "eval/returns_home": 3,
+   "eval/agent_1_delivery_count": 0,
+   "eval/agent_2_delivery_count": 0,
+   "eval/agent_3_delivery_count": 74,
+   "eval/agent_4_delivery_count": 37,
+   "eval/agent_5_delivery_count": 0,
+   "eval/agent_6_delivery_count": 32
+  }
+ },
+ {
+  "name": "b6_corner_indiv_pen005_acv2_br01000_pgct_max_s1",
+  "id": "bd8xull1",
+  "group": "pgctd2_br1M_20261102_180212",
+  "state": "finished",
+  "mode": "pgct_max",
+  "seed": 1,
+  "last_step": 500736,
+  "final_eval": {
+   "eval/deliveries": 7.1,
+   "eval/returns_home": 2.4,
+   "eval/agent_1_delivery_count": 0,
+   "eval/agent_2_delivery_count": 18,
+   "eval/agent_3_delivery_count": 61,
+   "eval/agent_4_delivery_count": 31,
+   "eval/agent_5_delivery_count": 0,
+   "eval/agent_6_delivery_count": 32
+  }
+ },
+ {
+  "name": "b6_corner_indiv_pen005_acv2_br01000_oracle_maxd1_s1",
+  "id": "45kzzkcw",
+  "group": "maxgae_br1M_20261102_165216",
+  "state": "finished",
+  "mode": "oracle_maxd1",
+  "seed": 1,
+  "last_step": 500736,
+  "final_eval": {
+   "eval/deliveries": 6.7,
+   "eval/returns_home": 2.1,
+   "eval/agent_1_delivery_count": 0,
+   "eval/agent_2_delivery_count": 0,
+   "eval/agent_3_delivery_count": 47,
+   "eval/agent_4_delivery_count": 40,
+   "eval/agent_5_delivery_count": 17,
+   "eval/agent_6_delivery_count": 30
+  }
+ },
+ {
+  "name": "b6_corner_indiv_pen005_acv2_br01000_oracle_mature_max_s3",
+  "id": "ok4w68kb",
+  "group": "pgctd2_br1M_20261102_180212",
+  "state": "finished",
+  "mode": "oracle_mature_max",
+  "seed": 3,
+  "last_step": 500736,
+  "final_eval": {
+   "eval/deliveries": 7.25,
+   "eval/returns_home": 2.5,
+   "eval/agent_1_delivery_count": 0,
+   "eval/agent_2_delivery_count": 21,
+   "eval/agent_3_delivery_count": 64,
+   "eval/agent_4_delivery_count": 32,
+   "eval/agent_5_delivery_count": 0,
+   "eval/agent_6_delivery_count": 28
+  }
+ },
+ {
+  "name": "b6_corner_indiv_pen005_acv2_br01000_allk_max_s1",
+  "id": "wtidjxw5",
+  "group": "maxgae_br1M_20261102_165216",
+  "state": "finished",
+  "mode": "allk_max",
+  "seed": 1,
+  "last_step": 500736,
+  "final_eval": {
+   "eval/deliveries": 6.4,
+   "eval/returns_home": 1.6,
+   "eval/agent_1_delivery_count": 0,
+   "eval/agent_2_delivery_count": 0,
+   "eval/agent_3_delivery_count": 51,
+   "eval/agent_4_delivery_count": 32,
+   "eval/agent_5_delivery_count": 6,
+   "eval/agent_6_delivery_count": 39
+  }
+ },
+ {
+  "name": "b6_corner_indiv_pen005_acv2_br01000_pgct_max_s3",
+  "id": "qowzf3uv",
+  "group": "pgctd2_br1M_20261102_180212",
+  "state": "finished",
+  "mode": "pgct_max",
+  "seed": 3,
+  "last_step": 500736,
+  "final_eval": {
+   "eval/deliveries": 7,
+   "eval/returns_home": 3.25,
+   "eval/agent_1_delivery_count": 0,
+   "eval/agent_2_delivery_count": 9,
+   "eval/agent_3_delivery_count": 38,
+   "eval/agent_4_delivery_count": 41,
+   "eval/agent_5_delivery_count": 0,
+   "eval/agent_6_delivery_count": 52
+  }
+ },
+ {
+  "name": "b6_corner_indiv_pen005_acv2_br01000_ippo_s3",
+  "id": "qxgrtpwg",
+  "group": "maxgae_br1M_20261102_165216",
+  "state": "finished",
+  "mode": "ippo",
+  "seed": 3,
+  "last_step": 500736,
+  "final_eval": {
+   "eval/deliveries": 6.4,
+   "eval/returns_home": 2.15,
+   "eval/agent_1_delivery_count": 0,
+   "eval/agent_2_delivery_count": 11,
+   "eval/agent_3_delivery_count": 61,
+   "eval/agent_4_delivery_count": 27,
+   "eval/agent_5_delivery_count": 0,
+   "eval/agent_6_delivery_count": 29
+  }
+ },
+ {
+  "name": "b6_corner_indiv_pen005_acv2_br01000_oracle_mature_max_s5",
+  "id": "znkebsx5",
+  "group": "pgctd2_br1M_20261102_180212",
+  "state": "finished",
+  "mode": "oracle_mature_max",
+  "seed": 5,
+  "last_step": 500736,
+  "final_eval": {
+   "eval/deliveries": 6.25,
+   "eval/returns_home": 1.7,
+   "eval/agent_1_delivery_count": 0,
+   "eval/agent_2_delivery_count": 18,
+   "eval/agent_3_delivery_count": 36,
+   "eval/agent_4_delivery_count": 27,
+   "eval/agent_5_delivery_count": 14,
+   "eval/agent_6_delivery_count": 30
+  }
+ },
+ {
+  "name": "b6_corner_indiv_pen005_acv2_br01000_oracle_max_s3",
+  "id": "fatzgerp",
+  "group": "maxgae_br1M_20261102_165216",
+  "state": "running",
+  "mode": "oracle_max",
+  "seed": 3,
+  "last_step": 88064,
+  "final_eval": {
+   "eval/deliveries": null,
+   "eval/returns_home": null,
+   "eval/agent_1_delivery_count": null,
+   "eval/agent_2_delivery_count": null,
+   "eval/agent_3_delivery_count": null,
+   "eval/agent_4_delivery_count": null,
+   "eval/agent_5_delivery_count": null,
+   "eval/agent_6_delivery_count": null
+  }
+ },
+ {
+  "name": "b6_corner_indiv_pen005_acv2_br01000_pgct_max_s5",
+  "id": "sbflomst",
+  "group": "pgctd2_br1M_20261102_180212",
+  "state": "running",
+  "mode": "pgct_max",
+  "seed": 5,
+  "last_step": 18432,
+  "final_eval": {
+   "eval/deliveries": null,
+   "eval/returns_home": null,
+   "eval/agent_1_delivery_count": null,
+   "eval/agent_2_delivery_count": null,
+   "eval/agent_3_delivery_count": null,
+   "eval/agent_4_delivery_count": null,
+   "eval/agent_5_delivery_count": null,
+   "eval/agent_6_delivery_count": null
+  }
+ }
+]

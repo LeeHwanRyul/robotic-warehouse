@@ -8,23 +8,22 @@
  [(\widehat r_i(q;\psi_i)-r_i)^2].
 \end{equation}}
 \newcommand{\ProbeEquation}{\begin{equation}\label{eq:probe}
- \mathcal Q_{ij}^{u}=\mathcal E_i^{u}\cup\mathcal E_j^{u}
- \cup M\big(\mathcal E_i^{u}\cup\mathcal E_j^{u}\big).
+ \mathcal Q_{ij}^{u}=\mathcal E_i^{u}\cup\mathcal E_j^{u}.
 \end{equation}}
 \newcommand{\DistanceEquation}{\begin{equation}\label{eq:distance}
  D_{ij}^{u}=\frac{\sum_{q\in\mathcal Q_{ij}^{u}}|\widehat r_i^{\,u}(q)-\widehat r_j^{\,u}(q)|}
  {\sum_{q\in\mathcal Q_{ij}^{u}}\big(|\widehat r_i^{\,u}(q)|+|\widehat r_j^{\,u}(q)|\big)}.
 \end{equation}}
 \newcommand{\ApprovalEquation}{\begin{align}\label{eq:approval}
- \bar D_{ij}&\leftarrow (1-\beta)\bar D_{ij}+\beta D_{ij}^{u},\quad\beta=0.35,\\
- B_{ij}&=\mathbf 1[i\ne j,\ n_{ij}\ge3,\ \bar D_{ij}<0.5,\ m_i^{u}=m_j^{u}=1].\nonumber
+ \bar D_{ij}&\leftarrow (1-\beta)\bar D_{ij}+\beta D_{ij}^{u},\\
+ B_{ij}&=\mathbf 1[i\ne j,\ n_{ij}\ge n_{\min},\ \bar D_{ij}<\tau,\ m_i^{u}=m_j^{u}=1].\nonumber
 \end{align}}
 \newcommand{\DonorEquation}{\begin{align}\label{eq:donor}
- C_{ij}^{u}&=\mathbf1[\exists t\text{ in rollout }u:\|p_{i,t}-p_{j,t}\|_\infty\le3],\\
+ C_{ij}^{u}&=\mathbf1[\exists t\text{ in rollout }u:\|p_{i,t}-p_{j,t}\|_\infty\le r_c],\\
  \mathcal G_i^u&=\{j\ne i:C_{ij}^u B_{ij}=1\}.\nonumber
 \end{align}}
 \newcommand{\MaxEquation}{\begin{align}\label{eq:max}
- b_{i,t}&=\min\{c,[\max_{j\in\mathcal G_i^u}V_j(\tilde h_{i,t}^{\,j})-V_i(h_{i,t})]_+\},\\
+ b_{i,t}&=\Big[\max_{j\in\mathcal G_i^u}V_j(\tilde h_{i,t}^{\,j})-V_i(h_{i,t})\Big]_+,\\
  f_{i,t}&=V_i(h_{i,t})+w_t b_{i,t}.\nonumber
 \end{align}}
 \newcommand{\GAEEquation}{\begin{align}\label{eq:gae}
@@ -32,10 +31,9 @@
  A_{i,t}^{f}&=\delta_{i,t}^{f}+\gamma\lambda_f(1-d_t)A_{i,t+1}^{f}.\nonumber
 \end{align}}
 \newcommand{\BlendEquation}{\begin{align}\label{eq:blend}
- \Delta_{i,t}&=w_t(A_{i,t}^{f}-A_{i,t}^{\rm self}),\\
+ A_{i,t}^{\rm PGCT}&=A_{i,t}^{\rm self}+\eta\, s_i\, w_t\big(A_{i,t}^{f}-A_{i,t}^{\rm self}\big),\qquad \eta=0.5,\\
  s_i&=\min\!\left(1,\frac{\operatorname{std}_t A_{i,t}^{\rm self}}
- {\max(\operatorname{std}_t\Delta_{i,t},10^{-8})}\right),\nonumber\\
- A_{i,t}^{\rm PGCT}&=A_{i,t}^{\rm self}+\eta s_i\Delta_{i,t},\qquad \eta=0.5.\nonumber
+ {\max\!\big(\operatorname{std}_t\, w_t(A_{i,t}^{f}-A_{i,t}^{\rm self}),\,10^{-8}\big)}\right).\nonumber
 \end{align}}
 \newcommand{\PPOEquation}{\begin{align}\label{eq:ppo}
  \rho_{i,t}(\theta_i)&=\pi_{\theta_i}(a_{i,t}\mid h_{i,t})/\pi_{\theta_i^{\rm old}}(a_{i,t}\mid h_{i,t}),\\

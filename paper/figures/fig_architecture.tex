@@ -3,7 +3,7 @@
 \tikzset{stage/.append style={text width=3.25cm,minimum height=1.7cm}}
 \node[stage] (s1) at (0,0)     {\stagetitle{Independent learning}\\[2pt]own rollout and own\\reward $r_i$; log contacts};
 \node[stage] (s2) at (4.1,0)   {\stagetitle{Individual reward}\\\stagetitle{prediction}\\[2pt]MLP $\widehat r_i$ fitted to own $r_i$};
-\node[stage] (s3) at (8.2,0)   {\stagetitle{Reward probe}\\[2pt]public events of $i$ and $j$\\plus mirrored copies};
+\node[stage] (s3) at (8.2,0)   {\stagetitle{Reward probe}\\[2pt]recent public events\\of both $i$ and $j$};
 \node[stage] (s4) at (12.3,0)  {\stagetitle{Latent team}\\\stagetitle{discovery}\\[2pt]response distance $\to$ approval};
 \node[stage] (s5) at (12.3,-3.1){\stagetitle{Peer Critic}\\\stagetitle{selection}\\[2pt]approved \emph{and} met\\in this rollout};
 \node[stage] (s6) at (8.2,-3.1) {\stagetitle{Advantage}\\\stagetitle{estimation}\\[2pt]Max-GAE on own history};

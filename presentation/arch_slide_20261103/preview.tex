@@ -1,0 +1,17 @@
+% Preview of the Overall Architecture slide in a default 16:9 Beamer deck.
+% In your own deck: add the two preamble lines below, copy pgct_style.tex and overall_architecture.tex,
+% then paste the frame.
+\documentclass[aspectratio=169,10pt]{beamer}
+\setbeamertemplate{navigation symbols}{}
+\usepackage{tikz}
+\input{../../paper/figures/pgct_style.tex}
+
+\begin{document}
+\begin{frame}{Proposed Method: Overall Architecture}
+\centering
+\resizebox{\linewidth}{!}{\input{overall_architecture.tex}}
+
+\vspace{6pt}
+{\footnotesize Each agent runs steps 1--7 locally. With no approved teammate met, the Actor--Critic update equals IPPO.}
+\end{frame}
+\end{document}

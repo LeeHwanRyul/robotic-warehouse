@@ -19,7 +19,7 @@
 
 \paragraph{Peer Critic access.} Donor sets are fixed within one update. Donor Critic weights are the weights used during the rollout. The receiver replays its complete current rollout through each donor Critic from a zero recurrent state, resets at episode ends, and evaluates captured time-limit observations before the reset. The warm-up mask covers the first seven steps before the first reset (eight observations are needed). The mask is applied both to the uplift and to the final auxiliary advantage. Own-return Critic targets are computed before the Actor advantage is formed. The scale factor $s_i$ is computed per receiver over the whole rollout before PPO's own per-agent advantage normalization.
 
-\paragraph{Optional filters.} An optional filter excludes donor Critics whose explained variance on their own rollout falls below a threshold. It is disabled in all reported settings because no threshold has been chosen. An optional finite cap $c$ on the uplift is likewise disabled.
+\paragraph{Optional filters.} An optional filter excludes donor Critics whose explained variance on their own rollout falls below a threshold. It is disabled in all reported settings because no threshold has been chosen. The implementation also allows an upper bound on the uplift; it is likewise disabled.
 
 \section{Reduction Checks}
 The implementation was checked against the following reductions with the real training loop (short runs of 64 environment steps; these are correctness checks, not performance results).

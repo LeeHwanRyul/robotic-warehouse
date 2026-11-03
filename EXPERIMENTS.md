@@ -1458,3 +1458,27 @@ ID / 실제 실행 날짜·작성 도구 / 상태(계획·smoke·진행·완료�
 - 참고 자료: ICCAS PDF 16장을 렌더링해 구성 확인. M4A는 머리 정보로 812.98초만 확인, 전사 못 함.
 - 실행 상태(읽기 전용): v1 run `runs/ac_20261023_185556`의 `pgct_s2`는 `job_status.json`이 failed(KeyboardInterrupt, 2026-11-02 18:01:52)로 바뀌었다. 약 3.19M에서 사용자가 중단한 것으로 보인다(T170 뒤). 1단계 분기 `runs/maxgae_br1M_20261102_165216`는 진행 중이며(작업 중 확인 시 `ippo_s1` 0.12M), 부분 결과는 문서에 넣지 않았다.
 - 한계: 그래프는 seed 1(발견)과 seed 2개(기준선)뿐이다. 통합 PGCT 학습 결과는 없다.
+
+## E73. 1M checkpoint 분기 실험 중간 결과: W&B 기록 읽기(학습 없음) — 2026-11-03 Claude Code, 사용자 요청(T187)
+
+- 방법: 이 PC에 run 폴더가 없어 W&B API(`t98339-hanyang-university/rware-from-scratch`, group `maxgae_br1M_20261102_165216`·`pgctd2_br1M_20261102_180212`)를 읽기 전용으로 조회했다(2026-11-03 20시 무렵 KST). 스크립트·데이터: `output/branch_wandb_20261103/`(`fetch_wandb.py`, `runs.json`, `eval.csv`, `update.csv`, `analyze.py`, `summary.json`, `plot_slides.py`, 그림 2개).
+- 조건: A+C IPPO s1 `checkpoint_01000.pt`(1.024M)에서 분기, 모서리·개인 보상·좌표 마스킹, job당 0.5M. 평가는 51,200 step마다 20 episode × 500 step(9회). W&B agent 번호는 1부터(agent_k = 0-index k−1)이고 agent별 배송 수는 20 episode 합이라 20으로 나눴다.
+- 진행: 1단계 12 job 중 5개 finished(ippo_s1, oracle_max_s1, oracle_maxd1_s1, allk_max_s1, ippo_s3), oracle_max_s3 running. 2단계 6 job 중 5개 finished(oracle_mature_max s1·s3·s5, pgct_max s1·s3), pgct_max_s5 running.
+- 팀 발견(PGCT-D2, 최종 알고리즘, 온라인):
+  - 성숙: 앞선 a2·a3·a5는 분기 후 6–12k step에 성숙. a1은 0.24M(pgct s1)·0.38M(pgct s3)·0.18M(oracle_mature s3)·0.26M(s5). a0는 어느 run에서도 성숙하지 않았고, a4는 oracle_mature s5에서만 0.38M.
+  - 승인: 첫 같은 팀 승인은 분기 후 20k(s1)·26k(s3) step. 마지막 승인 arc는 같은 팀 6(두 seed), 다른 팀 0. 6은 끝까지 성숙한 같은 팀 쌍(팀1 a1·a3·a5의 directed arc 6개) 전부다. 팀0은 a2만 성숙해 쌍이 없다.
+  - 다섯 stage-2 job 모두에서 다른 팀 승인 최대 0, 실제 donor arc도 모두 같은 팀(pgct s1 1,920, s3 1,350).
+- 학습(마지막 평가 3회 평균, 0.36–0.46M, 배송/episode; 팀 합계 / 뒤처진 a0+a1+a4 / 앞선 a2+a3+a5):
+  - seed 1: ippo 6.57 / .43 / 6.13, oracle_max(D2) 5.88 / .00 / 5.88, oracle_maxd1(D1) 6.13 / .60 / 5.53, allk_max 6.48 / .15 / 6.33, oracle_mature_max 6.28 / .00 / 6.28, pgct_max 6.05 / .42 / 5.63.
+  - seed 3: ippo 5.63 / .75 / 4.88, oracle_mature_max 6.70 / .63 / 6.07, pgct_max 5.73 / .00 / 5.73. seed 5: oracle_mature_max 6.88 / .82 / 6.07(ippo_s5 미완).
+  - 뒤처진 agent의 첫 배송(≥.25/ep)은 대부분 0.3–0.46M이고 a0는 모든 run에서 0이다.
+- 해석: 팀 발견은 최종 알고리즘에서 온라인으로 같은 팀만 승인했다(다른 팀 0). 다만 범위는 성숙한 agent 사이로 제한되어 같은 팀 arc 12개 중 6개다. 학습 가속은 아직 보이지 않는다. seed 1에서 D2는 IPPO보다 뒤처진·앞선 agent 모두 조금 낮고, 연속 평가 사이 변동(±1–2)이 모드 차이보다 크다. 1단계 seed 3·5가 끝나기 전에는 판정하지 않는다(D98 사전 규칙).
+- 한계: 분기 비교(처음부터 학습한 비교 아님), 모드당 seed 1–3개, 평가 9회, W&B 요약값만 사용(max_gae.jsonl의 donor 행렬은 원래 PC에 있음).
+
+## E74. 후반 다른 팀 거리 하락과 반납 사건: W&B 학습 로그로 한 간접 점검(학습 없음) — 2026-11-04 Claude Code, 사용자 요청(T206)
+
+- 질문(T204·T206): v2 run에서 5M에 가까워질수록 다른 팀 응답 거리가 내려가는 이유. 가설은 "두 팀 모두 +1을 받는 반납 사건이 최근 사건 probe를 채운다".
+- 방법: 이 PC에는 checkpoint가 없고 W&B에도 checkpoint artifact가 없다(history만). W&B run `q2u47mml`(`acv2_s1_20261029_084340`, v2 + critic 증류, 모서리·개인 보상, seed 1, 5M)의 `train/agent_k_{delivery,return}_count`와 `update/ac_v2_audit_*`를 250k 구간으로 묶었다. 코드·결과: `output/return_share_20261104/`(`return_share.py`, `return_share.csv`, `summary.json`, `return_share.png`).
+- 결과: 배송+반납 중 반납 비중은 0–0.25M .09 → 1–1.25M .17 → 3–3.25M .33 → 4.75–5M .43. 같은 구간 다른 팀 거리 EMA는 .99 → .99 → .83 → .61. 구간별 상관 −.93. 같은 팀 거리는 .25 → .08로 계속 낮다. 다른 팀 승인 비교(accepted)는 4.25M 이후 구간에만 있다(180·215·230).
+- 해석: 가설과 방향이 맞는다. 다만 두 양 모두 학습이 진행되며 단조롭게 변하므로 시간 상관만으로는 원인을 확정할 수 없다(예측기 일반화, 상대 goal 음성 경험 감소도 같은 방향).
+- 직접 검증 준비(미실행): `output/return_share_20261104/split_by_event.py`. 원래 PC에서 checkpoint의 `reward_probe_ac_v2` 상태(예측기 가중치, 저장된 자기 사건)를 읽어 쌍별 probe를 배송/반납으로 나눠 거리를 따로 계산한다. 반납 = 운반 중 TOGGLE_LOAD 후 비운반. 이 PC에서는 실제 상태 형식으로 만든 합성 checkpoint로 배선만 확인했다(결과 아님).

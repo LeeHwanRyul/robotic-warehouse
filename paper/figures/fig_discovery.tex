@@ -8,7 +8,7 @@
 % probe set
 \node[card,text width=2.6cm,fill=pgsky] (ei) at (4.15,0.85) {32 recent events of $i$};
 \node[card,text width=2.6cm,fill=pgsand] (ej) at (4.15,0.0) {32 recent events of $j$};
-\node[card,text width=2.6cm,fill=pglight] (mi) at (4.15,-0.85) {left--right mirrors};
+\node[card,text width=2.6cm,fill=pglight] (mi) at (4.15,-0.85) {optional: left--right mirrors};
 \node[box,fill=none,fit=(ei)(ej)(mi),inner sep=6pt,label={[font=\sffamily\small\bfseries,text=pgblue]above:Common probes $\mathcal Q_{ij}$}] (Q) {};
 \draw[flowg] (ai.east) -- (Q.west|-ei);
 \draw[flowg] (aj.east) -- (Q.west|-mi);
