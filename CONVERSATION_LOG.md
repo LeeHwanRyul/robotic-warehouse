@@ -19437,3 +19437,64 @@ checkpoint는 원래 PC에만 있고 W&B에도 올라가 있지 않습니다. �
 
 - 이 대화(T208) 기록은 바로 뒤에 작은 커밋 하나로 따로 넣었습니다.
 - **push와 병합은 하지 않았습니다.** 메인 폴더(`feature/PGCT_Next`)에서 이 내용을 보시려면 이 브랜치를 그쪽에 병합하거나, push해서 PR로 합쳐야 합니다. 원래 PC에서 `split_by_event.py`를 돌리려면 push가 필요합니다.
+
+## 원문 기록 T209 — 2026-11-04 KST, Claude Code (정확한 시각 기록하지 않음)
+
+### 사용자 — 원문
+
+[앱의 "Create PR" 명령: 이 세션의 변경으로 리뷰 가능한(draft 아닌) PR을 만들고, base는 master, 브랜치는 claude/blissful-elion-d7da03]
+
+### 수행 기록 — 원문 대화와 별도
+
+- 작업 트리는 깨끗했다. `git push -u origin claude/blissful-elion-d7da03`로 브랜치를 처음 push했다(origin = LeeHwanRyul/robotic-warehouse).
+- PR 생성은 하지 못했다. 이 PC에 GitHub CLI(`gh`)가 설치되어 있지 않다(Bash·PowerShell 모두 없음). 저장된 git 자격 증명을 꺼내 API를 직접 호출하는 방법은 쓰지 않았다. PR 템플릿은 저장소에 없다(`.github/workflows`만 있음).
+- 이 T209 기록을 커밋해 같은 브랜치에 push했다.
+
+### Assistant — 최종 답변
+
+브랜치는 push했지만, **PR은 만들지 못했습니다.** 이 PC에 GitHub CLI(`gh`)가 설치되어 있지 않습니다. 저장된 git 자격 증명을 꺼내 GitHub API를 직접 부르는 방법은 쓰지 않았습니다.
+
+## 된 것
+
+- `claude/blissful-elion-d7da03` 브랜치를 origin(LeeHwanRyul/robotic-warehouse)에 push했습니다. 커밋 `dabe898`, `7347000`과 이 기록(T209) 커밋이 들어 있습니다.
+
+## PR 만드는 방법 (둘 중 하나)
+
+1. **브라우저에서 바로:** 아래 주소를 열고 제목과 본문을 붙여 넣은 뒤 "Create pull request"를 누르면 됩니다.
+   `https://github.com/LeeHwanRyul/robotic-warehouse/compare/master...claude/blissful-elion-d7da03?expand=1`
+2. **gh 설치 후 제가 다시 실행:** PowerShell에서 `winget install --id GitHub.cli`로 설치하고 `gh auth login`으로 로그인해 주시면, 다시 "Create PR"을 누르셨을 때 제가 만들 수 있습니다.
+
+## 붙여 넣을 제목과 본문
+
+제목:
+
+```text
+PGCT paper notation/method updates, slide figures, and branch-run analysis
+```
+
+본문:
+
+```text
+## What changed
+- Paper (English, Korean, Overleaf copy, recompiled; English 7 pages):
+  - Contact rule uses a communication radius r_c (= observation radius 5). The experiments section states that the reported runs used r_c = 3 and mirrored probes.
+  - Left-right mirrored probes are now optional, not part of the core method. An offline replay without them gave the same decisions (E59).
+  - Actor advantage written as w_t(A^f - A^self) without the Delta symbol; the uplift cap c is removed (all runs used no cap); approval thresholds are written as n_min and tau.
+- Analysis (read-only, no training):
+  - output/branch_wandb_20261103: W&B export of the 1M-checkpoint branch runs (E73). Final PGCT online: 0 cross-team approvals in 5 finished runs; no learning speed-up visible yet (seed 1 only for stage 1).
+  - output/return_share_20261104: return-event share vs. cross-team distance (E74, r = -0.93), plus split_by_event.py to run on the training PC.
+  - output/identification_figure_20261103: team-identification figures.
+- Slides: environment renders and Beamer figures (overall architecture, Max-GAE process).
+- Notes: CONVERSATION_LOG T174-T209, DECISIONS D107-D110, EXPERIMENTS E73-E74, RESEARCH_STATE.
+
+## Why
+Prepare the professor presentation and the IJCAI-27 draft, and keep the paper's method consistent with what was actually run.
+
+## Reviewer notes
+- No code under latent_team/, rware/ or examples/ changed. No training was started.
+- The paper describes r_c = 5 and no mirroring as the method, but every reported result is from r_c = 3 with mirroring; the text says so. Runs with r_c = 5 and without mirrors are pending.
+- split_by_event.py was only checked on a synthetic checkpoint.
+- Includes 10 new Tectonic font-cache files (the repo already tracks this cache).
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+```
