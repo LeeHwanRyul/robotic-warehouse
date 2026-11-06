@@ -13,6 +13,8 @@
 │   │   ├── ppo.py              recurrent IPPO update
 │   │   ├── trainer.py          generic training loop + methods ippo/oracle/all/pgct_d2/pgct_id_only/random_gate
 │   │   └── metrics.py          identification / learning metrics (evaluation side)
+│   ├── pgct_runner/            shared experiment plumbing for LBF/VMAS: ExperimentSpec, plans + train/evaluate
+│   │                           CLI, W&B tracking, evaluation videos, plan aggregation (no algorithm)
 │   └── tests/                  core tests + toy environment (template for new environments)
 ├── RWARE/                      existing warehouse experiment (moved, behaviour unchanged)
 │   ├── rware/                  environment package (setup.py → `rware`)
@@ -27,13 +29,22 @@
 │   ├── scripts/                PowerShell launchers
 │   ├── tests/
 │   └── docs/EXPERIMENT_DESIGN.md
+├── LBF/                        multi-team Level-Based Foraging (D141, D142)
+│   ├── pgct_lbf/               simulator (lbforaging 2.0.0 rules + hidden teams), adapter, renderer, spec
+│   ├── configs/                main_4p2t.json, ind_4p2t.json, coop_4p2t.json
+│   └── tests/                  incl. step-for-step comparison with lbforaging
+├── VMAS/                       VMAS Team Discovery (optional vmas, GPLv3)
+│   ├── pgct_vmas/              scenario (multi-team discovery), adapter, renderer, spec
+│   ├── configs/                main_4p2t.json, coop_4p2t.json
+│   └── tests/
 ├── docs/                       ARCHITECTURE / MIGRATION / ALGORITHM + research context and history
-├── scripts/                    run_tests.ps1, migrate_local_layout.ps1
-├── pyproject.toml              installs pgct_core and pgct_overcooked (optional; paths are bootstrapped)
+├── scripts/                    run_tests.ps1, run_experiment.ps1, aggregate_experiment.ps1, start_detached.ps1, migrate_local_layout.ps1
+├── pyproject.toml              installs pgct_core, pgct_runner and the experiment packages (optional)
 └── research records            RESEARCH_STATE.md, DECISIONS.md, EXPERIMENTS.md, CONVERSATION_LOG.md, paper/, ...
 ```
 
-Dependency direction: `RWARE → pgct_core ← Overcooked`. `pgct_core` imports only numpy and torch.
+Dependency direction: `RWARE → pgct_core ← Overcooked`, `LBF / VMAS → pgct_runner → pgct_core`. `pgct_core` imports
+only numpy and torch; `pgct_runner` adds optional wandb / imageio / Pillow; only `VMAS/` imports `vmas`.
 
 ## The pre-split architecture (audit, 2026-11-05, commit 122615f)
 
@@ -89,7 +100,11 @@ update        ─ gate(update, contact, active = update > warmup)  → compare c
 ```
 
 RWARE runs the same gate/Max-GAE objects inside its own trainer through `latent_team/*install`; the
-Overcooked experiment uses `pgct_core.trainer.run_training`.
+Overcooked experiment uses `pgct_core.trainer.run_training`. The core trainer emits metric/evaluation rows
+through an optional callback while always retaining JSONL as the authoritative local record. Overcooked's
+`WandbTracker` consumes that callback; the queue launcher enables one W&B run per method/seed by default,
+grouped by the plan name. A W&B logging failure is written to `wandb_error.json` and does not destroy an
+otherwise valid long training run.
 
 ## Adding another MARL environment
 
@@ -99,7 +114,8 @@ Overcooked experiment uses `pgct_core.trainer.run_training`.
    Observations are each agent's local view; all agents' critic inputs must share one space (Max-GAE runs a
    donor critic on the receiver's inputs). `info` must not carry team labels; `info["events"]` may carry
    per-agent counters (logged as `episode_<key>_per_agent`, `eval_<key>_total`).
-2. **Projection** implementing `ProbeProjection`: `view_size`, `n_actions`, `view_dtype`,
+2. **Projection** implementing `ProbeProjection`: `view_size`, `n_actions`, `view_dtype`, optionally
+   `public_transition(before, action, after)` when both views and the action must share one frame (Overcooked v2),
    `public_view(observation)`. Include only what any nearby agent could see; exclude team identity,
    coordinates and private task information; make the semantics identical for every agent (egocentric views
    are fine). Leave `mirror` unimplemented (`NoMirror`) unless a symmetry augmentation is justified.
@@ -108,13 +124,16 @@ Overcooked experiment uses `pgct_core.trainer.run_training`.
 4. **Tests**: mechanics; public views independent of hidden labels; a scripted identification check (as in
    `Overcooked/tests/test_identification.py`); every method runs; non-oracle methods never read labels.
 
-`PGCT/tests/toy_env.py` is a complete 60-line example of steps 1–2.
+`PGCT/tests/toy_env.py` is a complete 60-line example of steps 1–2. For the command lines, describe the package
+with one `pgct_runner.ExperimentSpec` (`build(data, method, seed)`, config sections, smoke overrides, renderer,
+headline event counters) and wrap `train_main` / `evaluate_main` / `video_main` / `aggregate_main`
+(`LBF/pgct_lbf/experiment.py` and its four 15-line entry modules are the template).
 
 ## Environment-specific configuration
 
-| setting | where | RWARE | Overcooked |
-|---|---|---|---|
-| environment, rewards, layout | env config | `env_candidates.py`, trainer `env_kwargs_json` | `configs/*.json` → `kitchen` |
-| observation / probe radius, comm range | adapter | sensor range 5, probe radius 2, `communication_range` 3/5 | `adapter`: 3 / 1 / 3 |
-| PPO, gate, Max-GAE | shared dataclasses | RWARE trainer config + `ACV2Config` + `MaxGAEConfig` | same dataclasses (`ppo`, `gate`, `max_gae`) |
-| encoder | network | semantic CNN (RWARE trainer) | MLP (`pgct_core.networks`) |
+| setting | where | RWARE | Overcooked | LBF | VMAS |
+|---|---|---|---|---|---|
+| environment, rewards, layout | env config | `env_candidates.py`, trainer `env_kwargs_json` | `configs/*.json` → `kitchen` | `foraging` | `discovery` |
+| observation / probe radius, comm range | adapter | sensor range 5, probe radius 2, `communication_range` 3/5 | `adapter`: 3 / 1 / 3 | sight 2 / probe 2 / comm 3 | LIDAR .35 / velocity+LIDARs / comm .6 |
+| PPO, gate, Max-GAE | shared dataclasses | RWARE trainer config + `ACV2Config` + `MaxGAEConfig` | same dataclasses (`ppo`, `gate`, `max_gae`) | same; relative event rule | same; relative event rule |
+| encoder | network | semantic CNN (RWARE trainer) | MLP (`pgct_core.networks`) | MLP | MLP |

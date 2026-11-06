@@ -20446,3 +20446,1645 @@ python latent_team\train_from_scratch.py --env-variant b6_corner_indiv_comm5_pen
 ### Assistant — 최종 답변
 
 `feature/overcooked` 브랜치에 커밋했습니다(push는 하지 않았습니다). RWARE 코드·결과 이동은 rename으로 기록되어 이력이 이어집니다. 원격에 올리거나 PR을 만들려면 말씀해 주세요.
+
+## 원문 기록 T218 — 2026-11-05 KST, Codex
+
+### 사용자 — 원문
+
+# Files mentioned by the user:
+
+## PGCT_fin.pdf: C:/Users/95101/Downloads/PGCT_fin.pdf
+
+## My request:
+가장 최신 PGCT 논문이야.
+11월 5일 가장 최근 실험기록도 지금 문서에 남아있을꺼니 확인하고, 해당 실험을 동일하게 수행 가능한지 확인해주고, Overcooked도 동일하게 실험을 돌리고 싶으니까 잘 돌아가는지 확인해줘
+
+### 사용자 — 작업 중 추가 원문
+
+# Files mentioned by the user:
+
+## codex-clipboard-42a5d0f4-05f1-4d3e-a77c-c182bea0a784.png: C:/Users/95101/AppData/Local/Temp/codex-clipboard-42a5d0f4-05f1-4d3e-a77c-c182bea0a784.png
+
+## My request:
+두 이름으로 실험 돌아가는중이야
+
+(첨부 이미지: W&B run 이름 `b6_corner_indiv_comm5_pen005_acv2_amax_ippo_s1`, `b6_corner_indiv_comm5_pen005_acv2_amax_pgct_max_s1`.)
+
+### Assistant — 진행 안내 원문
+
+PDF의 최신 알고리즘 정의와 저장소의 11월 5일 기록·실행 설정을 대조하겠습니다. PDF 검증에는 `pdf` 스킬을 사용하고, 실제 본 실험은 시작하지 않은 채 동일 설정의 계획 생성·짧은 smoke 실행으로 RWARE와 Overcooked 양쪽의 실행 가능성을 확인하겠습니다.
+
+첨부 PDF는 저장소의 `MainPaper/PGCT_fin.pdf`와 SHA-256이 완전히 같습니다. 따라서 PDF 본문과 대응 LaTeX 원본을 함께 확인할 수 있습니다. 다음으로 11월 5일 기록에서 “실행 예정/실행 중”과 실제 완료 산출물을 구분해, 재현 가능한 정확한 명령과 누락된 조건을 확인하겠습니다.
+
+확인 결과, 11월 5일의 가장 마지막 실제 학습 기록은 `day_base_1105_nv`입니다. 기존 11×10 지도, 통신·관측 반경 5, 개인 보상, seed 1, 처음부터 2M step, `pgct_max` 대 `ippo`, action-max gate, mirror 없음, 영상 없음 조건입니다. 기록에는 15:10 기준 0.27–0.29M까지만 남아 있고, 현재 저장소에는 그 run의 실제 `runs/day_base_1105_nv_*` 산출물이 포함되어 있지 않아 최종 결과는 확인할 수 없습니다.
+
+이제 같은 2M 계획이 정확히 생성되는지와 두 환경의 짧은 실제 학습을 확인하겠습니다. 다만 현재 스크립트의 기본 Python 경로 `RWARE_MARL`은 이 컴퓨터에 없고, 설치된 호환 환경은 `marl-policy-sharing`이므로 검증 실행에는 그 경로를 명시하겠습니다.
+
+첫 계획 생성은 코드 오류가 아니라 PowerShell 배열을 외부 셸에서 전달한 방식 때문에 `pgct_max,ippo`가 하나의 문자열로 들어가 실패했습니다. 저장소의 실제 사용법처럼 PowerShell 배열로 다시 실행합니다.
+
+확인했습니다. 화면의 두 run은 바로 11월 5일 기록의 비교쌍입니다.
+
+- `..._ippo_s1`: 독립 PPO
+- `..._pgct_max_s1`: 현재 논문의 PGCT-D2(action-max gate + Max-GAE)
+
+이미 본 학습이 진행 중이므로 중복 학습은 띄우지 않겠습니다. 현재 프로세스의 실제 명령줄과 로컬 manifest/log를 읽기 전용으로 찾아서, 기록된 `day_base_1105_nv` 조건과 정확히 같은 실행인지 확인하겠습니다.
+
+이 PC에는 현재 Python 학습 프로세스가 하나도 없습니다. 따라서 W&B의 두 run이 실제로 계속 갱신 중이라면 다른 컴퓨터/서버에서 실행 중인 것이고, 이 PC에서 시작한 run이라면 W&B 상태만 `running`으로 남고 프로세스는 종료된 상황입니다. W&B API에서 두 run의 최근 step·heartbeat·설정을 읽어 어느 경우인지 확인하겠습니다.
+
+RWARE 검증은 통과했습니다.
+
+- 동일한 2M 계획이 정확히 생성됐고 실제 예산은 rollout 정렬 때문에 job당 2,000,896 step입니다.
+- 6 agent, seed 1, 무작위 초기화, 개인 보상, 요청 3개/팀, corner goal, 반경 5, action-max, mirror off, rollout-start snapshot, η=0.5/shrink가 모두 논문·11월 5일 기록과 일치합니다.
+- 64-step 실제 학습에서 두 job 모두 `final.pt`까지 정상 저장됐고, 초기 가중치 SHA-256도 동일했습니다.
+
+W&B의 현재 run도 18:36 KST heartbeat가 갱신되고 있어 실제 실행 중입니다. 현재 IPPO 617,472 step, PGCT 580,608 step이며 PGCT는 성숙 agent 5명, 같은 팀 승인 arc 8, 다른 팀 승인 arc 0, coverage 66.7%입니다. 두 run 모두 아직 평가 배송은 0이므로, 기록대로 0.8M 전후 회복 여부를 보는 단계입니다.
+
+이제 공유 코어 회귀 테스트와 Overcooked 6개 방법의 실제 smoke를 실행합니다.
+
+Overcooked의 여섯 방법은 모두 실제로 학습 루프를 완료하고 각각 `final.pt`와 `status=complete`를 만들었습니다. smoke는 wiring 확인용 256 step이라 평가 수익 0은 정상이며 성능 결과로 해석하면 안 됩니다. 테스트 결과 숫자를 확정하기 위해 RWARE 등가성 테스트와 Overcooked 테스트의 최종 요약만 다시 받겠습니다.
+
+핵심 결론이 나왔습니다. RWARE의 현재 run은 정상이고 논문 알고리즘과 맞습니다. 반면 Overcooked는 “코드 경로가 정상”인 것은 확인됐지만, 아직 “충분히 학습되는 실험”이라고 보기는 어렵습니다. 실제 설정 51.2K sanity에서 배달이 0이라 gate가 성숙하지 않았고, 현재 Overcooked에는 W&B 연동도 없습니다. 이 차이를 숨기지 않고 재현 명령과 함께 기록하겠습니다.
+
+### 수행 기록 — 원문 대화와 별도
+
+- PDF 스킬 지침을 읽고 첨부 PDF를 해시·전체 text·저장소 LaTeX와 대조했다. 첨부와 저장소 사본의 SHA-256이 같았다.
+- `RESEARCH_STATE.md`, `DECISIONS.md`, `EXPERIMENTS.md`, `CONVERSATION_LOG.md`에서 11월 5일 기록을 감사했다. 최신 실제 학습 기록은 T208의 `day_base_1105_nv`였다.
+- 로그인된 W&B API를 읽기 전용으로 조회해 현재 두 run의 heartbeat, step, 설정, 평가와 gate 지표를 확인했다. 외부 상태 변경 없음.
+- `RWARE/runs/verify_day_base_1105_exact`에 2M plan-only, `verify_day_base_smoke`에 64-step PGCT/IPPO smoke를 실행했다. 장기 학습은 시작하지 않았다.
+- 테스트: core 12 통과, RWARE 등가성 27 통과·3 건너뜀, Overcooked 14 통과. Overcooked 6개 방법 256-step smoke 모두 완료.
+- 기록: `RESEARCH_STATE.md`, `EXPERIMENTS.md` E87, 이 T218. 코드·알고리즘 변경 없음.
+
+### Assistant — 최종 답변
+
+확인 결과, **현재 RWARE 실험은 논문의 최신 PGCT-D2 설정과 맞고 정상 실행 중**입니다. Overcooked도 여섯 방법의 실행 경로는 정상이나, 아직 장기 학습 가능성까지 검증된 상태는 아닙니다.
+
+첨부 논문은 저장소의 `MainPaper/PGCT_fin.pdf`와 SHA-256이 완전히 같습니다. 논문의 핵심 설정(action별 최대 거리, mirror 없음, rollout-start snapshot, η=0.5/shrink Max-GAE, critic은 자기 return만 학습)도 현재 코드와 일치합니다.
+
+다만 논문에는 아직 “현재 방법을 11×16 넓은 지도에서 실행 중”이라고 적혀 있습니다. 11월 5일 E83에서 그 넓은 지도는 1.1M에 학습이 붕괴했고, 지금 실행하는 실험은 **기존 11×10 지도**로 전환한 뒤의 run입니다. 즉 알고리즘 설명은 최신이지만, 실험 진행 상황 문장과 결과 표는 아직 현재 run을 반영하지 않았습니다. 논문의 “learning comparisons are in progress”라는 결론은 여전히 맞습니다.
+
+#### 현재 W&B 두 run (18:36 KST 확인)
+
+| 방법 | W&B step | 상태 | 평가 배송 | 발견 상태 |
+|---|---:|---|---:|---|
+| IPPO | 617,472 | heartbeat 갱신 중 | 0 | 해당 없음 |
+| PGCT-D2 | 580,608 | heartbeat 갱신 중 | 0 | 성숙 5/6, 같은 팀 승인 arc 8, 다른 팀 0, coverage 66.7% |
+
+두 run은 실제로 살아 있습니다. 다만 이 Codex 환경에는 Python 학습 프로세스가 없으므로 다른 컴퓨터/호스트에서 실행 중입니다. 현재 0.6M 부근에도 평가 배송이 0이므로, 기록대로 **0.8M 전후에 pickup·배송이 회복하는지**가 첫 번째 중요한 판정점입니다.
+
+#### RWARE 재현성 확인
+
+- 같은 설정으로 2M 계획을 다시 생성했습니다: 6 agent, 2팀×3명, 개인 보상, corner goal, 요청 3개/팀, 관측·통신 반경 5, seed 1, scratch, action-max, mirror off, snapshot, η=.5/shrink.
+- 요청한 2M은 rollout에 맞춰 실제로 **2,000,896 step**입니다.
+- 64-step PGCT/IPPO smoke 둘 다 `final.pt`를 저장했고, 초기 가중치 hash도 같았습니다.
+- 공유 코어 12개, RWARE 분리 전후 등가성 27개가 통과했습니다(로컬 1M checkpoint가 필요한 3개는 건너뜀).
+
+따라서 **설정 수준과 실행 경로 수준에서는 동일 실험 재현이 가능**합니다. 다만 원래 `day_base_1105_nv` 로컬 run 폴더가 이 checkout에는 없으므로, 기존 run을 중간부터 resume하거나 완전 동일한 optimizer/RNG 상태를 복원하는 것은 불가능합니다. 새 실행은 같은 seed의 처음부터 실행입니다.
+
+작은 실행상 문제도 하나 있습니다. `run_queue.ps1` 기본 Python 경로는 이 PC에 없는 `RWARE_MARL`이고, 실제 설치 환경은 `marl-policy-sharing`입니다. 현재 run은 이미 잘 돌고 있으니 건드릴 필요 없지만, 새로 재현할 때는 `-Python C:\Users\95101\anaconda3\envs\marl-policy-sharing\python.exe`를 명시해야 합니다.
+
+#### Overcooked 확인 결과
+
+- 테스트 **14개 통과**.
+- IPPO, Oracle, All, PGCT-D2, identification-only, random-gate의 **6개 방법 모두 256-step smoke 완료**, `status=complete`와 `final.pt` 생성.
+- RWARE와 같은 PPO·gate·Max-GAE 수치를 사용합니다. 환경 차이 때문에 4 agent/2팀, 행동 6개, 관측 반경 3·통신 반경 3을 쓰며, 원칙상 `r_c=관측 반경`은 같습니다.
+- runtime에서는 rollout-start snapshot이 실제로 `true`로 강제됩니다. 다만 `plan.json`의 pre-runtime nested config에는 `false`로 보이고 각 job의 실제 `config.json`에는 `true`로 기록되는 작은 로깅 혼동이 있습니다. 동작 자체는 맞습니다.
+
+하지만 **바로 5M 본 실험을 거는 것은 권하지 않습니다.** 이전 실제 설정 51,200-step sanity에서 배달 0, reward event 0, 성숙 agent 0이어서 PGCT가 IPPO와 완전히 같았습니다. 이는 오류가 아니라 희소한 배송 보상까지 아직 도달하지 못했다는 뜻입니다. 또한 현재 Overcooked는 W&B가 아니라 로컬 `metrics.jsonl`, `gate.jsonl`, `eval.jsonl`만 기록합니다.
+
+먼저 0.5M pilot을 권합니다.
+
+```powershell
+Set-Location C:\PGCT_Overcooked\PGCT
+$env:PGCT_PYTHON = "C:\Users\95101\anaconda3\envs\marl-policy-sharing\python.exe"
+
+& .\Overcooked\scripts\run_overcooked.ps1 `
+  -Name oc_pilot_500k `
+  -Methods @("ippo", "pgct_d2") `
+  -Seeds @(1) `
+  -TotalTimesteps 500000 `
+  -MaxConcurrent 2
+```
+
+판정 기준은 delivery 발생, `ac_v2_mature_agents > 0`, 같은/다른 팀 거리 분리입니다. 이 세 조건이 확인되면 현재 RWARE와 같은 2M 비교로 확장하면 됩니다.
+
+```powershell
+& .\Overcooked\scripts\run_overcooked.ps1 `
+  -Name oc_2m_pair_v1 `
+  -Methods @("ippo", "pgct_d2") `
+  -Seeds @(1) `
+  -TotalTimesteps 2000000 `
+  -MaxConcurrent 2
+```
+
+검증 계획은 [RWARE experiment.json](C:/PGCT_Overcooked/PGCT/RWARE/runs/verify_day_base_1105_exact/experiment.json), Overcooked smoke 결과는 [run 폴더](C:/PGCT_Overcooked/PGCT/Overcooked/runs/verify_oc_smoke_1105)에서 확인할 수 있습니다.
+
+이번 점검은 `EXPERIMENTS.md` E87, `RESEARCH_STATE.md`, 대화 기록 T218에 남겼으며 아직 커밋하지 않았습니다.
+
+첨부 최신 논문: :codex-file-citation{path="C:/Users/95101/Downloads/PGCT_fin.pdf" purpose="source"}
+
+## 원문 기록 T219 — 2026-11-05 KST, Codex
+
+### 사용자 — 원문
+
+PS C:\PGCT_Overcooked> Set-Location C:\PGCT_Overcooked\PGCT
+>> $env:PGCT_PYTHON = "C:\Users\95101\anaconda3\envs\marl-policy-sharing\python.exe"
+>>
+>> & .\Overcooked\scripts\run_overcooked.ps1 `
+>>   -Name oc_pilot_500k `
+>>   -Methods @("ippo", "pgct_d2") `
+>>   -Seeds @(1) `
+>>   -TotalTimesteps 500000 `
+>>   -MaxConcurrent 2
+& : 이 시스템에서 스크립트를 실행할 수 없으므로 C:\PGCT_Overcooked\PGCT\Over
+cooked\scripts\run_overcooked.ps1 파일을 로드할 수 없습니다. 자세한 내용은 a
+bout_Execution_Policies(https://go.microsoft.com/fwlink/?LinkID=135170)를 참
+조하십시오.
+위치 줄:4 문자:3
++ & .\Overcooked\scripts\run_overcooked.ps1 `
++   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : 보안 오류: (:) [], PSSecurityException
+- FullyQualifiedErrorId : UnauthorizedAccess
+
+### Assistant — 진행 안내 원문
+
+PowerShell 실행 정책 차단입니다. 시스템 설정을 영구 변경하지 않고, 현재 PowerShell 창에서만 `Bypass`로 바꾸면 됩니다. 학습은 아직 시작되지 않았습니다.
+
+### 수행 기록 — 원문 대화와 별도
+
+- 오류 메시지로 실행 정책 차단임을 확인했다. 코드·설정·학습 변경 없음.
+
+### Assistant — 최종 답변
+
+오류 원인은 코드가 아니라 PowerShell 실행 정책입니다. 현재 창에서만 허용하면 되며 관리자 권한은 필요 없습니다.
+
+먼저 같은 PowerShell 창에서 실행하세요.
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+```
+
+그다음 기존 명령을 그대로 다시 실행합니다.
+
+```powershell
+Set-Location C:\PGCT_Overcooked\PGCT
+$env:PGCT_PYTHON = "C:\Users\95101\anaconda3\envs\marl-policy-sharing\python.exe"
+
+& .\Overcooked\scripts\run_overcooked.ps1 `
+  -Name oc_pilot_500k `
+  -Methods @("ippo", "pgct_d2") `
+  -Seeds @(1) `
+  -TotalTimesteps 500000 `
+  -MaxConcurrent 2
+```
+
+`-Scope Process`라서 이 PowerShell 창을 닫으면 설정이 자동으로 사라집니다. 시스템 전체 실행 정책은 바뀌지 않습니다.
+
+정상적으로 시작되면 `plan: ... (2 jobs)` 다음에 `start ippo_s1`, `start pgct_d2_s1`이 표시됩니다. 결과는 `C:\PGCT_Overcooked\PGCT\Overcooked\runs\oc_pilot_500k`에 저장됩니다. 이 queue 창은 두 job이 끝날 때까지 열어 두세요.
+
+그래도 같은 오류가 나오면 현재 정책이 그룹 정책으로 강제된 경우이므로, 아래 한 번짜리 명령을 사용하면 됩니다.
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command `
+  "& '.\Overcooked\scripts\run_overcooked.ps1' -Name 'oc_pilot_500k' -Methods @('ippo','pgct_d2') -Seeds @(1) -TotalTimesteps 500000 -MaxConcurrent 2 -Python '$env:PGCT_PYTHON'"
+```
+
+## 대화 기록 T220 — 2026-11-05 KST, Codex
+
+### 사용자 원문
+
+저거 돌아가는것도 RWARE처럼 wandb로 확인가능?
+
+### Assistant 진행 안내 원문
+
+Overcooked 실행 코드와 스크립트에서 W&B 연동 여부, 프로젝트명, 실행 이름이 어떻게 기록되는지 확인하겠습니다. RWARE와 같은 화면에서 바로 추적 가능한지도 함께 보겠습니다.
+
+확인 결과 현재 Overcooked 학습은 정상 진행 중이지만, 지금 구현은 W&B에 전송하지 않고 로컬 JSONL 파일에만 기록합니다. 현재 두 실행 모두 약 18,432/500,000 step까지 진행됐고 오류 로그는 비어 있습니다.
+
+### 수행 기록
+
+- `Overcooked/pgct_overcooked/train.py`, `Overcooked/scripts/run_overcooked.ps1`, 의존성 및 문서를 검색했다.
+- 현재 Overcooked 코드에는 W&B 초기화/로깅이 없고 `metrics.jsonl`, `gate.jsonl`, `eval.jsonl`에 로컬 기록한다.
+- `oc_pilot_500k`의 IPPO와 PGCT-D2 모두 update 18, env step 18,432까지 진행 중이며 두 `.log.err` 파일은 비어 있다.
+
+### Assistant 최종 답변
+
+현재 실행은 **W&B에서는 확인할 수 없습니다.** RWARE와 달리 Overcooked 쪽에는 아직 W&B 연동이 없고, 지표를 로컬 `metrics.jsonl`, `gate.jsonl`, `eval.jsonl`에 기록합니다.
+
+지금 상태는 정상입니다.
+
+- IPPO: 18,432 / 500,000 step
+- PGCT-D2: 18,432 / 500,000 step
+- 두 오류 로그 모두 비어 있음
+
+현재 진행 상황은 별도 PowerShell에서 다음처럼 볼 수 있습니다.
+
+```powershell
+Get-Content C:\PGCT_Overcooked\PGCT\Overcooked\runs\oc_pilot_500k\ippo_s1.log -Wait
+```
+
+```powershell
+Get-Content C:\PGCT_Overcooked\PGCT\Overcooked\runs\oc_pilot_500k\pgct_d2_s1.log -Wait
+```
+
+W&B 연동 자체는 가능합니다. 다만 **이미 실행 중인 두 프로세스에는 코드 변경이 자동 반영되지 않으므로**, 정식 W&B 추적은 연동 코드를 추가한 뒤 새 실험부터 적용하는 것이 안전합니다. 현재 500k 파일럿은 그대로 끝까지 돌려도 결과가 모두 로컬에 남습니다.
+
+## 대화 기록 T221 — 2026-11-05 KST, Codex
+
+### 사용자 원문
+
+앞으로는 Wandb 연동시켜줘 알겠지?
+그리고 RWARE에서 최신 PGCT 논문이랑 구현 상에 관계없어진 과거 출력파일들이 좀 있을꺼야 그런것들 전부 지워줘
+
+### Assistant 진행 안내 원문
+
+알겠습니다. 앞으로 시작하는 Overcooked 실험은 W&B로 추적되도록 연동하고, 현재 실행 중인 500k 파일럿은 중단하지 않겠습니다.
+
+RWARE 정리는 먼저 논문·최신 실험 문서·현재 실행과 연결된 결과를 대조해 보존 목록과 삭제 대상을 확정한 뒤 진행하겠습니다. 체크포인트나 활성 실행을 과거 출력으로 오인해 지우지 않도록 경로와 실행 상태도 함께 검증하겠습니다.
+
+정리 기준을 확인했습니다. 최신 논문이 직접 참조하는 RWARE 산출물과 현재 구현 검증에 쓰이는 체크포인트·회귀 자료는 보존하겠습니다. 반면 과거 탐색/실패/임시 렌더링 결과처럼 최신 논문과 현재 구현에서 참조되지 않는 생성 산출물은 삭제 대상으로 분류하겠습니다. 삭제 내역은 Git에서 복구 가능한 manifest로 남기겠습니다.
+
+W&B는 Overcooked 대기열 스크립트에서 기본 활성화하고, 실험명은 W&B group, `방법_seed`는 개별 run으로 기록하도록 구현하겠습니다. 테스트나 오프라인 실행은 `-NoTrack`으로 끌 수 있게 하고, 기존 500k 프로세스에는 손대지 않습니다.
+
+W&B 검증 결과는 정상입니다. Overcooked 전체 테스트 16개가 통과했고, 실제 W&B SDK의 offline smoke도 256 step 완료되어 지표와 최종 평가가 기록됐습니다. 샌드박스 계정이 사용자 W&B 설정 파일을 읽지 못한다는 경고는 있었지만 run 자체는 정상 생성됐으며, 일반 사용자 PowerShell에서는 해당 권한 경고가 발생하지 않습니다.
+
+이제 RWARE 삭제 대상을 절대경로·용량과 함께 최종 사전 점검한 뒤 삭제하겠습니다. Git 추적 파일이므로 삭제 후에도 커밋 이력에서 복구할 수 있습니다.
+
+RWARE 정리가 완료됐습니다. `RWARE/output`의 과거 생성 산출물 53개 디렉터리, 1,445개 파일(163.44 MiB)을 삭제했고, 최신 논문·D2 설계 근거·회귀 검증에 직접 필요한 8개 디렉터리와 `RWARE/runs` 전체는 보존했습니다. 삭제 파일은 Git 이력에서 복구 가능합니다.
+
+이제 공유 코어와 RWARE 동등성 테스트를 다시 실행해 정리 때문에 현재 구현이나 체크포인트 호환 경로가 깨지지 않았는지 확인하겠습니다.
+
+최종 회귀 검증도 통과했습니다: 공유 코어 12개, RWARE 동등성 27개(3개 건너뜀), Overcooked 16개입니다. 새 대기열의 plan에도 W&B `enabled=true`, project `pgct-overcooked`, mode `online`이 기록되는 것을 확인했습니다. 현재 500k 파일럿도 중단 없이 IPPO 102,400 step, PGCT-D2 100,352 step까지 진행 중입니다.
+
+### 수행 기록
+
+- 공유 trainer에 선택적 metric/eval callback을 추가하고 Overcooked 전용 `WandbTracker`를 구현했다.
+- `run_overcooked.ps1`은 새 job에서 W&B online tracking을 기본 활성화한다. project 기본값은 `pgct-overcooked`, group은 plan 이름, run 이름은 `<plan>_<method>_s<seed>`다.
+- W&B 실행 중 오류는 `wandb_error.json`에 남기고 로컬 JSONL/checkpoint 학습을 계속하도록 했다.
+- Overcooked 16 tests, 공유 코어 12 tests, RWARE 등가성 27 tests 통과·3 skip, 실제 W&B offline IPPO 256-step smoke 성공.
+- `RWARE/output` 53개 디렉터리/1,445파일/163.44 MiB 삭제. 최신 논문·D2 설계·검증 관련 8개와 `RWARE/runs` 전체 보존.
+- 삭제 manifest: `docs/RWARE_OUTPUT_CLEANUP_20261105.md`. 삭제 파일은 Git commit `b01ab42`에서 복구 가능.
+
+### Assistant 최종 답변
+
+완료했습니다.
+
+- **앞으로 Overcooked는 W&B 기본 연동**: `run_overcooked.ps1`로 시작하는 새 실험은 project `pgct-overcooked`에 자동 기록됩니다. `-Name`이 group, `<Name>_<method>_s<seed>`가 개별 run 이름입니다.
+- **현재 500k 파일럿은 유지**: 변경 전에 시작됐기 때문에 W&B에는 나타나지 않지만 중단하지 않았습니다. 현재 IPPO 102,400 step, PGCT-D2 100,352 step이며 오류 로그는 비어 있습니다.
+- **RWARE 과거 출력 정리**: 최신 논문·현재 D2 구현과 무관한 `RWARE/output` 53개 디렉터리, 1,445개 파일(163.44 MiB)을 삭제했습니다. 최신 논문/설계/회귀 검증에 필요한 8개 디렉터리와 `RWARE/runs`·체크포인트는 보존했습니다.
+- **복구 가능**: 삭제 대상 전체는 [정리 manifest](C:/PGCT_Overcooked/PGCT/docs/RWARE_OUTPUT_CLEANUP_20261105.md)에 기록했고 Git commit `b01ab42`에서 복구할 수 있습니다.
+
+검증 결과:
+
+- Overcooked: 16 passed
+- 공유 PGCT 코어: 12 passed
+- RWARE 동등성: 27 passed, 3 skipped
+- 실제 W&B offline smoke: 256 step 완료
+- 새 plan의 W&B 기본값: `enabled=true`, `project=pgct-overcooked`, `mode=online`
+
+W&B를 의도적으로 끌 때만 `-NoTrack`, 인터넷 없이 로컬 저장할 때는 `-WandbMode offline`을 사용하면 됩니다. 이번 변경사항은 아직 커밋하지 않았습니다.
+
+## 대화 기록 T222 — 2026-11-05 KST, Codex
+
+### 사용자 원문
+
+저거 Wandb에서 가장 마지막 영상도 보게할수 있나?
+
+### Assistant 진행 안내 원문
+
+가능한지 현재 Overcooked 환경의 렌더링 지원과 W&B 영상 로깅 경로를 확인하겠습니다. 기존 500k 실행에 적용 가능한지와, 새 실행부터 적용해야 하는지도 구분해서 말씀드리겠습니다.
+
+확인 결과 현재 Overcooked 환경은 텍스트 렌더링만 있고 RGB 프레임·MP4 생성과 W&B `Video` 로깅은 아직 없습니다. 따라서 설정만 켜서 바로 표시할 수 있는 상태는 아니지만, 렌더러와 결정적 평가 영상 저장을 추가하면 구현 가능합니다.
+
+### 수행 기록
+
+- `Overcooked/pgct_overcooked/env/kitchen.py`, adapter, evaluation, shared trainer에서 렌더링·영상·W&B Video 경로를 검색했다.
+- 현재 `Kitchen.render_text()`만 존재하며 RGB frame/MP4/W&B Video 구현은 없다.
+- 기존 `oc_pilot_500k`는 W&B 연동 전 프로세스라 실행 중 코드 변경을 자동 반영할 수 없다.
+
+### Assistant 최종 답변
+
+가능합니다. 다만 **현재 실행 중인 500k 파일럿에서는 바로 볼 수 없습니다.**
+
+현재 상태는 다음과 같습니다.
+
+- Overcooked 환경에는 아직 텍스트 렌더링만 있고 RGB 영상 생성 기능이 없습니다.
+- 현재 파일럿은 W&B 연동 전 시작했기 때문에 training run 자체도 W&B에 없습니다.
+
+새 실험부터는 다음 방식으로 구현할 수 있습니다.
+
+1. 평가 episode를 RGB 프레임으로 렌더링
+2. MP4로 저장
+3. W&B의 동일한 `eval/video` 키로 업로드
+4. 최종 평가 영상을 마지막에 한 번 더 기록해 W&B에서 가장 최신 영상을 바로 표시
+
+학습 속도와 저장 공간을 고려하면 **평가마다 영상을 올리기보다 최종 deterministic 평가 1 episode만 업로드**하는 방식을 권장합니다. 필요하면 일정 평가 간격마다 올리고 최종 영상만 로컬에 남길 수도 있습니다.
+
+현재 500k 파일럿도 완료 후 `final.pt`에서 영상을 사후 생성할 수 있습니다. 다만 기존 training run이 W&B에 없으므로, 이 영상은 별도의 W&B evaluation run으로 올려야 합니다.
+
+## 대화 기록 T223 — 2026-11-05 KST, Codex
+
+### 사용자 원문
+
+지금 2M으로 하는중인데 video 있어?
+
+### Assistant 진행 안내 원문
+
+현재 실행 중인 2M이 RWARE인지 Overcooked인지 실제 run 폴더와 설정을 확인해서, 영상 저장 옵션이 켜졌는지 바로 확인하겠습니다.
+
+확인했습니다. 지금 실행 중인 것은 Overcooked `oc_2m_pair_v1`이며 W&B 온라인 연결은 정상입니다. 다만 이 실행에는 영상 생성 기능이 포함되지 않아 현재 로컬에도 W&B에도 영상은 없습니다.
+
+### 수행 기록
+
+- `Overcooked/runs/oc_2m_pair_v1/plan.json`에서 2M IPPO/PGCT-D2, W&B tracking enabled를 확인했다.
+- W&B run ID는 IPPO `cw74dyw5`, PGCT-D2 `f3mnzn3l`이다.
+- run 폴더 전체에서 MP4/GIF/AVI/WebM 및 video 파일을 검색했으나 0개였다.
+- 20:35 전후 local metrics는 IPPO 335,872 step, PGCT-D2 325,632 step이며 PGCT mature agent 2, approved arc 0이다.
+- `.log.err` 내용은 W&B 로그인/동기화 상태 메시지이며 실제 학습 오류가 아니다.
+
+### Assistant 최종 답변
+
+아니요. **현재 2M 실행에는 video가 없습니다.**
+
+확인한 실행은 `oc_2m_pair_v1`이고 W&B 연결은 정상입니다.
+
+- [IPPO W&B run](https://wandb.ai/t98339-hanyang-university/pgct-overcooked/runs/cw74dyw5) — 약 335,872 step
+- [PGCT-D2 W&B run](https://wandb.ai/t98339-hanyang-university/pgct-overcooked/runs/f3mnzn3l) — 약 325,632 step
+
+로컬 run 폴더에도 MP4/GIF 등의 영상 파일이 0개입니다. `.log.err`에 있는 내용은 오류가 아니라 W&B 로그인·동기화 메시지입니다.
+
+이 실행은 이미 시작됐기 때문에 지금 영상 코드를 추가해도 실행 중 프로세스에는 반영되지 않습니다. 완료 후 `final.pt`로 영상을 사후 생성해 별도 W&B evaluation run에 올리는 것은 가능합니다.
+
+## 원문 기록 T224 — 2026-11-05 KST, Claude Code
+
+### 사용자 — 원문
+
+push해 줘
+한도 도달해서 codex로 Overcooked 진행했어
+기존 acv2_amax_ippo, pgct_max쪽 실험이 지금 환경에서도 동일하게 진행되는지
+Overcooked도 정상적으로 학습하는지
+
+### 사용자 — 작업 중 추가 원문
+
+Overcooked의 경우 만약 2M으로 안된다 싶으면 더 늘려서 잡아도 돼
+그리고 Overcooked 플레이 영상도 보고 싶어
+
+### 사용자 — 작업 중 추가 원문 2
+
+실험 돌리는데 팬 소음이 너무 시끄러워
+
+### 수행 기록 — 원문 대화와 별도
+
+- 저장소 폴더가 `C:\PGCT_Overcooked\PGCT`로 바뀌어 있었다. `b01ab42`는 이미 원격에 있고 PR #11로 master에 병합돼 있었다. Codex의 미커밋 작업(W&B 연동, RWARE 출력 1,445개 삭제, T218–T223 기록)을 확인했다.
+- RWARE: W&B 실행 중 2 run 설정과 현 계획 대조, 이 PC GPU 3 update 재실행 비교, 등가성 테스트·trainer 지문 재확인(E89).
+- Overcooked: 500k pilot·2M run 지표 요약, pilot `final.pt`로 gate 진단(E89, D133). 렌더러·영상 CLI·평가 영상 hook 추가, 테스트 19 통과, pilot 영상 생성·W&B 업로드.
+- 팬 소음: 제가 띄운 RWARE GPU 검증 job(PID 30416, 최종 평가 중)만 종료했다. 사용자 학습은 건드리지 않았다.
+- 커밋 `1483526`(출력 정리), `c5a1a34`(W&B·영상·문서·기록), 이 기록 커밋을 `feature/overcooked`에 push. master 반영은 하지 않았다.
+
+### Assistant — 진행 안내 (요지)
+
+- 저장소가 `C:\PGCT_Overcooked\PGCT`로 바뀐 것과, `b01ab42`가 이미 push·병합된 것, Codex 미커밋 작업(삭제 1,445개 포함)이 T221 사용자 요청이었음을 확인.
+- Overcooked는 학습은 되지만 gate 승인 0으로 PGCT-D2 = IPPO, 같은 팀 거리 .92 > 다른 팀 .80.
+- 실행 중 RWARE run은 다른 PC(RTX 5070 Ti)에서 분리 전 코드로 실행 중. 설정 127개 항목 일치. 이 PC 3 update 재실행은 첫 update 롤아웃 일치, 이후 GPU 부동소수점 차이로 갈라짐.
+- 영상 추가 요청에: 원인이 구조적이라 step만 늘려서는 해결이 어렵다고 먼저 알림. 렌더러 작성, 영상 생성·확인, 배지 위치 수정, 학습 중 영상 옵션 연결.
+- 분리 전후 지문 18/18 동일, 등가성 28 통과·4 건너뜀(probe bank 파일).
+- 팬 소음에: 제 검증 job을 종료해 CPU 부하 66% → 29%.
+
+### Assistant — 최종 답변
+
+push했고, RWARE 재현성과 Overcooked 학습을 확인했습니다. 결론부터 말씀드리면 RWARE는 같은 실험이 맞고, Overcooked는 학습은 잘 되지만 PGCT가 팀원을 한 번도 승인하지 못하고 있습니다.
+
+## 팬 소음
+
+- 제가 띄운 RWARE 검증 job이 최종 평가 중에 GPU와 CPU를 함께 쓰고 있었습니다. 필요한 지표는 이미 받아서 종료했고, CPU 부하가 66%에서 29%로 내려갔습니다.
+- 지금은 사용자의 Overcooked 2M 학습 두 개(각각 CPU 코어 1개)만 돕니다. 남은 시간은 3시간 남짓입니다(약 0.45M/2M, job당 약 140 step/s).
+- 더 줄이려면 직접 바꿔 주세요. 제어판 → 전원 옵션 → 고급 설정 → 프로세서 전원 관리 → 최대 프로세서 상태를 99%로 낮추면 대부분의 PC에서 터보가 꺼져 소음이 크게 줄고, 속도는 조금 느려집니다. 시스템 설정이라 제가 바꾸지 않았습니다.
+- 다음 실험은 `-MaxConcurrent 1`로 돌리면 열이 덜 납니다.
+
+## push
+
+- `b01ab42`(구조 분리)는 이미 원격에 있었고, PR #11로 master에도 병합돼 있었습니다.
+- 남아 있던 Codex 작업과 이번 작업을 `feature/overcooked`에 커밋 2개로 나눠 올렸습니다.
+  - `1483526`: RWARE 과거 출력 1,445개 삭제(T221에서 요청하신 정리, 목록은 `docs/RWARE_OUTPUT_CLEANUP_20261105.md`)
+  - `c5a1a34`: Overcooked W&B 연동, 재생 영상 기능, 문서·연구 기록
+- 이 대화 기록 커밋도 이어서 올렸습니다. master에는 아직 반영하지 않았습니다(PR 필요).
+
+## RWARE: 지금 환경에서도 같은 실험인가
+
+지금 W&B에서 도는 두 run은 다른 PC(DESKTOP-03ASKH8, RTX 5070 Ti)에서 분리 전 코드로 실행 중입니다.
+
+- **설정**: W&B에 기록된 run 설정과 지금 코드가 만드는 계획이 trainer 87개, 환경 40개 항목 모두 같습니다(예산 2,000,896 step, warm-up 100).
+- **실제 실행**: 같은 job을 이 PC(RTX 3060)에서 3 업데이트 돌려 W&B 기록과 비교했습니다.
+  - 첫 업데이트의 롤아웃 결과(배송·집기·에피소드 수익·행동 횟수)는 정확히 같습니다. 초기 가중치, 환경, 행동 표본이 같다는 뜻입니다.
+  - loss와 행동 확률은 상대 1e-5 정도 다르고, 2번째 업데이트부터 경로가 갈라집니다. GPU가 달라서 생기는 부동소수점 차이입니다.
+  - 그래서 이 PC에서 처음부터 다시 돌리면 같은 실험이지만 곡선이 숫자까지 똑같지는 않습니다.
+- **분리 전후 코드**(같은 PC, CPU): trainer 지문 18/18 동일, 등가성 테스트 28개 통과(건너뜀 4개는 모두 checkpoint가 아닌 probe bank 파일)입니다. Codex의 W&B 연동과 이번 영상 기능을 넣은 뒤에 확인했습니다.
+
+## Overcooked: 정상적으로 학습하는가
+
+**학습은 됩니다.** 500k pilot(seed 1)에서:
+- 에피소드당 자기 레시피 배달이 처음 100 업데이트 동안 0이었다가, 마지막에는 약 25회까지 늘었습니다.
+- 결정적 평가 수익은 agent당 8.5(자기 배달 21회)입니다.
+- 지금 도는 2M run은 같은 seed·설정이라 0.45M까지 pilot과 숫자까지 똑같습니다.
+
+**하지만 PGCT는 팀원을 한 번도 승인하지 못했습니다.** 그래서 PGCT-D2가 처음부터 IPPO와 가중치까지 같습니다. pilot의 gate 상태를 열어 보니 원인이 두 가지였습니다.
+- **창구 방향**: 토마토 팀 두 명이 각각 서쪽·동쪽 서빙 창구에서만 배달합니다. 공개 probe는 자기 중심 view지만 회전 정규화가 없어서, 같은 "자기 수프 배달"이 서로 다른 입력이 됩니다. 각자 예측기는 팀원의 배달에 0.04로 답했고(자기 배달은 1.0), 같은 팀 거리가 0.92로 다른 팀(0.82)보다 오히려 멉니다.
+- **역할 분화**: 양파 팀의 요리 담당은 배달을 2번만 해서 성숙하지 못했습니다. 보상 사건이 없는 agent는 설계상 묶이지 않습니다(RWARE와 같은 한계).
+
+**예산 연장**: 늘려도 된다고 하셨지만, 위 원인은 step을 늘려도 풀리지 않을 가능성이 커서 늘리지 않았습니다. 실행 중인 run은 이어 학습이 안 되므로, 늘리려면 처음부터 새로 돌려야 합니다.
+
+**제안**(D133, 미구현): Overcooked 어댑터의 공개 probe를 agent가 바라보는 방향이 항상 위가 되도록 회전해서 쓰는 v2입니다.
+- 공유 비교 절차, gate 값, Max-GAE는 바꾸지 않고 환경별 projection만 바꿉니다. 원 지시서 7절이 허용한 범위이고, mirror 증강을 되살리는 것과는 다릅니다.
+- 다만 회전해도 창구 양옆 칸의 좌우는 바뀌므로 완전히 해결된다는 보장은 없습니다.
+- 새 config와 새 plan 이름으로 0.5M pilot부터 확인하겠습니다.
+
+`Overcooked/docs/EXPERIMENT_DESIGN.md`에 "위치와 무관하게 비교 가능"이라고 썼던 부분은 이 결과로 정정했습니다.
+
+## 플레이 영상
+
+- 500k pilot 영상(결정적 정책 1 에피소드, 400 step)을 보내 드렸고, W&B에도 올렸습니다: [oc_pilot_500k_ippo_s1_video](https://wandb.ai/t98339-hanyang-university/pgct-overcooked/runs/el1xz1u1)
+- 칸 왼쪽 위 O/T 배지는 숨은 팀 레시피입니다. 보는 사람용이고 agent는 보지 않습니다.
+- 앞으로 `run_overcooked.ps1`로 시작하는 학습은 평가 때마다(51,200 step 간격) 영상을 W&B `eval/video`에 올리고, 최근 10개와 `final.mp4`를 남깁니다. 영상을 켜도 학습 가중치가 비트 단위로 같음을 테스트로 확인했습니다.
+- 지금 도는 2M run은 이 기능 전에 시작돼 영상이 없습니다. 끝난 뒤 아래처럼 만들면 됩니다.
+
+```powershell
+python -m pgct_overcooked.video --job Overcooked\runs\oc_2m_pair_v1\pgct_d2_s1 --wandb
+```
+
+테스트는 Overcooked 19개, 공유 코어 12개 모두 통과했습니다. 기록은 `EXPERIMENTS.md` E89, `DECISIONS.md` D133, `RESEARCH_STATE.md`, `CONVERSATION_LOG.md` T224에 남겼습니다.
+
+## 원문 기록 T225 — 2026-11-05 KST, Claude Code
+
+### 사용자 — 원문
+
+v2 준비해 줘
+
+### 수행 기록 — 원문 대화와 별도
+
+- 공유 코어에 선택적 public_transition hook, Overcooked 어댑터에 probe_frame(facing) v2, 설정 main_4p2t_probe_v2.json, 오프라인 재생 도구 offline_gate_check.py, 테스트 test_probe_v2.py(9개)를 추가했다(D134).
+- 검증: Overcooked 28 통과, RWARE gate 관련 60 통과·7 건너뜀, trainer 지문 18/18 동일, 스크립트 반대 창구 시험과 500k 정책 재생 비교(E90), v2 smoke, pilot 계획 생성. 학습·커밋 없음.
+
+### Assistant — 진행 안내 (요지)
+
+- v2 계획 설명(어댑터 옵션, 코어 hook, 학습 전 두 가지 확인, 긴 학습은 명령만 준비).
+- 스크립트 시험: v1 미승인, v2 정확히 팀원만 승인. 거리 기준 0.2는 실제 0.32라 테스트 기준을 정직하게 조정.
+- 오프라인 재생 v1 결과: 같은 서쪽 창구의 다른 팀 1–2가 0.054로 오승인(상대 수프 경험 부족 가설).
+- RWARE 재검증 60 통과, 지문 18/18. v2 smoke와 pilot 계획 완료.
+- 오프라인 결과 표(2–3 v1 .76 → v2 .36 승인, 1–2 오승인 유지, 1–3 .92 → .55).
+
+### Assistant — 최종 답변
+
+v2를 준비했습니다. 학습 전 검증에서 v2는 반대 창구를 쓰는 팀원을 찾아냈습니다. 다만 같은 창구를 쓰는 다른 팀을 잘못 승인하는 문제는 v1과 마찬가지로 남아 있어서, 실제 효과는 0.5M pilot으로 확인해야 합니다. 학습은 시작하지 않았고, 커밋도 아직 하지 않았습니다.
+
+## 바꾼 것
+
+- **v2 probe**(`Overcooked/configs/main_4p2t_probe_v2.json`): gate가 보는 공개 전이를 agent가 이동 전에 바라보던 방향 기준으로 바꿉니다.
+  - 3×3 주변 칸을 바라보는 방향이 위로 오도록 회전합니다.
+  - 다른 agent의 방향과 이동 행동(북·동·남·서)을 앞·오른쪽·뒤·왼쪽으로 바꿉니다.
+  - 회전이지 좌우 반전(mirror)이 아니고, mirror 증강도 다시 켜지 않았습니다.
+- **그대로인 것**: 관측, 보상, PPO, gate 값, Max-GAE는 v1과 같습니다. 그래서 IPPO·Oracle·All은 v1 설정과 비트 단위로 같고(테스트로 확인), 기존 `oc_pilot_500k/ippo_s1`을 IPPO 기준으로 그대로 쓸 수 있습니다.
+- **공유 코어**: projection이 전이 단위 변환을 정의하면 gate가 그것을 쓰는 선택적 hook만 추가했습니다. RWARE는 이 hook을 쓰지 않으며, gate 관련 테스트 60개 통과, trainer 지문 18/18이 분리 전과 같습니다.
+
+## 학습 전 검증
+
+**스크립트 시험**: 각 팀에서 한 명은 서쪽 창구, 다른 한 명은 동쪽 창구에서만 배달하게 했습니다.
+- v1: 같은 팀 거리 0.53·0.54로 승인 임계(0.5)를 넘어 팀원을 못 찾았습니다.
+- v2: 같은 팀 거리 0.32·0.27로 정확히 팀원 두 쌍만 승인했습니다.
+- 다른 팀 거리는 둘 다 0.92 이상입니다.
+
+**500k pilot 정책 재생**: pilot의 학습된 정책으로 40,960 step 경험을 만들고, 같은 경험을 v1·v2 gate에 각각 넣었습니다.
+
+| 쌍 | 관계 | v1 | v2 |
+|---|---|---|---|
+| 2–3 (토마토, 서쪽·동쪽 창구) | 같은 팀 | 0.76 미승인 | **0.36 승인** |
+| 1–2 (양파·토마토, 둘 다 서쪽 창구) | 다른 팀 | 0.054 오승인 | 0.067 오승인 |
+| 1–3 (양파 서쪽·토마토 동쪽) | 다른 팀 | 0.92 | 0.55 |
+
+**해석**
+- v2는 목표했던 반대 창구 팀원 문제를 해결합니다.
+- 반면 학습이 끝난 정책은 상대 팀 수프를 거의 배달하지 않습니다. 그래서 그 경험만으로 새로 학습한 예측기는 수프 종류를 구분하지 못하고, 같은 창구를 쓰는 다른 팀을 승인합니다(v1·v2 공통).
+- 실제 학습에서는 초반 탐색 중 상대 수프 배달이 섞여서, pilot gate의 1–2 거리가 0.82였습니다. 이 재생은 다른 팀 분리에 불리한 조건이라, 실제 결과는 학습으로 봐야 합니다.
+- 주의할 점도 있습니다. v2는 1–3 거리도 0.92에서 0.55로 낮춰 다른 팀과의 여유가 줄었습니다. 그리고 배달하지 않는 요리 담당은 v2에서도 성숙하지 못합니다.
+
+## 실행 준비
+
+- v2 smoke(pgct_d2·pgct_id_only·random_gate, 영상 포함)가 정상 동작했습니다. Overcooked 테스트는 28개 모두 통과했습니다(v2 관련 9개 추가).
+- pilot 계획 `Overcooked\runs\oc_pilot_500k_probe_v2`(pgct_d2·oracle, seed 1, 0.5M)를 만들어 두었습니다. 두 job을 동시에 돌리면 1시간 남짓 걸립니다.
+- 소음이 신경 쓰이면 `-MaxConcurrent 1`로 하나씩 돌리세요(약 2시간). 지금 도는 2M은 0.51M 지점이고 3시간쯤 남았으니, 끝난 뒤에 시작하는 편이 조용합니다.
+
+```powershell
+Set-Location C:\PGCT_Overcooked\PGCT
+```
+
+```powershell
+$env:PGCT_PYTHON = "C:\Users\95101\anaconda3\envs\marl-policy-sharing\python.exe"
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -Command "& '.\Overcooked\scripts\run_overcooked.ps1' -Config main_4p2t_probe_v2.json -Name oc_pilot_500k_probe_v2 -Methods pgct_d2,oracle -Seeds 1 -TotalTimesteps 500000 -MaxConcurrent 2"
+```
+
+판정 기준은 네 가지입니다: 성숙 agent 수, 같은 팀 2–3의 승인 여부와 시점, 다른 팀 오승인, PGCT-D2와 IPPO 학습 곡선의 차이. W&B `pgct-overcooked` 프로젝트에서 지표와 평가 영상을 볼 수 있습니다.
+
+기록은 `EXPERIMENTS.md` E90, `DECISIONS.md` D134, `RESEARCH_STATE.md`, `CONVERSATION_LOG.md` T225에 남겼습니다.
+
+## 원문 기록 T226 — 2026-11-05 KST, Claude Code
+
+### 사용자 — 원문
+
+커밋·push해 줘
+
+### 수행 기록 — 원문 대화와 별도
+
+- T225의 Overcooked probe v2 변경(D134, E90)과 기록을 `feature/overcooked`에 한 커밋으로 올렸다. master 반영 없음. 커밋 해시는 `git log`로 확인한다.
+
+### Assistant — 최종 답변
+
+`feature/overcooked`에 v2 변경을 커밋해 push했습니다. 실행 결과물·영상·checkpoint는 포함되지 않았습니다. master에는 아직 반영하지 않았으니, 필요하시면 PR을 만들어 드리겠습니다.
+
+## 원문 기록 T227 — 2026-11-06 KST, Claude Code
+
+### 사용자 — 원문
+
+wandb rware-main-amax-v2 학습과 이 컴퓨터에서의 overcooked 학습 분석해줘
+
+https://forge.coreweave.com/wandb/t98339-hanyang-university/rware-main-amax-v2?nw=nwusert98339
+
+### 사용자 — 작업 중 추가 원문
+
+https://forge.coreweave.com/wandb/t98339-hanyang-university/rware-main-amax-v2?nw=nwusert98339
+
+지금 claude 브라우저 창에서 열었어 확인
+
+### 수행 기록 — 원문 대화와 별도
+
+- W&B API로 day_base 2 run의 지표를 읽기 전용으로 받았다(전체 다운로드가 느려 제가 띄운 다운로드 프로세스만 중단). 브라우저 W&B 화면의 PGCT key 패널 11개를 넘겨 확인했다(클릭은 패널 넘김만).
+- 로컬 Overcooked run 상태·로그·gate 기록·시간 기록을 분석했다. 학습 시작·중단 없음. 결과는 E91, 상태는 RESEARCH_STATE.
+
+### Assistant — 진행 안내 (요지)
+
+- W&B는 API로 원본을 받겠다고 안내. 실행 중 2 run(DESKTOP-03ASKH8, 12.8시간) 확인.
+- 브라우저 화면 확인: PGCT-D2 수익·배송이 0.8M 이후 IPPO보다 높고, eval/wrong_returns가 끝에 급등.
+- Overcooked: 2M v1이 21:08 KeyboardInterrupt로 중단, v2 pilot은 승인 0, 처리량 저하는 CPU 전반 저하.
+- PGCT key 패널 요약(성숙 5/6, 같은 팀 승인 8, 다른 팀 0, donor 모두 같은 팀).
+- 전체 다운로드가 느려 지표를 골라 받도록 전환. 집기 보상 지급 방식 확인(선반당 1회).
+
+### Assistant — 최종 답변
+
+두 학습을 분석했습니다. RWARE에서는 PGCT-D2가 팀원을 오류 없이 찾고, IPPO가 멈춰 있는 동안 배송을 회복하고 있습니다. Overcooked는 학습은 잘 되지만, v2에서도 아직 승인이 0입니다. 브라우저에 열어 주신 W&B 화면(PGCT key 패널 11개)과 API로 받은 원본 수치를 함께 봤습니다.
+
+## RWARE (`rware-main-amax-v2`, seed 1, 진행 중)
+
+다른 PC(DESKTOP-03ASKH8)에서 12.8시간째 돌고 있습니다. 현재 IPPO 1.26M, PGCT-D2 1.17M step이고(목표 2M), 약 27 step/s라 8시간쯤 남았습니다.
+
+**식별: 깨끗합니다.**
+- 성숙 agent는 0.16M부터 늘어 0.23M에 6명 중 5명이 됐습니다. agent 1은 보상 사건이 없어 끝까지 미성숙입니다.
+- 승인은 같은 팀 arc 8개뿐이고 다른 팀은 0입니다. 성숙한 agent 사이의 같은 팀 쌍은 전부 승인됐고, 0.25M 이후 바뀌지 않았습니다. critic을 빌려 준 donor 8개도 모두 같은 팀입니다.
+- 감사 거리는 같은 팀이 0.25 → 0.07로 줄었고, 다른 팀은 0.99–1.00입니다.
+
+**학습: PGCT-D2만 회복 중입니다.** (구간 평균)
+
+| 구간 | IPPO 학습 배송 | PGCT-D2 학습 배송 | IPPO 수익 | PGCT-D2 수익 |
+|---|---|---|---|---|
+| 0.6–0.8M | 0.02 | 0.37 | −0.07 | 0.00 |
+| 0.8–0.9M | 0.03 | 1.06 | −0.03 | 0.16 |
+| 0.9–1.0M | 0.04 | 1.92 | −0.02 | 0.32 |
+| 1.1–1.2M | 0.08 | 2.46 | −0.01 | 0.47 |
+
+- 결정적 평가 배송: IPPO는 1.23M까지 24번 모두 0입니다. PGCT-D2는 0.77M에 0.25로 처음 나온 뒤 1.02M 2.30, 1.18M 1.45입니다.
+- 배송은 두 명만 합니다: agent 0(팀 0)과 agent 5(팀 1). 두 agent의 critic 설명력(EV)은 0.73과 0.69이고, 나머지는 −0.22–0.11입니다.
+- Max-GAE 상향폭(mean b)은 0.02에서 0.29로 커졌고, 실제 advantage 변화(adv shift)는 0.35입니다.
+
+**주의할 점**
+- 학습 중 요청 선반 집기는 에피소드당 8–14회인데, 잘못된 위치에 반납하는 것도 4.6–6.3회로 늘었습니다. 1.13M 평가에서는 잘못된 반납이 39.75회 나왔습니다.
+  - 집기 보상은 agent·선반마다 한 번만 주므로 보상 악용은 아닙니다.
+  - 배송 뒤 선반을 제자리에 돌려놓지 못하고 내려놨다 다시 집는 반복으로 보입니다. 영상으로는 아직 확인하지 않았습니다.
+- seed 1 하나이고 IPPO와 PGCT-D2만 있어서, 이 이득이 critic 접근 덕분이라고 단정할 수는 없습니다. oracle_max·allk_max와 추가 seed가 있어야 합니다.
+
+## Overcooked (이 PC, seed 1)
+
+**v1 2M 실행**
+- 어제 21:08에 두 job 모두 `KeyboardInterrupt`(Ctrl+C 또는 창 닫기)로 멈췄습니다(약 0.51–0.53M).
+- 이 구간은 500k pilot과 숫자까지 같아서 새로 얻은 정보는 없습니다.
+
+**v2 pilot의 PGCT-D2**
+- 0.497M으로 거의 끝났고, 학습 자체는 잘 됩니다(배달 0 → 에피소드당 약 25).
+- 하지만 승인이 0이라 학습 기록이 v1과 486 업데이트 내내 같습니다.
+- oracle job은 아직 시작 전입니다.
+
+| 쌍 | 관계 | v1 거리 | v2 거리 |
+|---|---|---|---|
+| 2–3 (반대 창구) | 같은 팀 | 0.92 | **0.58** |
+| 1–2 | 다른 팀 | 0.82 | 0.82 |
+| 1–3 | 다른 팀 | 1.00 | 1.00 |
+
+- v2로 같은 팀 거리가 크게 줄고 다른 팀과도 갈렸지만, 승인 임계 0.5를 넘지 못했습니다.
+- 남은 차이는 회전 후에도 창구 앞 양 대각선 칸(접시 디스펜서와 카운터)이 좌우로 다르기 때문으로 보입니다.
+- 요리 담당 agent 0은 여전히 미성숙입니다. RWARE의 agent 1과 같은 한계입니다.
+
+**처리량**: 36 step/s로 어제 pilot의 약 1/3.5입니다. 롤아웃·PPO·gate가 모두 같은 비율로 느려졌으니 코드 문제가 아니라 CPU 클럭이 낮아진 것으로 보입니다(전원 설정이나 발열 제한). 팬 소음 때문에 전원 설정을 바꾸셨다면 그 영향입니다.
+
+## 정리와 제안
+
+- **RWARE**: 그대로 2M까지 두는 게 맞습니다. 지금 기록만으로도 "같은 팀만 정확히 승인(precision 1.0)"은 확인됩니다. 학습 이득은 2M과 비교군이 모여야 주장할 수 있습니다.
+- **Overcooked**: 원인이 창구 앞 대각선 두 칸으로 좁혀졌습니다. 회전한 view에서 대각선을 빼고 앞·좌·우·뒤와 자기 칸만 남기는 십자형 probe(v3)로 바꾸면 서쪽·동쪽 창구 배달이 같은 입력이 됩니다.
+  - v2처럼 gate만 바뀌고 학습·IPPO 기준은 그대로입니다.
+  - 학습 전에 스크립트 시험과 정책 재생으로 먼저 확인할 수 있습니다.
+
+기록은 `EXPERIMENTS.md` E91, `RESEARCH_STATE.md`, `CONVERSATION_LOG.md` T227에 남겼고, 커밋은 하지 않았습니다.
+
+## 원문 기록 T228 — 2026-11-06 KST, Claude Code
+
+### 사용자 — 원문
+
+v3 검증해줘
+그리고 Overcooked에 무슨 문제가 있는지 자세히 분석, 알기쉽게 이유 설명
+
+### 사용자 — 작업 중 추가 원문
+
+전에 교수님도 지적한 내용인데 Dij 범위가 [0,1]이라고 승인 임계를 0.5로 둔 이유가 없지 않냐고 묻던데 이 부분도 생각해줘
+
+### 수행 기록 — 원문 대화와 별도
+
+- v3(probe_frame facing_cross) 구현, 설정 main_4p2t_probe_v3.json, 테스트(Overcooked 30 통과), 그림 Overcooked/docs/img/probe_views_v1_v2_v3.png.
+- offline_gate_check를 checkpoint 순차 재생으로 확장하고 v1/v2/v3 비교, 재생 접촉 측정. 임계값 수식 수치 검증(유도 오류 2건을 발견해 고침). 학습 시작·중단 없음. 결과 D135·D136·E92.
+
+### Assistant — 진행 안내 (요지)
+
+- v3 계획과 세 단계 검증 안내. v3 스크립트 시험 .001/.004.
+- 임계값: 수식을 숫자로 먼저 확인. 공유 사건 비율 공식과 오차 상한의 유도 오류를 발견해 바로잡음.
+- 그림 작성. v1 재생에서 같은 창구 다른 팀 1–2 오승인(.11), 실제 학습과 차이 설명.
+- v2 pilot 완료, oracle 실행 중. 재생에서 2–3 비교 0회의 원인을 접촉·성숙 시점으로 확인.
+- v3 재생 표(1–3 .30 오승인)와 한쪽만 구분할 때 거리 1/3 식 확인, probe 주인별 최대 거리 후보.
+
+### Assistant — 최종 답변
+
+v3를 구현해 학습 전 검증까지 했고, Overcooked의 문제를 원인별로 정리했습니다. 결론부터 말하면 v3는 "같은 일을 다른 장면으로 본다"는 문제를 고칩니다. 하지만 검증 중에 더 근본적인 문제가 드러났습니다. 예측기가 "상대 팀 수프는 보상이 없다"는 걸 겪어 보지 못하면, 위치 단서가 사라진 뒤로는 팀을 구분하지 못합니다. 실제 학습 궤적에서 v3가 통하는지는 아직 확인하지 못했습니다.
+
+## 먼저, gate가 팀을 찾는 원리
+
+각 agent는 "어떤 장면에서 내가 보상을 받는가"를 스스로 배웁니다. 두 agent가 만나면 각자 보상을 받았던 장면을 서로 보여 주고, "이 장면이면 너도 보상을 받겠니?"를 확인합니다. 대답이 대부분 같으면 같은 팀으로 승인합니다. 이 과정에 팀 라벨은 쓰지 않습니다.
+
+## Overcooked에 있는 문제 (쉬운 설명)
+
+**1. 같은 일을 다른 장면으로 기억한다 — v3가 고치는 문제**
+- 토마토 팀 두 명이 각각 왼쪽·오른쪽 서빙 창구에서만 배달합니다.
+- v1은 "지도 북쪽이 위인 사진"이라, 한 사람에게 배달은 "왼쪽에 창구가 있는 장면"이고 다른 사람에게는 "오른쪽에 창구가 있는 장면"입니다.
+- 그래서 팀원의 배달 장면을 보여 주면 "처음 보는 장면"이라며 0.04로 답했습니다. 같은 팀 거리는 0.92였습니다.
+- v2는 바라보는 방향을 위로 돌려 창구를 앞에 맞췄지만, 창구 양옆 대각선 칸(접시 디스펜서와 카운터)이 좌우로 바뀌어 0.58이 남았습니다. 0.5 임계를 넘지 못했습니다.
+- v3는 대각선을 빼고 앞·좌·우·뒤와 자기 칸만 봅니다. 두 창구의 배달이 완전히 같은 입력이 됩니다(보내 드린 그림).
+
+**2. 보상을 받는 순간이 없는 팀원 — 역할 분담**
+- 양파 팀 agent 0은 요리만 하고 배달은 2번 했습니다.
+- 재료 넣기(+0.1)와 수프 꺼내기(+0.2)는 "보상 사건" 기준(0.5)보다 작아서, agent 0에게는 비교에 쓸 장면이 없습니다. 그래서 끝까지 미성숙이고, 양파 팀 쌍은 처음부터 판정할 수 없습니다.
+- RWARE의 agent 1도 같은 이유로 미성숙입니다. 방법 자체의 한계입니다.
+
+**3. 겪어 보지 않은 것은 구별하지 못한다 — 이번에 새로 드러난 핵심 문제**
+- 팀을 가르는 근거는 "상대 팀 수프를 배달했더니 보상이 0이었다"는 경험뿐입니다.
+- 학습된 정책은 상대 수프를 거의 배달하지 않습니다(agent 1은 6번). 이 경험만으로 새로 배운 예측기는 수프 종류를 무시하고 "수프를 창구에 내면 1"로 답합니다.
+- 한쪽 예측기만 수프 종류를 구분하면 거리는 정확히 1/3이 됩니다(식과 수치로 확인). 그래서 임계 0.5 아래로 들어와 다른 팀이 승인됩니다.
+- v1이 다른 팀을 떼어 놓았던 것도 사실 수프 종류가 아니라 창구 위치 덕분이었습니다. v3는 그 우연한 단서를 지웁니다.
+- 다만 실제 학습에서는 초반 탐색 경험이 쌓여서, 같은 창구를 쓰는 다른 팀 쌍(1–2)이 0.82로 잘 떨어져 있었습니다. 그래서 학습 궤적에서는 수프 종류를 배운 것으로 보입니다.
+
+**4. 승인되더라도 얻을 게 적을 수 있다**
+- Overcooked는 IPPO만으로도 0.5M에 이미 잘 배웁니다(배달 0 → 에피소드당 약 25).
+- RWARE는 IPPO가 아예 멈춰 버려서, 팀원 critic이 길을 알려 줄 여지가 컸습니다.
+- 게다가 Overcooked에서 승인될 수 있는 같은 팀 쌍은 1쌍뿐입니다. 효과를 보이려면 더 어려운 설정(shaping 제거 등)이 필요할 수 있습니다.
+
+**5. 운영 문제**
+- v1 2M 실행은 11-05 21:08에 Ctrl+C로 중단됐습니다.
+- CPU 클럭이 낮아져 처리량이 약 1/3.5로 떨어졌습니다.
+
+## v3 검증 결과
+
+| 확인 | v1 | v2 | v3 |
+|---|---|---|---|
+| 두 창구 배달이 같은 입력인가 | 아니오 | 아니오 | **예** |
+| 스크립트 시험, 같은 팀 거리(두 수프를 모두 겪은 경우) | 0.53·0.54 | 0.32·0.27 | **0.001·0.004** |
+| 스크립트 시험, 다른 팀 거리 | 0.92–1.0 | 0.92–0.99 | 0.96–0.97 |
+| 정책 재생, 다른 팀 1–2 | 0.11 오승인 | 0.13 오승인 | 0.15 오승인 |
+| 정책 재생, 다른 팀 1–3 | 0.94 | 0.72 | 0.30 오승인 |
+
+- 정책 재생에서 같은 팀 2–3은 세 프레임 모두 비교되지 않았습니다. agent 2가 재생 후반에야 성숙해 비교 기회가 3번뿐이었고, 그때 두 agent가 만난 롤아웃은 40%였습니다.
+- 정책 재생은 새로 만든 예측기가 짧은 경험만 보는 비관적인 조건이라, v3의 실제 효과를 판정하지 못합니다.
+- 실제 판정은 학습 궤적에서 해야 합니다. 이 PC의 CPU 학습은 결정적이어서, `pgct_id_only`로 돌리면 IPPO pilot과 똑같은 궤적을 다시 만들면서 v3 gate의 판단만 기록할 수 있습니다.
+- Overcooked 테스트 30개가 모두 통과했습니다. IPPO·Oracle·All 기준은 v1과 같습니다.
+
+```powershell
+powershell -ExecutionPolicy Bypass -Command "& '.\Overcooked\scripts\run_overcooked.ps1' -Config main_4p2t_probe_v3.json -Name oc_id_500k_probe_v3 -Methods pgct_id_only -Seeds 1 -TotalTimesteps 500000 -MaxConcurrent 1"
+```
+
+지금 v2의 oracle job이 돌고 있으니 그게 끝난 뒤 시작하는 편이 조용합니다.
+
+## 승인 임계 0.5 (교수님 지적)
+
+지적이 맞습니다. "D가 [0,1]이니 가운데"는 근거가 아닙니다. 대신 아래처럼 설명할 수 있고, 모두 수치로 확인했습니다.
+
+1. **0.5는 범위가 아니라 두 이상값의 가운데입니다.** 예측이 완벽하면 같은 팀은 정확히 0, 다른 팀은 정확히 1이 나옵니다. probe 개수나 보상 크기와 무관하고, Q_ij = E_i ∪ E_j와 action_max 덕분입니다. 두 팀이 같이 보상받는 사건이 섞이면 pooled 거리는 (1−s)/(1+s)로 내려가는데, action_max가 이것을 막습니다.
+2. **뜻으로 말하면 "응답 비율 1/3"입니다.** 상대의 보상 장면에 자기 장면의 ρ배로 반응하면 D = (1−ρ)/(1+ρ)입니다. 따라서 τ = 0.5는 "상대 장면에 자기 응답의 1/3 이상 반응하면 같은 팀"이라는 기준입니다.
+3. **예측 오차 허용폭으로 말하면:** 모든 예측이 정답에서 ε 이내면 같은 팀은 ε 이하, 다른 팀은 1−2ε 이상입니다. τ = 0.5는 ε < 1/4이면 항상 맞게 판정합니다. 다만 이 오차 모형에서 가장 안전한 값은 0.5가 아니라 1/3(ε < 1/3까지 허용)입니다. 0.5는 최적값이 아니라 미리 정해 둔 안전한 값이라고 써야 정직합니다.
+4. **실제로는 둔감합니다.** RWARE에서는 같은 팀 0.28 이하, 다른 팀 0.98 이상이라 τ를 0.28–0.98 사이 어디에 두어도 판정이 같습니다.
+5. **τ로는 못 고치는 경우도 있습니다.** 위 3번 문제처럼 한쪽만 구분하면 거리가 1/3 근처라 어떤 τ로도 안정적으로 막지 못합니다. probe를 "누구의 장면인지"로 나눠 큰 쪽 거리를 쓰면 1이 됩니다. 후보로만 기록했고 구현하지 않았습니다.
+
+논문에는 1–3을 쓰고 τ sweep(같은 궤적에서 판정만 다시 계산)을 보이는 것을 권합니다. 그리고 Overcooked에 맞춰 τ를 올리는 것은 피해야 합니다. v2의 0.58을 통과시키려 0.6으로 올리면 사후 맞춤이 됩니다.
+
+기록은 `DECISIONS.md` D135·D136, `EXPERIMENTS.md` E92, `RESEARCH_STATE.md`, `docs/ALGORITHM.md`(τ 근거 절), `CONVERSATION_LOG.md` T228에 남겼습니다. 커밋은 하지 않았습니다.
+
+## 원문 기록 T229 — 2026-11-06 KST, Claude Code
+
+### 사용자 — 원문
+
+커밋, push해줘
+그리고 저 승인 임계 문제나 reward shaping 쪽 문제로 overcooked에서 pgct가 안되는거 같은데 해결책은?
+
+### 수행 기록 — 원문 대화와 별도
+
+- T228 작업을 커밋 ffd96ac로 push. offline_gate_check에 --gate 덮어쓰기와 probe 주인별 거리 분석 추가, v3 + 사건 기준 0.5/0.1 재생 시험, pilot 역할 분석, 설정 main_4p2t_probe_v3_ev01.json 생성(D137, E93). 학습 시작·중단 없음.
+
+### Assistant — 진행 안내 (요지)
+
+- 커밋·push 후 해결책을 오프라인에서 시험하겠다고 안내(원인 세 가지 요약).
+- pilot 역할 분석: 네 명 모두 자기 재료를 많이 넣음 → 사건 기준을 낮추면 공통 비교 장면이 생길 것.
+- 재생 결과 표(사건 0.1에서 같은 팀 두 쌍 승인, 다른 팀 오승인 유지, 주인별 거리도 양쪽 낮음).
+- 주인별 최댓값이 해결책이 아님을 확인해 문서 수정.
+
+### Assistant — 최종 답변
+
+커밋·push했습니다. v3·임계값 작업은 `ffd96ac`, 이번 분석은 그 뒤 커밋 하나로 올렸습니다. 해결책은 말로만 제안하지 않고 오프라인에서 시험해 봤습니다. 결론은 **임계값(τ)은 병목이 아니고, reward shaping 쪽 문제는 설정 한 줄로 풀리며, 마지막 하나가 남는다**는 것입니다.
+
+## Overcooked에서 PGCT가 안 되는 이유: 세 가지 조건
+
+PGCT gate가 팀원을 찾으려면 세 가지가 필요한데, Overcooked는 셋 다 어겼습니다.
+
+**① 같은 일은 같은 장면으로 보여야 한다**
+- 위반: 왼쪽·오른쪽 창구 배달이 다른 장면으로 보였습니다.
+- 해결: v3로 해결했습니다(재생 예측기 기준 같은 팀 거리 0.012).
+
+**② 모든 팀원에게 "보상 사건"이 있어야 한다 — 말씀하신 reward shaping 문제의 정체**
+- gate는 0.5 이상의 보상만 비교에 쓰는 "사건"으로 칩니다. 이 기준은 RWARE의 배송(+1)에 맞춘 값입니다.
+- Overcooked에서는 재료 넣기 +0.1, 수프 꺼내기 +0.2라서, 배달을 안 하는 요리 담당에게는 사건이 하나도 없습니다. 그래서 그 팀원은 영원히 비교 대상이 되지 못합니다.
+- 해결: 사건 기준을 Overcooked 보상 단위(0.1)로 맞춥니다. 근거도 깔끔합니다. 이 주방에서 양의 보상은 전부 팀별(자기 재료, 자기 수프, 자기 배달)이라, 어떤 양의 보상이든 목표를 드러내는 사건입니다. RWARE는 0.5 그대로 둡니다.
+- 실제로 네 agent 모두 자기 재료를 에피소드당 12–29회 넣고 있어서(요리 담당 포함), 이것이 팀원 공통의 비교 장면이 됩니다.
+
+**③ 각자 "상대 팀 일은 나에게 0"이라는 경험이 있어야 한다 — 남은 문제**
+- 팀을 가르는 유일한 근거는 상대 재료·수프를 다뤘는데 보상이 0이었던 경험입니다.
+- 학습된 정책은 상대 재료를 거의 넣지 않습니다(에피소드당 0.0–0.02). 그러면 예측기는 "재료든 수프든 내면 보상"이라고 뭉뚱그려 배우고, 다른 팀을 팀원으로 착각합니다.
+
+## 오프라인 시험 결과 (500k pilot 정책 재생, 같은 경험)
+
+| 쌍 | 관계 | v3 + 사건 0.5 | v3 + 사건 0.1 |
+|---|---|---|---|
+| 0–1 (요리·배달, 양파) | 같은 팀 | 비교 불가(요리 담당 미성숙) | **0.31 승인** |
+| 2–3 (반대 창구, 토마토) | 같은 팀 | 비교 0회 | **0.26 승인** |
+| 1–2 | 다른 팀 | 0.15 오승인 | 0.26 오승인 |
+| 1–3 | 다른 팀 | 0.30 오승인 | 0.32 오승인 |
+| 0–2 / 0–3 | 다른 팀 | 비교 불가 | 0.52 / 0.71 거부 |
+
+- 사건 기준을 0.1로 바꾸자 네 명 모두 성숙했고, 같은 팀은 두 쌍 모두 승인됐습니다(재현율 0 → 1.0).
+- 다른 팀 두 쌍의 오승인은 남았습니다(정밀도 0.5).
+
+## 임계값(τ)과 거리 정의는 해결책이 아니다
+
+- 위 표에서 같은 팀(0.26–0.31)과 다른 팀(0.26–0.71)이 겹칩니다. τ를 어디에 두어도 둘을 가를 수 없습니다. 그래서 τ는 0.5로 두는 게 맞습니다.
+- 지난번 후보로 적었던 "probe 주인별 거리 중 큰 값"도 시험해 봤는데 해결책이 아니었습니다.
+  - 이번에는 한쪽이 아니라 양쪽 예측기 모두 구분하지 못해서(0.13 / 0.23) 효과가 없었습니다.
+  - 오히려 요리·배달 팀원 쌍을 0.53으로 막았습니다.
+  - 문서에 이 내용을 바로잡아 두었습니다.
+- 이유는 단순합니다. 경험한 적 없는 차이는 어떤 거리 계산으로도 만들어 낼 수 없습니다.
+
+## 해결 순서 (제안)
+
+1. **v3 표현** — 완료.
+2. **사건 기준을 환경 보상 단위로** — 설정만 바꾸면 됩니다(`Overcooked/configs/main_4p2t_probe_v3_ev01.json`). 알고리즘 변경은 없습니다.
+3. **실제 학습 궤적에서 ③이 정말 문제인지 먼저 확인**
+   - 재생은 새 예측기가 최근 경험만 보는 불리한 조건입니다. 실제 v1 학습에서는 같은 창구를 쓰는 다른 팀 1–2가 0.82로 잘 떨어져 있었습니다. 초반 탐색에서 상대 수프를 다뤄 본 경험이 예측기에 남아 있었다는 뜻입니다.
+   - 아래 run은 IPPO pilot과 똑같은 궤적을 재현하면서 gate 판단만 기록합니다. 0.5M이고, 지금 돌고 있는 v2 oracle job이 끝난 뒤가 조용합니다.
+
+```powershell
+powershell -ExecutionPolicy Bypass -Command "& '.\Overcooked\scripts\run_overcooked.ps1' -Config main_4p2t_probe_v3_ev01.json -Name oc_id_500k_v3_ev01 -Methods pgct_id_only -Seeds 1 -TotalTimesteps 500000 -MaxConcurrent 1"
+```
+
+4. **그래도 다른 팀 오승인이 나오면 ③을 직접 다룹니다.** 둘 다 공유 코어의 선택 옵션으로 넣고, RWARE 기본값은 유지합니다.
+   - (a) **기억 유지**: 예측기 학습 데이터를 "최근 2만 개"(FIFO) 대신 "전체 이력에서 고르게 뽑은 표본"(reservoir)으로 바꿉니다. 초반에 상대 재료를 넣어 0을 받은 경험이 잊히지 않습니다.
+   - (b) **근거 없으면 보류**: 예측기 여러 개(앙상블)의 답이 크게 갈리는 probe, 즉 겪어 보지 않은 장면은 거리 계산에서 빼고 판정을 보류합니다. 잘못 승인하는 대신 기다리게 됩니다.
+5. **전이 효과**는 그다음입니다. Overcooked는 IPPO만으로도 이미 잘 배워서 critic 전이가 보여 줄 여지가 작습니다. shaping은 식별 근거이므로 없애지 말고, 과제를 어렵게 하는 다른 방법은 나중에 검토하는 편이 좋겠습니다.
+
+기록은 `DECISIONS.md` D137, `EXPERIMENTS.md` E93, `RESEARCH_STATE.md`, `docs/ALGORITHM.md`, `CONVERSATION_LOG.md` T229에 남겼습니다.
+
+## 원문 기록 T230 — 2026-11-06 KST, Claude Code
+
+### 사용자 — 원문
+
+너 생각에 overcooked는 PGCT 실험에 쓰기 좋은 환경이야?
+그리고 PGCT 실험 학습에 좋도록 보상함수를 바꾸는건 좋은 행동인가?
+
+(붙여넣은 글 시작)
+\(D_{ij}\)의 승인 임계값 0.5보다, 처음 Reward Probe의 보상 사건을 정의할 때 사용하는 0.5가 더 근본적인 문제일 수 있습니다.
+
+현재 PGCT에는 서로 다른 두 개의 임계값이 있습니다.
+구분	기준	의미
+보상 사건 임계값 \(	au_r\)	\(r_i\geq0.5\)	어떤 경험을 Reward Probe에 넣을 것인가?
+팀 승인 임계값 \(	au_D\)	\(D_{ij}<0.5\)	두 에이전트를 같은 팀으로 판단할 것인가?
+
+둘 다 0.5이지만 수학적 의미는 완전히 다릅니다.
+1. 보상 사건을 0.5 이상으로 정의하는 이유는 무엇인가?
+현재 설정에서는 보상이 큰 사건만 선택하려는 의도였을 것입니다.
+
+예를 들어 Overcooked에서 다음과 같은 보상을 받는다면,
+행동	보상	Probe 포함 여부
+재료 넣기	+0.1	제외
+수프 꺼내기	+0.2	제외
+배달하기	+1.0	포함
+
+결국 보상 사건은 사실상 배달 사건만 의미하게 됩니다.
+(붙여넣은 글 끝)
+
+이 부분도 생각해줘
+
+### 수행 기록 — 원문 대화와 별도
+
+- 기록에서 보상 사건 기준 0.5의 출처를 찾고(D93 부근, E66, v2 gate) RWARE 보상 크기를 확인했다. 코드 변경·학습·커밋 없음. 의견은 D138.
+
+### Assistant — 진행 안내 (요지)
+
+- 확인한 사실: τ_r 0.5의 출처와 근거 부재, RWARE 보상 크기(요청 선반 집기 0.15 제외), E66의 같은 미성숙 문제.
+
+### Assistant — 최종 답변
+
+짧게 답하면 이렇습니다.
+- Overcooked는 **주 실험으로는 약하고, "언제 식별이 되고 안 되는가"를 보여 주는 보조 실험으로는 쓸모가 있습니다.**
+- 환경 보상을 PGCT가 잘 되도록 바꾸는 것은 **좋지 않습니다.**
+- 붙여 주신 지적(보상 사건 기준 τ_r이 더 근본적)에는 **동의합니다.** 다만 이유를 하나 더 붙이고 싶고, τ_r만 고쳐서는 다 풀리지 않는다는 점도 함께 말씀드립니다.
+
+## 1. Overcooked는 PGCT 실험에 좋은 환경인가
+
+**좋은 점**
+- RWARE와 다른 영역입니다. "레시피가 다르면 팀이 다르다"는 구조가 자연스럽습니다.
+- 팀원끼리 역할이 갈립니다(요리 담당, 배달 담당). "팀원이 서로 다른 행동을 해도 찾을 수 있는가"라는 질문을 시험할 수 있습니다.
+- CPU로 0.5M 안에 학습되어 반복이 빠릅니다.
+- 실제로 이 환경에서 식별이 성립하는 조건 세 가지가 드러났습니다.
+  - 같은 일이 같은 입력으로 보여야 한다.
+  - 모든 팀원에게 비교할 보상 사건이 있어야 한다.
+  - 상대 팀 일에서 보상 0을 받은 대조 경험이 있어야 한다.
+
+**약한 점**
+- **표준 환경이 아닙니다.** 표준 Overcooked는 2인 완전 협력에 팀 공유 보상입니다. 4인·2팀·팀별 레시피·개인 보상은 저희가 만든 변형이라, 심사자가 "PGCT에 맞춘 환경"으로 볼 수 있습니다.
+- **개인 보상이 이 게임에서는 부자연스럽습니다.** 그렇다고 표준인 팀 보상을 쓰면 보상이 곧 팀 정의라 식별이 자명해집니다(D81과 같은 논리).
+- **전이 효과(Q2)를 보일 여지가 작습니다.** IPPO만으로도 0.5M에 에피소드당 배달 25회를 합니다. RWARE에서 PGCT-D2가 돋보인 건 IPPO가 아예 멈춘 상황이었는데, Overcooked에는 그런 막힘이 없습니다.
+- **역할 분화와 대조 경험 부족으로 식별이 불안정합니다.** 결과가 gate 설정에 크게 좌우될 수 있어서, 이것저것 맞추다 보면 cherry-picking으로 보이기 쉽습니다.
+
+**제 판단**: 논문에서 Overcooked는 "식별 가능성 조건을 확인하는 절"로 쓰는 게 맞습니다. 위 세 조건이 깨질 때 식별이 실패하고 갖춰지면 성공한다는 것을 보이는 용도입니다. 이는 기존 기여 방향(D71: 식별 가능성 조건 + 조건별 probe)과도 맞습니다. Q2(전이가 학습을 돕는다)는 RWARE로 주장하고, 두 번째 Q2 환경이 꼭 필요하면 IPPO가 막히는 환경(예: D79의 LBF 변형)을 결과를 보기 전에 정해서 쓰는 편이 낫습니다.
+
+## 2. PGCT가 잘 되도록 보상함수를 바꾸는 것은 좋은 행동인가
+
+두 가지를 구분해야 합니다.
+
+**(a) 환경 보상(agent가 최적화하는 것)을 바꾸기 → 원칙적으로 좋지 않습니다.**
+- 방법이 환경에 맞춰야지, 환경을 방법에 맞추면 결과가 방법의 성능이 아니라 환경 설계의 산물이 됩니다.
+- 보상을 바꾸면 모든 비교군의 과제도 같이 바뀝니다.
+- 결과를 본 뒤 바꾸면 사후 맞춤(cherry-picking)이 됩니다.
+- 허용되는 경우는 네 가지를 다 지킬 때뿐입니다.
+  1. 연구 질문 자체에서 나온 이유가 있다(예: "개인 보상"을 가정으로 명시).
+  2. PGCT 결과를 보기 전에 정했다.
+  3. 모든 방법에 똑같이 적용한다.
+  4. 실패한 버전까지 공개한다.
+- 지금 Overcooked 보상(자기 재료·자기 수프에만 주는 shaping)은 결과를 보기 전, 구현 시점에 정한 것이라 괜찮습니다. 다만 **지금 버전으로 고정하고 더는 바꾸지 않는 게** 좋습니다. "shaping을 없애 IPPO를 막히게 해서 PGCT가 돋보이게 하자" 같은 변경도 같은 이유로 피해야 합니다.
+
+**(b) PGCT 내부 설정(사건 기준 τ_r)을 바꾸기 → 환경은 그대로지만, 이것도 튜닝입니다.**
+- 제가 지난번 제안한 "Overcooked만 0.1"은 실패를 보고 그 환경에만 맞춘 값이라, 그대로 쓰면 약점이 됩니다.
+- 정당하려면 **환경과 무관한 규칙으로 정하고, 두 환경에 같은 규칙을 적용하고, 민감도를 함께 보고해야** 합니다.
+
+## 3. 붙여 주신 지적: τ_r(보상 사건 기준)이 더 근본적이다
+
+**동의합니다.**
+- τ_r은 "누구를, 무엇으로 비교하는가"를 정합니다. τ_D는 그다음 "어디서 선을 긋는가"만 정합니다.
+- 요리 담당이 영원히 미성숙인 것은 순전히 τ_r 때문입니다.
+- RWARE도 같습니다. 지금 day_base의 agent 1이 미성숙이고, E66에서도 a0·a4가 같은 이유로 미성숙이었습니다.
+- RWARE에서도 팀별 보상인 "요청 선반 집기(+0.15)"가 사건에서 빠집니다.
+
+**제가 더하고 싶은 핵심**: 두 임계값의 진짜 차이는 **단위**입니다.
+- D는 정규화된 값이라 τ_D = 0.5는 보상 크기와 무관합니다.
+- 반면 τ_r = 0.5는 보상 단위 그대로라, 환경마다 뜻이 바뀝니다. RWARE에서는 "배송·반납", Overcooked에서는 "배달만"이 됩니다.
+- 성숙 조건의 0.3(min_event_response)도 같은 문제를 가집니다.
+- 기록을 찾아보니 τ_r = 0.5는 RWARE의 큰 사건(1.0)을 고르려고 정한 값이고, 환경과 무관한 근거는 없었습니다. 교수님이 τ_D에 하신 질문은 사실 τ_r에 더 정확하게 들어맞습니다.
+
+**하지만 τ_r만 고쳐서는 다 풀리지 않습니다.**
+- 지난번 시험에서 τ_r을 0.1로 내리자 같은 팀 재현율은 0에서 1.0으로 올랐습니다.
+- 그러나 다른 팀 오승인은 그대로였습니다(정밀도 0.5). 이건 대조 경험 문제라 어떤 임계값으로도 못 고칩니다.
+- 즉 τ_r 수정은 필요하지만 충분하지 않습니다.
+
+**τ_r을 고치는 방법 (결과를 보기 전에 하나를 고정)**
+- **A. 보상 의미로 정의**: "과제 결과에 주는 양의 보상"을 사건으로 보고, 진척 보상과 감점은 뺍니다.
+  - RWARE: 집기·배송·반납 / Overcooked: 재료 넣기·수프 꺼내기·배달.
+  - 해석은 깔끔하지만 환경 설계자가 보상 성분을 분류해야 합니다.
+- **B. 상대 기준(라벨 불필요)**: τ_r,i = κ × (agent i 자신의 양의 보상 크기, 예: 최댓값).
+  - κ를 한 번 정하면 두 환경에 같은 규칙이 적용됩니다.
+  - 예를 들어 κ = 0.1이면 RWARE는 집기(0.15)를 포함하고, Overcooked는 재료 넣기를 포함합니다.
+- **C. 임계값 없애기**: 모든 양의 보상을 사건으로 쓰되, 보상 크기에 비례한 가중치를 줍니다.
+
+**어느 쪽이든 주의할 점**
+- RWARE 본 실행(0.5)의 동작이 바뀝니다. 그러니 선택지는 둘입니다.
+  1. 지금 논문의 RWARE는 0.5로 두고, τ_r ∈ {0.1, 0.5} 민감도를 두 환경 모두에서 보고한다.
+  2. 새 규칙으로 두 환경을 다시 돌린다.
+- min_event_response도 같은 비율로 맞춰야 합니다.
+
+## 권고 요약
+
+1. Overcooked는 보조 실험(식별 조건)으로 씁니다. Q2 주장은 RWARE로 합니다.
+2. 환경 보상은 지금 버전으로 고정하고, PGCT에 맞춰 더 바꾸지 않습니다.
+3. τ_r은 환경 무관 규칙(B 추천)으로 다시 정의하고, 두 환경에 같은 규칙을 미리 고정한 뒤 민감도를 보고합니다. "Overcooked만 0.1"은 쓰지 않습니다.
+4. 대조 경험 문제는 임계값으로 풀리지 않습니다. 방법 쪽 옵션(기억 유지·근거 없으면 보류)으로 다루거나, 한계로 명시합니다.
+
+이 판단은 `DECISIONS.md` D138과 `CONVERSATION_LOG.md` T230에 남겼습니다. 코드 변경과 커밋은 없습니다.
+
+## 원문 기록 T231 — 2026-11-06 KST, Claude Code
+
+### 사용자 — 원문
+
+B 상대 기준으로
+
+### 수행 기록 — 원문 대화와 별도
+
+- 공유 코어에 상대 보상 사건 규칙 옵션(event_threshold relative, κ 0.1, ρ 0.3)을 추가하고, RWARE opt-in 설정과 `_rel` job 이름, Overcooked 설정을 추가했다. ev01 설정은 삭제했다(D139, E94).
+- 검증: 코어 15, Overcooked 30, RWARE gate 60 통과·7 건너뜀, 지문 18/18, Overcooked 재생, RWARE 계획(-PlanOnly) 확인 후 확인용 폴더·로그 삭제. 학습·커밋 없음.
+- RESEARCH_STATE.md의 항목 순서(줄바꿈 혼재로 생긴 문제)를 시간순으로 바로잡았다.
+
+### Assistant — 진행 안내 (요지)
+
+- 규칙·κ·ρ의 근거와 기본값 유지 방침 안내.
+- 코어 구현, RWARE 측 변경(_rel 이름, opt-in 설정, 등가성 비교에서 새 키 제외), Overcooked 설정과 테스트.
+- RWARE 60 통과·지문 18/18, Overcooked 30 통과·smoke, RWARE 계획 이름 확인.
+- 재생: 상대 규칙이 절대 0.1과 모든 수치에서 같음.
+- RESEARCH_STATE 순서 문제 발견·수정, RWARE 명령 PlanOnly 확인.
+
+### Assistant — 최종 답변
+
+B(상대 기준)를 공유 코어의 선택 옵션으로 넣었습니다. Overcooked에서는 환경마다 값을 따로 맞추지 않아도, 지난번 "Overcooked만 0.1"과 똑같은 효과가 났습니다. 기본값은 기존 방식이라 RWARE 실험은 비트 단위로 그대로입니다. 학습은 돌리지 않았고 커밋도 하지 않았습니다.
+
+## 규칙
+
+- **보상 사건**: 보상이 양수이고, **자기가 지금까지 받은 가장 큰 보상의 10%(κ = 0.1) 이상**이면 사건입니다.
+- **성숙**: 자기 사건 probe에서 그 사건들 평균 보상의 30%(ρ = 0.3) 이상을 예측하면 성숙입니다.
+- **성질**
+  - 팀 라벨이 필요 없고, 각 agent는 자기 보상만 씁니다.
+  - 보상 전체를 몇 배로 키우거나 줄여도 판정이 같습니다(테스트로 확인).
+  - 더 큰 보상을 처음 받아 기준이 올라가면, 새 기준보다 작은 옛 사건은 버퍼에서 지웁니다.
+- **값의 근거(결과를 보기 전에 고정)**
+  - κ = 0.1은 자릿수 기준입니다. 두 환경 모두 step마다 주는 진척 보상과 감점은 최대 보상의 2% 이하이고, 하위 목표 보상은 10% 이상입니다(RWARE 집기 0.15, Overcooked 재료 0.1·수프 0.2).
+  - ρ = 0.3은 사건 보상이 1.0인 RWARE에서 기존 성숙 기준(0.3)과 같아지는 값입니다.
+- **적용 결과**
+  - RWARE: 팀별 보상인 집기(0.15)가 사건에 들어옵니다.
+  - Overcooked: 배달을 안 하는 요리 담당도 자기 최대 보상(0.2)의 10%를 넘는 재료 넣기가 사건이 됩니다.
+
+## 변경 파일
+
+- `PGCT/pgct_core/reward_gate.py`: `event_threshold`("absolute" 기본 / "relative"), `event_scale`, `min_event_response_ratio`
+- RWARE
+  - `latent_team/acv2_nomirror_relative.json`: 본 실행 설정 + 상대 규칙
+  - 상대 규칙 job 이름에는 `_rel`이 붙어 기존 run과 섞이지 않습니다(예: `..._acv2_amax_rel_pgct_max_s1`).
+- Overcooked
+  - `configs/main_4p2t_probe_v3_rel.json`: v3 + 상대 규칙
+  - "Overcooked만 0.1" 설정(`ev01`)은 D138에 따라 지웠습니다.
+- `docs/ALGORITHM.md`: 두 임계값(τ_r, τ_D)의 차이와 새 규칙을 정리한 절을 추가했습니다.
+
+## 검증 (모두 실제 실행)
+
+- **공유 코어 테스트 15개 통과**(3개 추가). 보상을 1/20로 줄인 toy 환경에서도 상대 규칙이면 팀을 정확히 찾았습니다. 같은 환경에서 기존 0.5 기준이면 사건이 0개입니다.
+- **RWARE**: gate 관련 테스트 60 통과 · 7 건너뜀. trainer 지문 **18/18이 분리 전과 동일**합니다. 기본값이 기존 방식이라 지금 W&B에서 도는 실험과 같은 코드 경로입니다.
+- **Overcooked**: 테스트 30개 통과, 상대 규칙 설정으로 smoke 학습 정상.
+- **Overcooked 정책 재생**(500k pilot 정책, 같은 경험): 상대 규칙 결과가 지난번 절대 0.1과 **모든 수치에서 같았습니다**.
+
+| 쌍 | 관계 | 기존(사건 ≥ 0.5) | 상대 규칙(κ = 0.1) |
+|---|---|---|---|
+| 0–1 (요리·배달) | 같은 팀 | 비교 불가(미성숙) | 0.31 승인 |
+| 2–3 (반대 창구) | 같은 팀 | 비교 0회 | 0.26 승인 |
+| 1–2 / 1–3 | 다른 팀 | 0.15 / 0.30 오승인 | 0.26 / 0.32 오승인 |
+| 0–2 / 0–3 | 다른 팀 | 비교 불가 | 0.52 / 0.71 거부 |
+
+정리하면 "누구를 비교할 수 있는가"(사건 범위) 문제는 환경 무관 규칙으로 풀렸습니다. 남은 다른 팀 오승인은 대조 경험 부족 때문이라 이 규칙과는 무관합니다.
+
+## 다음에 돌릴 것 (직접 실행)
+
+**Overcooked**: IPPO pilot과 똑같은 궤적에서 v3 + 상대 규칙 gate의 판단만 기록합니다. 실제 학습 중에 대조 경험이 남는지 판정하는 run입니다.
+
+```powershell
+powershell -ExecutionPolicy Bypass -Command "& '.\Overcooked\scripts\run_overcooked.ps1' -Config main_4p2t_probe_v3_rel.json -Name oc_id_500k_v3_rel -Methods pgct_id_only -Seeds 1 -TotalTimesteps 500000 -MaxConcurrent 1"
+```
+
+**RWARE**: κ 민감도용입니다. 기존 0.5 run(day_base)과 같은 설정에 상대 규칙만 다릅니다. 2M이라 서버나 여유 있는 PC에서 돌리는 게 좋습니다.
+
+```powershell
+cd RWARE
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -Command "& '.\latent_team\run_queue.ps1' -Candidates b6_corner_indiv_comm5_pen005 -Modes pgct_max,ippo -Seeds 1 -TotalTimesteps 2000000 -MaxConcurrent 2 -Track -WandbProject rware-main-amax-v2 -ExtraPlanArgs @('--reward-probe-ac','--ac-gate','v2','--ac-distance','action_max','--ac-config','latent_team/acv2_nomirror_relative.json','--team-reward','individual')"
+```
+
+`run_queue.ps1`의 기본 Python 경로는 `RWARE_MARL`입니다. 이 PC에서 돌린다면 `-Python C:\Users\95101\anaconda3\envs\marl-policy-sharing\python.exe`를 덧붙이세요. 이 명령은 `-PlanOnly`로 실제 동작을 확인했습니다(`..._acv2_amax_rel_pgct_max_s1`, `..._rel_ippo_s1`). 확인용 계획 폴더와 로그는 지웠습니다.
+
+## 기록 정리 중 고친 것
+
+`RESEARCH_STATE.md`에서 Codex 항목(LF 줄바꿈)과 제 항목(CRLF)이 섞여, T224 이후 제 항목들이 시간순보다 아래에 들어가 있었습니다. 블록 순서를 시간순으로 바로잡았습니다(내용은 그대로).
+
+기록은 `DECISIONS.md` D139, `EXPERIMENTS.md` E94, `RESEARCH_STATE.md`, `docs/ALGORITHM.md`, `CONVERSATION_LOG.md` T231에 남겼습니다.
+
+## 원문 기록 T232 — 2026-11-06 KST, Claude Code
+
+### 사용자 — 원문
+
+커밋, push해줘
+그리고 RWARE의 경우도 내가 팀 보상을 알아채지 못하게 막고 개인 보상처럼  해놨을텐데 이건 괜찮아? 초기에 ippo 학습처럼 하려면 이랬어야 해서
+
+### 수행 기록 — 원문 대화와 별도
+
+- T231 작업을 커밋 2969f27로 push했다. RWARE 보상 코드(`_reward_delivery`, `_reward_shelf_return`, `reveal_team_info`)와 원래 RWARE 등록 환경의 보상 유형을 확인했다. 코드 변경 없음. 의견은 D140. 이 기록은 별도 커밋으로 push했다.
+
+### Assistant — 진행 안내 (요지)
+
+- 커밋·push 완료. 개인 보상은 운반 agent에게만, 자기 팀 선반일 때만 지급. 원래 RWARE 기본도 개인 보상. 팀 ID는 info에만 있고 gate는 읽지 않음.
+
+### Assistant — 최종 답변
+
+커밋·push했습니다(`2969f27`, 이 기록은 그 뒤 커밋). RWARE에서 팀 보상을 숨기고 개인 보상으로 둔 것은 **괜찮습니다.** 오히려 RWARE를 주 환경으로 쓰는 근거가 됩니다. 다만 논문에서 "팀"의 뜻을 정확히 써야 하고, 그 설정 때문에 생기는 현상 두 가지는 함께 밝혀야 합니다.
+
+## 코드로 확인한 사실
+
+- **개인 보상 모드**(`team_reward_mode="individual"`): 배송·반납 보상은 배송한 agent 본인에게만, 그것도 자기 팀 선반일 때만 줍니다. 팀원이 배송해도 나는 0입니다.
+- **팀 보상 모드**(`team`): 팀원 전원이 같이 받습니다. 환경 클래스의 기본값은 이쪽입니다.
+- **원래 RWARE 벤치마크는 개인 보상이 기본입니다.** 등록된 환경이 모두 `RewardType.INDIVIDUAL`입니다. 즉 저희 설정은 "벤치마크를 PGCT에 맞게 바꾼 것"이 아니라 원래 관례를 따른 것입니다.
+- **팀 정보 노출 경로**: `reveal_team_info=True`는 팀 ID를 관측이 아니라 step의 `info`에만 넣습니다. PGCT-D2의 gate와 donor 선택은 이것을 읽지 않고, 감사 로그와 Oracle 비교군만 씁니다(테스트로 확인돼 있음).
+
+## 왜 괜찮은가
+
+1. **"팀"을 보상 함수로 정의하면 일관됩니다.** 같은 팀 = 같은 일(자기 팀 요청 선반 배송)에 보상받는 agent입니다. 보상 신호를 나눠 받는 집단이 아닙니다. 같은 회사 로봇들이 각자 자기 배송분만큼 평가받는 상황과 같고, 현실적인 설정입니다.
+2. **식별 문제가 의미를 가지려면 개인 보상이어야 합니다.** 팀 보상이면 팀원이 동시에 보상을 받으니, 보상이 같이 오르내리는 것만 봐도 팀이 드러납니다. 실제로 팀 보상에서는 보상 결합 probe의 AUROC가 1.0이었습니다(D72·D81).
+3. **비교가 공정합니다.** IPPO, PGCT-D2, Oracle, All 모두 같은 개인 보상을 받습니다. 말씀하신 "처음에 IPPO처럼 학습"되는 것도 이 덕분입니다. 독립 학습자가 자기 보상만 보는 것은 탈중앙 MARL의 표준 설정입니다.
+4. **PGCT의 전제와 맞습니다.** 각 agent는 자기 경험과 자기 보상만으로 목표를 배우고, 팀원은 보상 반응으로 찾습니다. 팀 보상을 주면 이 전제가 깨집니다.
+
+## 대신 밝혀야 할 것
+
+1. **팀원끼리 협력이 아니라 경쟁이 생길 수 있습니다.** 보상이 개인별이라, 같은 팀이 같은 요청 선반을 두고 다툽니다(D81에서 이미 우려한 점).
+   - day_base에서도 배송은 팀마다 한 명씩(agent 0, agent 5)만 합니다. 예전 1M 실험에서도 한 agent가 배송의 82–99%를 했습니다.
+   - 따라서 PGCT의 이득은 "팀 협업이 좋아졌다"가 아니라 **"같은 목표를 가진 agent끼리 가치 추정(critic)을 나눠 학습을 도왔다"**로 써야 정확합니다.
+2. **보상을 못 받는 팀원은 찾지 못합니다.** day_base의 agent 1처럼 자기 보상 사건이 없으면 팀 판정에 참여할 수 없습니다. 이것이 개인 보상 설정의 직접적인 대가입니다. 상대 사건 기준(D139)으로 줄일 수 있지만 없애지는 못합니다.
+
+## Overcooked와의 차이
+
+지난번 Overcooked에서 개인 보상이 부자연스럽다고 한 것과 일관된 이야기입니다.
+- RWARE는 원래 개인 보상 벤치마크라, 개인 보상이 그 환경의 자연스러운 설정입니다.
+- Overcooked는 원래 팀 공유 보상이 기본이라, 개인 보상이 저희가 만든 변형입니다.
+
+그래서 RWARE가 주 실험, Overcooked가 보조 실험이라는 판단이 더 단단해집니다.
+
+## 논문에 쓸 문장 (제안)
+
+> 각 agent는 자기 행동에 대한 개인 보상만 받는다. 잠재 팀은 같은 보상 함수를 가진 agent의 집합으로 정의하며, 팀원 사이에 보상 신호나 팀 라벨을 공유하지 않는다. 이는 원래 RWARE의 개인 보상 설정과 같다. 팀 보상을 주면 보상 신호의 동시 발생만으로 팀이 드러나므로, 이 경우는 참조 실험으로만 보고한다.
+
+이 판단은 `DECISIONS.md` D140과 `CONVERSATION_LOG.md` T232에 남겼습니다.
+
+## 원문 기록 T233 — 2026-11-06 KST, Claude Code
+
+### 사용자 — 원문
+
+그러면 Overcooked 같이 팀끼리 협동해서 분담하는 경우는 PGCT를 쓰기 애매하다는거네? 생각해보면 PGCT랑 안맞아보이기도 하고
+
+### Assistant — 최종 답변
+
+네, 대체로 맞는 판단입니다. 다만 정확히 말하면 "협동해서 분담"이 문제가 아니라, **분담 때문에 팀원끼리 보상받는 순간이 서로 달라지는 것**이 PGCT와 안 맞는 지점입니다.
+
+**PGCT가 전제하는 것**
+- **식별**: "내가 보상받은 장면을 보여 주면, 너도 거기서 보상받을 거라고 답하니?"로 팀원을 찾습니다. 그러려면 팀원끼리 같은 종류의 장면에서 보상을 받아 봤어야 합니다.
+- **critic 전이(Max-GAE)**: 팀원의 critic이 내 상황의 가치를 대신 평가합니다. 그러려면 그 critic이 매기는 가치가 나에게도 맞아야 합니다.
+
+**분담형 협동에서 깨지는 이유**
+- 요리 담당은 "재료 넣기"에서, 배달 담당은 "배달"에서 보상받습니다. 보상 함수는 같아도 실제로 겪는 보상 장면이 겹치지 않아서, 서로의 장면에 "모른다"고 답합니다. 실제로 사건 기준을 낮추기 전에는 요리 담당이 아예 비교 대상이 되지 못했습니다.
+- critic도 같은 문제가 있습니다. 같은 팀이어도 요리 담당의 critic은 "요리하는 내"가 얻을 가치를 배웠기 때문에, 배달 담당의 상황을 평가하면 맞지 않을 수 있습니다.
+- 팀 보상으로 바꾸면 역할 차이는 상관없어지지만, 이번에는 보상이 같이 오르내리는 것만 봐도 팀이 드러나서 식별 문제가 사라집니다. 분담형 협동은 둘 중 어느 쪽으로 가도 PGCT가 기여할 자리가 좁습니다.
+
+**PGCT가 잘 맞는 경우**
+- 같은 목표, 비슷한 역할, 개인 보상, 독립 학습입니다. RWARE처럼 같은 회사 로봇들이 각자 자기 몫의 배송으로 평가받는 상황이 여기에 해당합니다.
+
+**완전히 안 되는 것은 아닙니다**
+- 역할이 갈려도 공통으로 보상받는 장면이 있으면 식별됩니다. Overcooked에서는 네 명 모두 재료 넣기를 많이 하고, 상대 기준(D139)을 적용하자 같은 팀 두 쌍이 모두 승인됐습니다.
+- 하지만 이건 "분담이 덜 철저해서" 된 것이지, 분담 자체를 다룬 것은 아닙니다.
+
+**논문에서의 활용 (제안)**
+- 적용 조건을 명시합니다: "팀원이 자기 행동으로 보상받는 장면의 종류가 겹칠 것".
+- Overcooked는 그 조건이 약해지는 **경계 사례**로 씁니다. 같은 일이 다른 장면으로 보이면 실패하고, 보상 장면이 겹치지 않으면 실패하고, 공통 장면이 있으면 성공한다는 것을 보여 주면 됩니다. 실패 사례가 오히려 조건을 뒷받침하는 근거가 됩니다.
+- 분담형 협동까지 다루려면 "역할이 달라도 같은 목표"를 알아보는 다른 신호가 필요합니다. 예를 들어 보상 장면이 아니라 결과(배달된 수프)에 대한 반응을 비교하는 방식인데, 이는 현재 방법의 확장 과제로 남기는 편이 맞습니다.
+
+## 원문 기록 T234 — 2026-11-06 KST, Claude Code
+
+### 사용자 — 원문
+
+Overcooked 말고 다른 환경을 넣는다면 뭐가 좋을까?
+
+### 수행 기록 — 원문 대화와 별도
+
+- 웹 검색으로 LBF의 Gymnasium 지원·라이선스·개인 보상 방식을 확인했다(semitable/uoe-agents lb-foraging, libraries.io). 코드 변경 없음. 제안은 D141.
+
+### Assistant — 최종 답변
+
+Overcooked에서 드러난 조건에 비추어 보면, **Level-Based Foraging(LBF)의 다중 팀 변형**이 가장 잘 맞습니다. 이전에 D79에서 이미 환경 후보로 꼽았던 것이기도 합니다.
+
+## 고르는 기준 (Overcooked에서 배운 것)
+
+1. 개인 보상이 그 환경의 원래 설정일 것(변형으로 보이지 않게)
+2. 팀원이 비슷한 일을 해서 보상받는 장면이 겹칠 것(분담형이 아닐 것)
+3. "팀 = 같은 목표"가 자연스럽게 숨겨질 수 있을 것
+4. IPPO가 쉽게 풀지 못해 critic 전이(Q2)를 보일 여지가 있을 것
+5. 공개 probe가 위치·방향과 무관하게 비교될 것
+6. Windows와 PyTorch에서 빠르게 돌아갈 것
+
+## 1순위: LBF 다중 팀 변형
+
+격자에서 agent가 음식을 모으는 환경이고, 레벨이 높은 음식은 여러 agent가 함께 집어야 합니다.
+
+- **개인 보상이 원래 설정입니다.** 음식을 집으면 그 음식의 레벨을 함께 집은 agent들이 각자의 기여만큼 나눠 받습니다([LBF](https://www.github.com/uoe-agents/lb-foraging)).
+- **RWARE와 같은 계열입니다.** RWARE와 같은 저자·같은 논문(SEAC)의 벤치마크이고 EPyMARL 표준 환경이라, 심사자에게 익숙합니다. Gymnasium을 지원하고 라이선스는 MIT입니다([ecosyste.ms](https://awesome.ecosyste.ms/projects/github.com%2Fsemitable%2Flb-foraging), [PyPI 정보](https://libraries.io/pypi/lbforaging)).
+- **팀을 자연스럽게 만들 수 있습니다.** 음식을 두 종류로 두고, 팀 A는 A 음식에서만, 팀 B는 B 음식에서만 보상을 받게 합니다. 관측에 팀 정보는 없습니다.
+- **역할이 같습니다.** 모두 "자기 팀 음식을 찾아 집기"를 하므로 보상 장면이 겹칩니다. Overcooked의 요리·배달 분담 문제가 없습니다.
+- **같은 팀이 실제로 협력합니다.** 레벨이 높은 음식은 팀원이 함께 집어야 합니다. RWARE처럼 팀원끼리 경쟁하는 대신 같은 팀이 협력하므로, 팀원 critic을 빌리는 게 더 의미 있는 상황이 됩니다.
+- **난도를 조절할 수 있습니다.** 시야, 격자 크기, 협동 필수 여부로 조절합니다. 어려운 설정에서는 IPPO가 잘 풀지 못하므로 Q2를 보일 여지가 생깁니다.
+- **주의할 점**: 함께 집으면 팀원이 동시에 보상을 받습니다. 그래서 "보상이 같이 들어오는지"만 봐도 팀을 꽤 알아낼 수 있어 비교 기준선이 강해집니다. 기존 보상 상관 기준선과 반드시 비교해야 합니다. PGCT의 장점은 보상 신호를 서로 보내지 않고 probe 장면만 교환한다는 점입니다. 협동 필수를 끈 설정도 결과를 보기 전에 함께 정해 두면 좋습니다.
+
+## 2순위: VMAS (PyTorch 벡터화 다중 로봇)
+
+- 연속 제어 로봇 영역이라 "격자 세계 밖에서도 된다"는 일반성을 보일 수 있습니다. GPU에서 빠릅니다.
+- 팀별 목표 지점에 개인 보상을 주는 시나리오를 설계할 수 있습니다.
+- 단점은 두 가지입니다. 기본 보상이 거리 기반이라 매 step 보상이 생겨서, 보상 사건 정의가 까다롭습니다(상대 기준 D139가 도움이 됩니다). 또 시나리오를 직접 설계해야 해서 LBF보다 손이 많이 갑니다.
+
+## 맞지 않는 환경
+
+- **SMAC/SMACv2**: 팀 구조가 고정돼 있고 공유 보상입니다. StarCraft 설치도 무겁습니다(D79).
+- **Melting Pot**: 개인 보상인 mixed-motive 환경이지만, 이 PC(Windows)에서는 실행되지 않습니다.
+- **MPE simple_spread**: 공유 보상에 거리 기반 dense 보상입니다.
+- **Hanabi**: 완전 협력이라 숨은 팀이 없습니다.
+- **Overcooked**: 분담형이라 경계 사례로만 쓰는 게 맞습니다.
+
+## 제안
+
+- **두 번째 주 환경은 LBF 다중 팀 변형**으로 합니다. Overcooked처럼 작은 다중 팀 시뮬레이터로 만들고, `pgct_core`의 어댑터 방식으로 붙입니다. 하루 정도 작업이고 테스트까지 포함됩니다.
+- 난도와 협동 필수 여부는 결과를 보기 전에 고정합니다.
+- **Overcooked는 이미 구현돼 있으니 지우지 말고**, "보상 장면이 겹치지 않으면 식별이 실패한다"는 경계 사례로 남깁니다.
+
+이 제안은 `DECISIONS.md`와 대화 기록에 남기겠습니다.
+
+## 대화 기록 T235 — 2026-11-06 KST, Codex
+
+### 사용자 원문
+
+코드를 수정하지는 말고
+[https://forge.coreweave.com/wandb/t98339-hanyang-university/rware-main-amax-v2](https://forge.coreweave.com/wandb/t98339-hanyang-university/rware-main-amax-v2)
+
+에서 pgct의 경우 에이전트중에 leading, lagging인 에이전트가 있잖아
+lagging인 에이전트가 leading을 통해 얼만큼 학습 능력이 상향됐는지 보고 싶어
+
+### Assistant 진행 안내 원문
+
+코드는 수정하지 않고 읽기 전용으로 분석하겠습니다. W&B의 실제 run과 시계열을 확인해야 하므로, 로그인 세션을 활용할 수 있는 브라우저 제어 기능을 사용해 PGCT run의 agent별 성과, donor 접근, leading/lagging 관계를 대조하겠습니다. 먼저 어떤 지표가 ‘leading을 통해 향상’을 직접 보여주는지 확인하고, 단순 동시 상승과 Max-GAE 전이 효과를 구분하겠습니다.
+
+브라우저보다 정량 분석에 적합한 W&B 읽기 API를 먼저 사용하겠습니다. 프로젝트의 PGCT run 목록과 실제 기록된 지표 키를 가져온 뒤, lagging agent별로 donor가 활성화된 시점 전후의 성과 변화와 IPPO 기준선을 비교하겠습니다.
+
+현재 W&B 실행 기록을 에이전트별 평가 시점에 맞춰 내려받는 중입니다. PGCT와 IPPO를 동일한 환경 step에서 비교하고, Max-GAE donor가 처음 활성화된 시점을 기준으로 전후 효과를 나누겠습니다.
+
+W&B의 전체 이력 스트리밍 API가 응답을 지연시키고 있어, 동일 데이터를 요약 샘플 API로 전환해 조회하겠습니다. 실행 중인 학습 프로세스에는 영향을 주지 않으며 조회만 수행합니다.
+
+중간 결과는 꽤 선명합니다. 팀은 `A1·A3·A5`와 `A2·A4·A6`이고, 현재 공유 가능한 5명 사이에 같은 팀 donor arc 8개가 열려 있으며 교차 팀 arc는 0개입니다. 이제 가장 최근 공통 평가 step에서 lagging agent의 IPPO 대비 상승량과 leader 대비 도달 비율을 산출하겠습니다.
+
+### Assistant 최종 답변 원문
+
+확인 결과, **lagging agent의 성능 상승은 실제로 보입니다. 가장 분명한 사례는 A4 ← A6입니다.** 소스 코드는 수정하지 않았고, W&B를 읽기 전용으로 분석했습니다.
+
+비교 기준은 실행 속도가 다른 두 run의 가장 최근 공통 평가점인 **1,280,000 step**, seed 1, 결정적 평가 20 episode × 500 step입니다. 아래 배송 수는 20 episode 합계입니다.
+
+| 팀 | Leader | Lagging | PGCT | IPPO | PGCT 상승량 | Leader 대비 |
+|---|---:|---:|---:|---:|---:|---:|
+| A1·A3·A5 | A1: 30회 (1.50/ep) | A3 | 13회 (0.65/ep) | 0 | **+0.65/ep** | 43.3% |
+| A1·A3·A5 | A1 | A5 | 0 | 0 | 0 | 0% |
+| A2·A4·A6 | A6: 40회 (2.00/ep) | A4 | 17회 (0.85/ep) | 0 | **+0.85/ep** | 42.5% |
+| A2·A4·A6 | A6 | A2 | 0 | 0 | 0 | 0% |
+
+- A1과 A6은 768k step부터 배송하기 시작했습니다.
+- A4는 1.2288M, A3는 1.28M에 처음 배송했습니다.
+- 같은 구간에서 IPPO는 모든 agent가 0이므로 상대 개선율은 나눗셈으로 정의할 수 없습니다. 대신 절대 증가량과 leader 대비 성과를 사용했습니다.
+
+전이 기작도 맞물립니다. 768k–1.28M 구간에서 PGCT는 **같은 팀 donor arc 8개, 교차 팀 arc 0개, receiver 5명**을 유지했습니다. Max-GAE의 donor-derived 항이 선택된 비율은 평균 **64.3%**, actor advantage의 정규화 변화량은 평균 **0.338**이었습니다.
+
+특히 A2는 reward predictor가 미성숙해 공유 대상에서 빠져 있습니다. 따라서 team 1에서 A4가 받을 수 있는 donor 후보는 A6 하나뿐입니다. 그래서 **A4의 +0.85 배송/episode가 A6의 critic access와 연결된 가장 강한 증거**입니다. 반면 A3는 A1과 A5 두 donor 후보가 있어 A1 단독 기여량은 W&B aggregate만으로 분리할 수 없습니다. A5는 donor access가 있지만 아직 배송 성과는 나타나지 않았습니다.
+
+다만 이는 아직 **실행 중인 seed 1의 중간 결과**입니다. W&B에는 receiver별로 어느 donor critic이 실제 max로 선택됐는지가 저장되지 않아 엄밀한 인과 효과라고 단정할 수는 없습니다. 정확한 edge별 기여도는 실행 호스트의 `max_gae.jsonl`과 critic-access ablation, 추가 seed가 필요합니다. 현재 단계의 보수적인 결론은 **“A4는 A6 접근과 함께 IPPO 대비 +0.85 배송/episode, A3는 PGCT donor 접근과 함께 +0.65 배송/episode까지 상승했지만, 모든 lagging agent가 개선된 것은 아니다”**입니다.
+
+## 원문 기록 T236 — 2026-11-06 KST, Claude Code
+
+### 사용자 — 원문
+
+LBF를 build해주고
+VMAS, MetaDrive, MAgent2 검토해서 실험에 쓰기 괜찮다 싶으면 같이 build해줘
+
+### 수행 기록 — 원문 대화와 별도
+
+- 검토: lbforaging 2.0.0 소스(scratchpad에 sdist를 받아 읽음), VMAS 1.5.2 소스와 격리 폴더 설치 동작, MetaDrive RL 환경 문서, MAgent2 battle 문서, PyPI 메타데이터(의존성·라이선스·Windows wheel).
+- 구현: `PGCT/pgct_runner`(공용 실행부), `LBF/`(다중 팀 LBF), `VMAS/`(Team Discovery), `scripts/run_experiment.ps1`, `scripts/aggregate_experiment.ps1`, `docs/ENVIRONMENTS.md`, README·ARCHITECTURE·pyproject·run_tests 갱신. `pgct_core`와 Overcooked 코드는 바꾸지 않았다.
+- 설치: `marl-policy-sharing`에 vmas 1.5.2, gym 0.26.2, gym-notices 0.0.8, lbforaging 2.0.0을 `--no-deps`로 설치했다.
+- 검증·시험 실행은 E96, 판단은 D142. 실행 중이던 다른 학습은 건드리지 않았다. 커밋하지 않았다.
+
+### Assistant — 진행 안내 (원문)
+
+- 기존 Overcooked 구조(어댑터·학습 진입점·설정)를 읽는 중입니다. LBF도 같은 틀로 만들 예정입니다.
+- Overcooked 구조 파악을 마쳤습니다. 이제 VMAS·MetaDrive·MAgent2를 검토합니다.
+- LBF 원본 코드(lbforaging 2.0.0)의 규칙을 읽는 중입니다. 다중 팀 변형이 원래 규칙을 그대로 따르게 하려고 확인하고 있습니다.
+- VMAS 소스를 살펴보는 중입니다. 기본 시나리오인 discovery(목표 지점 덮기, 개인 보상 옵션)를 팀형으로 바꿀 수 있는지 확인하고 있습니다.
+- VMAS는 격리 폴더에서 import와 동작을 확인했습니다(gym 0.26.2 필요, 4 agent 기준 step당 약 7 ms). MetaDrive·MAgent2는 문서로 구조를 확인했습니다. 이제 gate 설정의 검증 규칙을 확인한 뒤 코드를 작성합니다.
+- 검토 결과는 이렇습니다. VMAS는 쓸 만하고(discovery를 팀형으로 변형), MetaDrive·MAgent2는 맞지 않습니다. 이제 코드를 씁니다. 먼저 LBF와 VMAS가 함께 쓸 실행 공용부(`PGCT/pgct_runner`)를 만듭니다. 실행 중일 수 있는 Overcooked 코드는 건드리지 않습니다.
+- 공용부(설정·계획·W&B·영상·집계) 작성을 마쳤습니다. 다음은 LBF 환경입니다. lbforaging 2.0.0의 규칙(레벨, 동시 적재, 충돌, 보상 정규화, 먹이 배치)을 그대로 따르고, 먹이 종류(팀)만 추가합니다.
+- LBF 환경이 동작합니다(약 22,000 step/s, 무작위 정책 기준). 이제 원본 lbforaging과 규칙이 같은지 비교하는 테스트를 만들기 위해 원본 패키지를 격리 폴더에 설치합니다.
+- 원본 lbforaging과의 단계별 비교가 5개 설정에서 일치했습니다. 남은 1개는 규칙 차이가 아니라, 3명이 동시에 적재해야 하는 설정에서 무작위 행동으로는 적재 성공이 한 번도 나오지 않아 검사 조건이 실패한 것입니다. 적재 시도까지 세도록 조건을 고칩니다.
+- LBF 테스트 21개가 모두 통과했습니다(규칙, 원본 일치, 6개 방법 학습 경로, 라벨 차단, 영상·평가·집계). 이제 짧은 IPPO 시험 학습으로 속도와 학습 여부를 확인합니다.
+- 시험 학습(200k step)을 백그라운드로 돌리는 동안 VMAS 쪽을 만듭니다. 먼저 VMAS의 환경 생성·step API를 확인합니다.
+- VMAS 팀 discovery 시나리오와 어댑터를 작성했습니다. 이어서 렌더러·설정·진입점을 붙이고 동작을 확인합니다.
+- VMAS는 CPU 단일 환경에서 초당 약 140 step입니다. LIDAR 계산이 시간의 40% 정도를 씁니다. 같은 프로세스의 VMAS 환경들이 난수 상태를 공유하는지도 확인합니다. 공유한다면 평가·영상용 환경이 학습 환경의 난수 흐름을 바꿀 수 있습니다.
+- 확인 결과 VMAS의 난수 상태는 클래스 수준에서 모든 환경이 공유합니다. 어댑터마다 자기 난수 상태를 갖도록 감싸서, 평가·영상 환경이 학습 환경에 영향을 주지 않게 고칩니다.
+- VMAS 테스트 12개도 모두 통과했습니다(덮기 보상, 협동 변형, 난수 격리, 팀 라벨 무관성, 6개 방법 학습 경로, 명령줄 전체). 이제 공용 실행·집계 스크립트를 만들고 테스트 스크립트에 두 환경을 추가합니다.
+- Codex가 같은 저장소에 E95(RWARE 중간 분석) 기록을 추가해 두었습니다. 그 내용은 건드리지 않고, 기록할 때 다시 읽어서 합치겠습니다. 백슬래시가 들어간 수정은 Write 도구로 만든 스크립트로 처리합니다.
+- 실행 스크립트와 `pyproject.toml` 등록을 마쳤습니다. 사용자가 바로 돌릴 수 있도록 `marl-policy-sharing` 환경에 VMAS 1.5.2와 그 필수 의존성(gym 0.26.2, gym-notices)만 `--no-deps`로 설치합니다. 기존 패키지는 바꾸지 않습니다. 원본 비교 테스트용 lbforaging 2.0.0도 같은 방식으로 설치합니다.
+- 설치가 끝났습니다. numpy·torch·gymnasium 버전은 그대로이고, 렌더링에만 쓰이는 pyglet이 없다는 경고만 남습니다. 이제 공유 코어·Overcooked·LBF·VMAS 테스트 묶음을 전부 돌립니다.
+- 네 묶음 모두 통과했습니다. 공유 코어 15개, Overcooked 30개, LBF 21개, VMAS 12개입니다. LBF 원본 비교 테스트는 이번에는 lbforaging이 설치돼 있어 실제로 실행됐습니다. LBF 시험 학습이 끝나기를 기다리는 동안 문서를 씁니다.
+- 문서 갱신을 마쳤습니다. LBF 시험 학습 진행 상황을 확인합니다.
+- LBF 시험 학습은 131k step(seed 1, IPPO) 기준으로 초당 약 208 step이고, 보상이 오르고 있습니다. 에피소드당 평균 보상이 0.038에서 0.13으로 늘었고, 자기 팀 먹이 수집은 늘고 다른 팀 먹이 수집은 줄었습니다. 끝나면 VMAS도 짧게 시험해 보겠습니다. 그 사이 기록 번호가 겹치지 않는지 확인합니다.
+- Codex가 T235를 이미 썼으므로 이번 기록은 T236, D142, E96으로 씁니다. LBF 시험 학습 종료 알림을 기다리는 동안 기록 초안을 작성합니다.
+- 기다리는 동안 PowerShell 실행 스크립트를 실제로 검증합니다. LBF smoke 2개 job을 돌리고(W&B 끔, 영상 켬) 집계 스크립트까지 실행합니다.
+- 스크립트 경로도 계획 → 2개 job 병렬 실행 → 영상 → 집계까지 동작합니다. smoke 수치는 배선 확인용 값이라 의미가 없습니다. LBF 시험 학습 종료를 확인합니다.
+- 두 시험 학습이 도는 동안, Overcooked 때처럼 식별 가능성을 미리 점검합니다. 자기 팀 먹이로 가서 적재하는 스크립트 정책 경험을 gate에 넣었을 때, 라벨 없이 같은 팀만 승인되는지 확인하는 시험입니다.
+- 스크립트 경험에서는 gate가 같은 팀 두 쌍만 정확히 승인했습니다. 기록용으로 거리 수치를 뽑습니다.
+- 스크립트 경험에서는 같은 팀 거리가 0.003, 다른 팀 거리가 0.90–0.91로 임계 0.5에서 멀리 떨어져 깔끔하게 갈렸습니다. 다만 이 시험은 모든 agent가 두 종류 먹이를 다 겪는 이상적인 경험입니다. 학습된 정책이 다른 팀 먹이를 피하면 대조 경험 문제가 다시 나타날 수 있어서, 실제 판정은 학습 중 식별 실험으로 해야 합니다.
+- 두 시험 학습이 동시에 돌고 있어 조금 느립니다. LBF는 196 update 중 159 완료, VMAS는 98 중 4 완료입니다. 그동안 실험·상태 기록 초안을 씁니다.
+- 타이밍은 정상입니다. LBF는 update당 약 5초(초당 208 step), VMAS는 update당 약 13초(초당 80 step)입니다. LBF는 몇 분 안에, VMAS는 약 20분 뒤에 끝납니다. 그동안 기록 초안을 작성합니다.
+
+### Assistant — 최종 답변 (원문)
+
+LBF와 VMAS를 만들었습니다. MetaDrive와 MAgent2는 PGCT 실험에 맞지 않아 만들지 않았습니다. 본 실험은 돌리지 않았고, 짧은 시험 학습만 했습니다.
+
+## 1. LBF 다중 팀 (`LBF/`): 두 번째 주 환경
+
+- **규칙**: 원본 lbforaging 2.0.0의 규칙(레벨, 함께 들기, 충돌, 보상 몫, 먹이 배치)을 그대로 쓰고, 먹이 종류(팀)만 추가했습니다.
+  - 누구나 어느 먹이든 함께 들 수 있습니다. 보상은 자기 팀 먹이를 든 agent에게만 갑니다.
+  - 관측에 먹이 종류는 보이지만, 어느 종류가 자기 보상인지는 나오지 않습니다.
+- **원본과 같은지 확인**: 팀을 하나로 두면 원본과 같은지 비교했습니다. 6개 설정에서 7,406 step을 돌렸고, 위치·먹이·보상·종료·관측이 모두 같았습니다. 이 중 적재에 성공한 step은 44개입니다.
+- **식별 가능성 사전 점검**: agent가 무작위 종류의 먹이를 드는 스크립트 경험을 gate에 넣었습니다.
+  - gate는 같은 팀 두 쌍만 승인했습니다. 같은 팀 거리는 .003, 다른 팀 거리는 .905, AUROC는 1.0입니다.
+  - 다만 모두가 두 종류 먹이를 다 겪는 이상적인 경험입니다. 학습된 정책에서도 되는지는 따로 봐야 합니다.
+- **설정 3개**: 결과를 보기 전에 고정했습니다.
+  - `main_4p2t`: 12×12, 4 agent(2+2), 팀당 먹이 3개, 시야 2, 50 step. 일부 먹이는 둘이 함께 들어야 합니다.
+  - `ind_4p2t`: 모든 먹이가 레벨 1입니다. 팀원이 같은 순간에 보상받는 일이 없어서, 식별을 probe만으로 해야 합니다.
+  - `coop_4p2t`: 모든 먹이에 둘이 필요합니다.
+- **IPPO 시험 학습**(main, seed 1, 200k step):
+  - 평가 보상(agent 평균)은 .019(51k)에서 .143(200k)으로 올랐습니다.
+  - 200k에서 먹이 6개 중 평균 2.4개를 모읍니다. 적재 실패는 에피소드당 51회인데, 혼자 들 수 없는 먹이 앞에서 계속 적재를 시도하기 때문입니다.
+  - 즉 같은 팀 협력이 병목입니다. critic 전이가 효과를 보일 여지가 있습니다.
+  - 속도는 초당 약 206 step이라, 5M step이면 job 하나에 약 6.7시간입니다.
+
+## 2. VMAS Team Discovery (`VMAS/`): 연속 물리 환경 점검
+
+- **규칙**: VMAS의 discovery 시나리오에 목표 종류(팀)를 추가했습니다.
+  - 로봇이 목표 근처에 가면 그 목표를 덮은 것으로 봅니다. 덮기는 팀과 무관하지만, 보상은 자기 종류 목표를 덮은 로봇에게만 갑니다.
+  - 목표 종류마다 LIDAR를 따로 두었고, probe에서는 절대 위치를 뺐습니다.
+- **고친 문제**: VMAS는 한 프로세스 안의 모든 환경이 난수 상태 하나를 같이 씁니다. 그래서 평가·영상용 환경이 학습 환경의 난수 흐름을 바꿀 수 있었습니다. 어댑터마다 자기 난수 상태를 갖도록 고쳤고, 테스트로 확인했습니다.
+- **IPPO 시험 학습**(main, seed 1, 100k step): 평가 보상이 .575(51k)에서 .675(100k)로 올랐습니다.
+- **한계**:
+  - 단일 환경을 CPU로 돌려서 학습 중 초당 약 84 step입니다. 2M step이면 job 하나에 약 6.6시간입니다.
+  - VMAS는 GPLv3입니다. 코드를 저장소에 복사하지 않고 선택 의존성으로만 씁니다.
+
+## 3. 만들지 않은 환경
+
+- **MetaDrive**: 에피소드 중에 차량이 사라지고 새 차량이 생겨서 agent 구성이 고정되지 않습니다. PGCT는 agent마다 계속 유지되는 학습기, 보상 예측기, critic이 필요합니다. 또 차량마다 자기 경로가 있을 뿐 자연스러운 숨은 팀이 없고, 3D 시뮬레이터라 무겁습니다.
+- **MAgent2**: 관측에 "우리 팀/상대 팀" 채널이 따로 있어서 팀 식별이 자명합니다. 또 팀끼리 적대하고, 전투 중 agent가 죽어서 인원이 줄어듭니다.
+
+## 4. 공용 구조와 검증
+
+- LBF와 VMAS가 함께 쓰는 실행부 `PGCT/pgct_runner`를 만들었습니다. 계획, 학습·평가·영상·집계 명령, W&B를 맡습니다.
+- 실행 스크립트는 `scripts/run_experiment.ps1`와 `scripts/aggregate_experiment.ps1`입니다.
+- `pgct_core`와 Overcooked 코드는 바꾸지 않았습니다.
+- 테스트는 공유 코어 15개, Overcooked 30개, LBF 22개, VMAS 12개가 모두 통과했습니다. 6개 방법의 학습 경로, 라벨 차단, gate 방법이 IPPO·Oracle로 정확히 환원되는지도 포함합니다.
+- PowerShell 스크립트도 직접 실행했습니다. smoke job 2개, 영상, 집계까지 정상 동작했습니다.
+- `marl-policy-sharing` 환경에 vmas 1.5.2, gym 0.26.2, gym-notices, lbforaging 2.0.0을 `--no-deps`로 설치했습니다. 기존 패키지 버전은 바뀌지 않았습니다.
+
+## 다음 단계 제안 (학습은 직접 실행)
+
+먼저 Overcooked에서 문제가 됐던 대조 경험 부족을 확인하는 게 좋겠습니다. 학습된 정책이 다른 팀 먹이를 피하면 생길 수 있는 문제입니다. LBF main에서 IPPO와 PGCT-ID-only를 seed 1, 1M step으로만 돌려 보면 됩니다. job당 약 1.4시간입니다.
+
+```powershell
+$env:PGCT_PYTHON = "C:\Users\95101\anaconda3\envs\marl-policy-sharing\python.exe"
+powershell -ExecutionPolicy Bypass -Command "& '.\scripts\run_experiment.ps1' -Experiment LBF -Name lbf_id_1m -Methods ippo,pgct_id_only -Seeds 1 -TotalTimesteps 1000000"
+```
+
+식별이 되면, 6개 방법 × seed 3개 × 5M의 본 비교로 넘어가면 됩니다. job 18개이고, 3개씩 동시에 돌리면 약 40시간입니다.
+
+기록은 D142, E96, `RESEARCH_STATE.md`, `CONVERSATION_LOG.md` T236에 남겼습니다. 커밋은 하지 않았습니다.
+
+## 원문 기록 T237 — 2026-11-06 KST, Claude Code
+
+### 사용자 — 원문
+
+Commit and push
+
+### 수행 기록 — 원문 대화와 별도
+
+- T236 작업(51개 파일)을 커밋 62d2b9d로 `feature/overcooked`에 push했다. 같은 기록 파일에 있던 Codex의 E95·T235 항목도 함께 들어갔다. 이 기록은 별도 커밋으로 push했다.
+
+### Assistant — 진행 안내 (원문)
+
+- 커밋 `62d2b9d`를 `feature/overcooked`에 push했습니다. 이 turn의 대화 기록을 남기고 별도 커밋으로 push합니다.
+
+### Assistant — 최종 답변 (원문)
+
+커밋하고 push했습니다. 커밋은 `62d2b9d`이고 브랜치는 `feature/overcooked`입니다.
+
+- 포함된 것: `LBF/`, `VMAS/`, `PGCT/pgct_runner/`, 실행·집계 스크립트, `docs/ENVIRONMENTS.md`, README·ARCHITECTURE·pyproject·run_tests 갱신, 기록 D142·E96·T236. 모두 51개 파일입니다.
+- Codex가 같은 기록 파일에 추가한 E95·T235 항목도 함께 들어갔습니다.
+- 학습 결과 폴더(`LBF/runs`, `VMAS/runs`)는 git에서 제외되므로 올라가지 않았습니다.
+- 이 대화 기록(T237)은 별도 커밋으로 push했습니다.
+
+## 원문 기록 T238 — 2026-11-06 KST, Claude Code
+
+### 사용자 — 원문
+
+다시한번 분석
+
+(작업 중 추가 메시지) wandb
+
+### 수행 기록 — 원문 대화와 별도
+
+- 읽기 전용 분석이다. 대상: 로컬 `LBF/runs/lbf_id_1m`(사용자가 실행한 ippo·pgct_id_only seed 1, 1M), W&B `pgct-lbf` 2 run, W&B `rware-main-amax-v2` 2 run(seed 1, 2M 완료), `Overcooked/runs/oc_id_500k_v3_rel` 로그. W&B API는 읽기 전용으로 썼다. 코드와 학습은 바꾸지 않았다. 결과는 E97.
+
+### Assistant — 진행 안내 (원문)
+
+- 사용자가 `lbf_id_1m`(제안한 LBF 식별 점검)을 실행한 것으로 보입니다. 로컬 로그와 W&B를 함께 분석하겠습니다.
+- 두 job(IPPO, PGCT-ID-only, seed 1, 1M step)이 모두 끝났고 W&B(`pgct-lbf`)에 동기화돼 있습니다. W&B 프로젝트에 다른 run도 있는지 먼저 확인하고, 식별 지표를 분석하겠습니다.
+- W&B에는 이 두 run만 있고(둘 다 finished, 1,000,448 step), VMAS 프로젝트는 아직 없습니다. W&B에는 스칼라만 올라가므로, 쌍별 gate 정보가 다 남아 있는 로컬 로그(`gate.jsonl`)로 자세히 분석하고 W&B 값과 대조합니다.
+- 학습 쪽부터 보면, 두 run의 최종 가중치가 완전히 같습니다. PGCT-ID-only는 gate만 돌리고 학습에는 개입하지 않으니 설계대로입니다. 그래서 학습 성능은 run 하나로 보고, 식별은 PGCT-ID-only의 gate 로그로 봅니다.
+- 결과가 좋습니다. 학습 중에도 식별이 완벽합니다. 네 agent 모두 102k step 이전에 성숙했고, warm-up(100 update)이 끝난 뒤 117,760 step에서 같은 팀 두 쌍이 처음 승인됐습니다. 이후 1M까지 오승인은 한 번도 없었습니다. 승인이 두 번 뒤집힌 시점과 쌍별 거리 추이를 확인합니다.
+- 쌍별 거리가 아주 깨끗하게 갈립니다. 같은 팀 거리는 매 비교에서 0.06–0.14이고, 다른 팀 거리는 0.94–1.00입니다. 임계값을 0.14에서 0.93 사이 어디에 두어도 결과가 같습니다. 왜 Overcooked와 달리 다른 팀 구분이 되는지, 학습 중 다른 팀 먹이 경험과 보상 사건 수를 확인합니다.
+- 다른 팀 먹이 경험이 학습 내내 남아 있습니다. 1M 직전에도 agent마다 에피소드당 다른 팀 먹이 적재가 0.08–0.10회, 적재 실패가 4–6회 있습니다. 끝으로 학습 속도가 시험 학습(초당 206 step)보다 훨씬 느렸던 이유(초당 46 step)를 확인합니다.
+- update당 시간은 rollout 8.6–9초, PPO 12.5–13초입니다. 시험 학습 때(1.9초, 2.9초)보다 둘 다 약 4.3배 느려졌고, 이 비율이 처음부터 끝까지 일정했습니다. gate 비용은 update당 0.2–0.34초(약 1.5%)뿐이라 gate 탓은 아닙니다. 마지막으로 W&B 값이 로컬 로그와 같은지 대조합니다.
+- W&B 값이 로컬 로그와 정확히 같습니다. 다만 "다시 한번"이 지난번처럼 RWARE(`rware-main-amax-v2`) 분석을 뜻할 수도 있습니다. 그래서 W&B 계정의 다른 프로젝트에 새 결과가 있는지도 확인합니다.
+- 큰 변화가 있습니다. RWARE 본 실험 `rware-main-amax-v2`의 seed 1 두 run(IPPO, PGCT-D2)이 모두 2,000,896 step에서 끝났습니다. Codex의 지난 분석은 1.28M 중간 시점이었습니다. 그래서 "다시 한번 분석"은 이 RWARE 최종 결과를 포함해서 하겠습니다. LBF 분석은 위에서 거의 끝났습니다. Overcooked `oc_id_500k_v3_rel`은 02:15에 7분 만에 멈춘 흔적이 있어 따로 확인하겠습니다.
+- RWARE 최종 결과가 나왔습니다(seed 1, 2M). 최종 평가에서 IPPO는 에피소드당 6.85회, PGCT-D2는 8.55회 배송했고, 첫 배송은 PGCT가 약 60만 step 빨랐습니다. 이어서 gate가 언제 무엇을 승인했는지, 오승인이 있었는지 확인합니다.
+- RWARE gate는 2M 동안 다른 팀 승인과 다른 팀 donor 연결이 한 번도 없었습니다(1,954개 기록 전부 0). 6명 중 5명이 23만 step 안에 성숙했고, A2만 끝까지 성숙하지 못했습니다. 이제 중간에 멈춘 Overcooked 실행을 확인합니다.
+- Overcooked 식별 실행은 오류가 아니라 키보드 중단(Ctrl+C)으로 02:15에 멈췄습니다. 489 update 중 16 update까지 진행된 상태였습니다. LBF 실행이 느렸던 이유를 보려고, 같은 시간대에 RWARE 학습이 이 PC에서 같이 돌았는지 확인합니다.
+- RWARE 학습은 다른 PC(DESKTOP-03ASKH8)에서 돌았습니다. 그러니 이 PC에서 LBF가 느렸던 원인은 RWARE와의 경합이 아닙니다. 원인은 확인하지 못했습니다. 분석이 끝났으니 기록을 남깁니다.
+
+### Assistant — 최종 답변 (원문)
+
+W&B에 새로 끝난 결과가 두 묶음 있어서 둘 다 분석했습니다. 하나는 직접 돌리신 LBF 식별 점검(1M)이고, 다른 하나는 RWARE 본 실험 seed 1 최종(2M)입니다. W&B 값과 로컬 로그는 서로 같았습니다.
+
+## 1. LBF 식별 점검 (`lbf_id_1m`, main, seed 1, 1M step)
+
+**학습 중에도 팀 식별이 완벽합니다.** Overcooked에서 막혔던 문제가 LBF에서는 생기지 않았습니다.
+
+- 네 agent 모두 warm-up이 끝나기 전에(102k step) 성숙했습니다.
+- 117,760 step에서 같은 팀 두 쌍이 승인됐고, 1M까지 그대로 유지됐습니다. 오승인은 한 번도 없었습니다(precision·recall 1.0).
+- 175회 비교 각각에서 같은 팀 거리는 0.06–0.14, 다른 팀 거리는 0.94–1.00이었습니다. 임계값을 0.14에서 0.93 사이 어디에 둬도 결과가 같습니다. 교수님이 지적하신 "왜 0.5인가" 문제가 이 환경에서는 결과에 영향을 주지 않습니다.
+- **Overcooked와 달리 된 이유**: 모든 agent가 같은 상황에서 두 종류 먹이를 다 겪습니다. 학습이 끝날 무렵에도 agent당 에피소드마다 다른 팀 먹이 적재가 0.08–0.10회, 적재 실패가 4–6회 남아 있습니다. 그래서 "남의 먹이 앞에서 LOAD해도 내 보상은 0"이라는 대조 경험이 계속 쌓입니다.
+
+**학습 성능**: 두 run의 최종 가중치가 완전히 같았습니다. PGCT-ID-only는 gate만 돌리고 학습에 손대지 않으니 설계대로입니다. 그래서 학습 성능은 IPPO 하나로 보면 됩니다.
+- 평가 보상(agent 평균)은 0.019(51k), 0.130(154k), 0.223(563k)으로 올랐습니다. 그 뒤 1M까지 0.21–0.23에서 멈춰 있습니다.
+- 1M에서 먹이 6개 중 3.75개를 모으고, 적재 실패가 에피소드당 58회입니다. 혼자 못 드는 먹이를 둘이 함께 드는 협력이 여전히 병목입니다. 그래서 다음 단계인 critic 전이(PGCT-D2)가 효과를 보일 여지가 큽니다.
+
+**문제 하나: 속도**: 초당 46 step으로, 1M에 6.1시간 걸렸습니다.
+- 시험 학습 때(초당 206 step)보다 rollout과 PPO가 똑같이 약 4.3배 느려졌습니다. gate 비용은 약 1.5%뿐이라 원인이 아닙니다.
+- RWARE는 다른 PC에서 돌았으니 그것도 원인이 아닙니다. 원인은 확인하지 못했습니다. Windows 전원 모드(예: 팬 소음 때문에 저전력으로 바꾼 경우)나 다른 프로세스를 확인해 보시면 좋겠습니다.
+- 이 속도라면 5M은 job 하나에 약 30시간입니다.
+
+## 2. RWARE 본 실험 seed 1 최종 (`rware-main-amax-v2`, 2M step)
+
+결정적 평가 20 episode × 500 step 기준입니다.
+
+| | IPPO | PGCT-D2 |
+|---|---|---|
+| 최종 배송/episode | 6.85 | **8.55** (+25%) |
+| 첫 배송 시점 | 1,433,600 step | **819,200 step** |
+| 평가 39점 평균 배송 (학습곡선 면적) | 1.24 | **3.19** (2.6배) |
+| 1.5M 이후 평균 | 4.61 | **7.88** |
+
+- **gate는 깨끗했습니다**: 2M 동안 다른 팀 승인이나 다른 팀 critic 연결이 한 번도 없었습니다. 6명 중 5명이 23만 step 안에 성숙했고, 50만 step 이후로는 같은 팀 쌍 전부(8개 연결)가 유지됐습니다.
+- **주의할 점 세 가지**:
+  1. IPPO가 막판에 따라붙고 있습니다. 격차가 "PGCT만 배송"에서 +25%로 줄었습니다. PGCT의 이득은 주로 **더 빨리 배운다**는 쪽입니다.
+  2. **A2는 PGCT run에서 배송이 0입니다**(IPPO run에서는 23). A2는 자기 보상 사건이 없어 끝까지 성숙하지 못했고, 그래서 critic 공유에서 빠졌습니다. 같은 팀 A4·A6가 빨리 배워 팀 요청을 먼저 가져갔을 수도 있지만, 확인하지는 않았습니다. 팀 전체 배송은 PGCT가 더 많습니다(team1 85 대 66).
+  3. seed가 하나뿐입니다. 판정에는 seed 2·3이 필요합니다.
+
+## 3. Overcooked 식별 실행
+
+`oc_id_500k_v3_rel`은 02:15에 Ctrl+C로 멈췄습니다(489 update 중 16). 결과가 없으므로 Overcooked v3+상대 규칙의 학습 중 식별은 아직 검증되지 않았습니다.
+
+## 정리와 다음 단계
+
+- **Q1(식별)**: RWARE와 LBF 모두 학습 중에 오승인 0으로 팀을 찾았습니다. LBF는 오차 여유가 매우 큽니다.
+- **Q2(전이)**: RWARE seed 1에서 학습 속도가 확실히 빨라졌고, 최종 성능도 +25%입니다.
+- **다음 순서 제안**:
+  1. RWARE seed 2·3. 본 판정에 필요합니다.
+  2. LBF IPPO 대 PGCT-D2(Oracle·All 포함) 비교. 단, 먼저 이 PC의 속도 문제를 확인하는 게 좋겠습니다.
+
+분석 내용은 E97, `RESEARCH_STATE.md`, `CONVERSATION_LOG.md` T238에 기록했습니다. 커밋은 하지 않았습니다.
+
+## 원문 기록 T239 — 2026-11-06 KST, Claude Code
+
+### 사용자 — 원문
+
+(첨부: FanControl 화면 캡처 1장. CPU Fan 35% 1428 RPM, Pump Fan 100%, System Fan #1·#2 60%, GPU 팬 자동 곡선)
+
+커밋과 푸시해주고, LBF 진행해줘
+PC속도는 내가 팬 속도 조절한다고 줄여놨는데 그 영향인거 같거든? 확인해줘
+
+### 수행 기록 — 원문 대화와 별도
+
+- E97/T238 기록을 커밋 7385341로 push했다.
+- 속도 진단(E98): CPU·전원 구성표·성능 카운터를 읽기 전용으로 확인했다. 30 update 벤치마크를 하위 프로세스, 최소화 창, 수정 후 최소화 창의 세 조건으로 비교했다. 시스템 설정과 팬 설정은 바꾸지 않았다.
+- 코드: `PGCT/pgct_runner/power.py`, `pgct_runner/cli.py`·`Overcooked/pgct_overcooked/train.py`의 EcoQoS 해제(기본)와 `--allow-eco`, `scripts/start_detached.ps1`, 테스트 `PGCT/tests/test_runner_power.py`, LBF·루트 README와 ARCHITECTURE 갱신.
+- 실행: 사용자 요청("LBF 진행해줘")으로 `LBF/runs/lbf_main_5m`(15 job)을 앱 밖(WMI)에서 시작했다(D143). 실행 중인 다른 학습은 없었고 건드리지 않았다.
+- 이 기록과 수정은 별도 커밋으로 push했다.
+
+### Assistant — 진행 안내 (원문)
+
+- 커밋·push부터 하고, 속도 원인을 측정으로 확인한 뒤 LBF 본 실험을 시작하겠습니다.
+- 분석 기록을 커밋 `7385341`로 push했습니다. 이제 CPU 클럭이 떨어져 있는지(스로틀링), 전원 설정은 어떤지 확인합니다.
+- CPU는 i5-13400(P코어 6개, E코어 4개, 16 스레드)이고 전원 구성표는 "균형 조정"입니다. 지금은 부하가 거의 없습니다. 팬 속도가 원인이라면, 지난번처럼 job 2개만 돌릴 때(16 스레드 중 2개 사용)도 CPU가 과열돼 클럭이 떨어져야 합니다. 그런데 이 정도 부하에서 과열은 잘 일어나지 않습니다. 또 시험 학습(초당 206 step)도 같은 팬 설정에서 돌았습니다. 그래서 실행 방식에 따라 속도가 달라지는지 직접 재 보겠습니다. Windows는 백그라운드 창에서 실행된 프로세스를 E코어·저전력으로 돌릴 수 있습니다.
+- 현재 팬 설정에서 job 하나를 이 앱의 하위 프로세스로 돌리니 초당 197 step이 나왔습니다(시험 학습 206과 비슷). 지금 팬 설정만으로는 느려지지 않습니다. 다음은 지난번처럼 별도 PowerShell 창에서, 그 창이 최소화(백그라운드)된 상태로 돌려 보겠습니다.
+- 최소화된 창에서는 같은 작업이 10분이 넘도록 끝나지 않았습니다. 하위 프로세스로는 162초 걸린 작업입니다. 느려지는 현상이 재현됐습니다. 진행 중인 지표를 확인합니다.
+- 원인을 찾았습니다. 최소화된 창에서 돌리면 초당 48 step이고, update당 rollout 8.5초·PPO 12.2초입니다. 사용자 `lbf_id_1m`(46 step/s, 8.6초, 12.5초)과 거의 같은 수치입니다. 팬 설정은 그대로였는데 실행 방식만 바뀌어도 4배 느려집니다. 즉 **팬이 아니라 Windows 11의 백그라운드 절전 처리**(최소화·백그라운드 창의 프로세스를 E코어·저클럭으로 돌리는 EcoQoS) 때문입니다. 관리자 권한 없이 프로세스가 스스로 이 절전에서 빠질 수 있으므로, 학습 진입점에서 그렇게 하도록 고친 뒤 같은 조건으로 다시 재겠습니다.
+- 절전 해제 호출이 성공합니다(관리자 권한 불필요). 이제 같은 최소화 창 조건에서 다시 측정합니다.
+- 고친 뒤에는 같은 최소화 창에서 **초당 203 step**이 나왔습니다(rollout 2.11초, PPO 2.99초). 고치기 전 48 step보다 4.2배 빠르고, 하위 프로세스로 돌린 197 step과 같은 수준입니다. 원인은 팬이 아니라 Windows 백그라운드 절전이었고, 이제 해결됐습니다. 같은 문제가 있었던 Overcooked 학습 진입점에도 같은 처리를 넣습니다. 계산 내용은 바뀌지 않고 실행 속도만 바뀝니다.
+- Overcooked와 LBF의 학습·명령줄 테스트가 고친 뒤에도 통과했습니다. 이제 LBF 본 비교를 시작합니다. 앱이 재시작돼도 학습이 죽지 않도록(E26), 앱의 프로세스 트리 밖(WMI)에서 대기열을 띄우겠습니다. 그 방식에서 사용자 환경(W&B 인증 파일 위치 등)이 제대로 잡히는지 먼저 시험합니다.
+- WMI로 띄운 프로세스는 사용자 계정(95101)으로 돌고, W&B 인증 파일(`_netrc`)도 찾습니다. 앱 밖에서 학습 대기열을 띄울 수 있음을 확인했습니다. 다음에 다시 쓸 수 있도록 이 실행 방식을 스크립트로 만들어 두고, 그 스크립트로 LBF 본 비교를 시작합니다.
+- 15개 job이 계획됐고, 첫 묶음(seed 1의 5개 방법)이 동시에 시작됐습니다. 몇 분 뒤 각 job의 속도, 절전 해제 여부, W&B 연결을 확인합니다.
+- 다섯 job 모두 정상입니다. 각각 초당 152–156 step으로 돌고 있고(5개 합계 약 770 step/s), 절전 해제가 적용됐고, W&B에도 연결됐습니다. 이 속도면 job 하나에 약 9시간이고, seed 3개 묶음을 차례로 돌리면 전체 약 27–28시간입니다. 이제 테스트·문서·기록을 정리하고 커밋합니다.
+
+### Assistant — 최종 답변 (원문)
+
+세 가지 모두 처리했습니다. 분석 기록은 커밋·push했고, 학습이 느렸던 원인을 찾아 고쳤고, LBF 본 비교를 시작했습니다.
+
+## 1. 속도 저하 원인: 팬이 아니라 Windows 백그라운드 절전
+
+지금 팬 설정 그대로(CPU 팬 35% 고정) 같은 LBF 학습을 세 가지 방식으로 재 봤습니다.
+
+| 실행 방식 | 속도 | update당 rollout / PPO |
+|---|---|---|
+| 앱 안에서 하위 프로세스로 실행 | 197 step/s | 2.05초 / 2.90초 |
+| **최소화된 PowerShell 창에서 실행** | **48 step/s** | 8.53초 / 12.40초 |
+| 최소화 창 + 이번 수정 적용 | 203 step/s | 2.11초 / 2.99초 |
+
+- 최소화 창의 수치가 지난 `lbf_id_1m`(46 step/s, 8.6초 / 12.5초)과 똑같습니다. 팬 설정은 그대로인데 실행 방식만 바꿔도 4배 넘게 느려집니다.
+- **원인**: Windows 11은 최소화되거나 뒤에 가려진 창의 프로세스를 효율 코어(E코어)와 낮은 클럭으로 돌립니다(EcoQoS). 이 PC의 i5-13400에는 E코어가 4개 있습니다. job 2개 정도의 부하로는 과열로 클럭이 떨어진다는 근거도 없었습니다.
+- **수정**: 학습 프로세스가 시작할 때 스스로 이 절전에서 빠지게 했습니다(`PGCT/pgct_runner/power.py`). 관리자 권한도 필요 없고 시스템 설정도 바꾸지 않습니다. 계산 결과는 그대로이고 속도만 돌아옵니다. LBF·VMAS·Overcooked 학습 모두에 적용했습니다. 예전처럼 절전을 쓰고 싶으면 `--allow-eco`를 붙이면 됩니다.
+- 팬은 이제 온도 쪽만 보시면 됩니다. 지금은 job 5개가 동시에 돌아서 부하가 이전보다 큽니다. FanControl에서 CPU 온도가 90°C 근처까지 오르면 CPU 팬을 고정값 대신 곡선으로 켜 두시는 게 좋겠습니다.
+
+## 2. LBF 본 비교 시작 (`LBF/runs/lbf_main_5m`)
+
+- **조건**: main 설정, 5M step(미리 고정한 예산), seed 1·2·3.
+- **방법 5개**: PGCT-D2, IPPO, Oracle, All, random-gate. 모두 15 job이고 5개씩 동시에 돕니다.
+  - PGCT-ID-only는 뺐습니다. 지난 분석에서 학습 결과가 IPPO와 비트 단위로 같았고, 식별 지표는 PGCT-D2·random-gate의 gate 로그에도 똑같이 남기 때문입니다.
+- **앱 밖에서 실행**: 새로 만든 `scripts/start_detached.ps1`로 대기열을 띄웠습니다. Claude 앱이 업데이트되거나 닫혀도 학습은 계속됩니다. 창 없이 돌고, 진행 기록은 `LBF/runs/lbf_main_5m/queue.log`에 남습니다.
+- **현재 상태**: seed 1의 5개 job이 각각 초당 약 155 step으로 돌고 있습니다. 절전 해제가 적용됐고 W&B(`pgct-lbf`)에도 연결됐습니다.
+- **예상 시간**: job 하나에 약 9시간이고, seed 묶음 3개를 차례로 돌리므로 전체 약 27–28시간입니다.
+- 끝나면 다음 명령으로 집계합니다.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\aggregate_experiment.ps1 -Experiment LBF -Name lbf_main_5m
+```
+
+## 3. 기록과 커밋
+
+- 분석 기록(E97, T238)은 커밋 `7385341`로 push했습니다.
+- 이번 수정과 실행 기록(D143, E98, T239)도 별도 커밋으로 push했습니다.
+- 참고로 RWARE 학습은 다른 PC에서 돌고 있습니다. 그 PC도 최소화 창에서 돌리고 있다면 같은 이유로 느려졌을 수 있습니다. 다만 RWARE 학습기는 수정 금지 파일이라 이번 수정이 적용되지 않았습니다. 필요하면 RWARE 실행기(`latent_team`) 쪽에서 학습 프로세스의 절전을 해제하는 방법을 따로 넣을 수 있습니다.
+
+## 원문 기록 T240 — 2026-11-06 KST, Claude Code
+
+### 사용자 — 원문
+
+(첨부: 작업 관리자 GPU 화면. RTX 3060 사용률 1%, CPU 39% 3.73GHz)
+
+5개 전부 돌아가는 중인데 gpu 자원을 안먹어
+아마 Fancontrol 건드려서 그런거 같은데
+
+### 수행 기록 — 원문 대화와 별도
+
+- 설정 확인만 했다(LBF 설정 `trainer.device: "cpu"`). 코드·실행 변경 없음.
+
+### Assistant — 최종 답변 (원문)
+
+FanControl 때문이 아닙니다. 처음부터 CPU로 돌도록 설정돼 있어서 GPU를 쓰지 않는 게 정상입니다.
+
+- LBF 설정 파일(`LBF/configs/main_4p2t.json`)에 `"device": "cpu"`가 들어 있습니다. RWARE·Overcooked 설정도 같습니다.
+- 이 실험은 GPU가 오히려 손해입니다.
+  - 신경망이 작습니다(128 유닛 MLP와 GRU).
+  - 환경을 1 step 돌릴 때마다 agent 4개가 행동을 하나씩 고릅니다. GPU로 보내면 매번 데이터를 옮기는 비용이 계산 시간보다 큽니다.
+  - 그래서 job마다 CPU 스레드 하나로 돌리고, 대신 job 5개를 동시에 돌려 CPU를 나눠 쓰는 방식입니다.
+- 지금 화면도 정상 상태입니다. CPU 사용률 39%는 job 5개가 각각 스레드 하나씩 쓰는 정도이고, 3.73GHz는 성능 코어 클럭으로 절전 없이 돌고 있다는 뜻입니다. GPU 1%는 화면 표시용입니다.
+
+GPU를 쓰게 하려면 환경 여러 개를 한꺼번에 돌리는 쪽으로 학습기를 바꿔야 합니다. 지금 실험 규모에서는 그럴 필요가 없습니다.
+
+## 원문 기록 T241 — 2026-11-06 KST, Claude Code
+
+### 사용자 — 원문
+
+근데 cpu 사용률 40%하니까 팬 소음이 너무 커
+
+### 수행 기록 — 원문 대화와 별도
+
+- 의견만 제시했다. 실행 중인 학습과 시스템·팬 설정은 건드리지 않았다.
+
+### Assistant — 최종 답변 (원문)
+
+실행 중인 학습은 멈추지 않고, 소음을 줄일 수 있는 방법을 효과가 큰 순서로 정리했습니다. 설정은 직접 바꾸셔야 합니다(시스템 설정이라 제가 바꾸지 않습니다).
+
+1. **CPU 최대 클럭 제한 (가장 효과 큼, 추천)**
+   - 경로: 제어판 → 전원 옵션 → 현재 전원 구성표의 "고급 전원 관리 옵션 설정 변경" → 프로세서 전원 관리 → **최대 프로세서 상태**를 100%에서 **99%**로 바꿉니다.
+   - 99%로 두면 터보 부스트가 꺼져 클럭이 약 3.7GHz에서 기본 2.5GHz로 내려갑니다. 발열과 전력이 크게 줄어 팬이 덜 돕니다.
+   - 대가로 학습이 대략 30% 느려집니다. 전체 예상 시간이 약 28시간에서 35–40시간 정도로 늘어납니다.
+   - 학습을 멈출 필요가 없고, 원래대로 100%로 되돌리면 바로 원래 속도로 돌아옵니다.
+2. **100%로 고정된 팬 낮추기**
+   - 지난 FanControl 화면에서 Pump Fan과 System Fan #3·#4·#5가 100%였습니다. 소음은 CPU 팬(35%)보다 이쪽에서 나올 가능성이 큽니다.
+   - 펌프는 너무 낮추면 CPU 냉각이 나빠집니다. 70% 정도로 낮추고 CPU 온도를 지켜보세요.
+3. **동시 job 수 줄이기**
+   - 지금 대기열은 5개 동시로 시작해서 실행 중에는 바꿀 수 없습니다. seed 1 묶음(약 9시간)이 끝난 뒤 대기열만 멈추고 3개 동시로 다시 시작하는 방법이 있습니다. 끝난 job은 자동으로 건너뜁니다.
+   - 대신 전체 시간이 약 40시간 이상으로 늘어납니다.
+
+1번만으로도 체감 소음이 크게 줄 가능성이 높습니다. 바꾼 뒤 학습 속도가 얼마나 줄었는지는 제가 확인해 드릴 수 있습니다.
+
+## 원문 기록 T242 — 2026-11-06 KST, Claude Code
+
+### 사용자 — 원문
+
+지금 1, 2번 했는데 cpu 온도 확인
+
+### 수행 기록 — 원문 대화와 별도
+
+- 읽기 전용으로 확인했다(성능 카운터, ACPI 온도 카운터, `powercfg /q`, 학습 metrics). 설정 변경 없음.
+
+### Assistant — 최종 답변 (원문)
+
+CPU 온도는 제가 직접 읽을 수 없었습니다. 대신 1번 설정이 아직 적용되지 않은 것을 확인했습니다.
+
+- **온도**: Windows가 관리자 권한 없이 보여 주는 온도 센서는 메인보드의 고정값(27.9°C)뿐입니다. 실제 CPU 패키지 온도는 관리자 권한이 필요해서 읽지 못했습니다. 지금 실행 중인 **FanControl 화면의 CPU 온도**(CPU Package 또는 Core 온도)를 봐 주세요. 학습 중 80°C 이하면 안전하고, 90°C를 넘으면 펌프나 팬을 다시 올리는 게 좋습니다.
+- **1번(최대 프로세서 상태 99%)은 적용되지 않았습니다.**
+  - 현재 사용 중인 전원 구성표("균형 조정")의 최대 프로세서 상태가 여전히 100%입니다(AC·DC 모두).
+  - 실제 클럭도 기본 클럭의 약 156%(약 3.9GHz)로 터보가 켜져 있습니다.
+  - 학습 속도도 그대로입니다(job당 153–156 step/s, update당 rollout 2.7초·PPO 3.7초).
+  - 다른 전원 구성표를 바꾸셨을 가능성이 큽니다. **"균형 조정"** 구성표에서 다시 99%로 바꿔 주세요. 고급 설정 창 위쪽 드롭다운이 "균형 조정 [활성]"인지 확인하시면 됩니다.
+- **2번(팬)**: 온도는 FanControl에서 확인해 주세요. 1번이 적용되면 발열이 줄어 팬을 더 낮출 여유가 생깁니다.
+
+바꾸신 뒤 말씀해 주시면 클럭과 학습 속도가 실제로 바뀌었는지 다시 확인하겠습니다.
+
+## 원문 기록 T243 — 2026-11-06 KST, Claude Code
+
+### 사용자 — 원문
+
+잠깐 lbf s1 crashed났는데?
+
+### 수행 기록 — 원문 대화와 별도
+
+- 진단과 조치는 E99에 적었다. `scripts/start_detached.ps1`을 숨김 창과 `-WaitForPid`로 고쳤다. 중단된 seed 1 기록은 `_crashed_20261106_1117/`로 옮겨 보존했다. seed 2가 끝난 뒤 seed 1·3을 돌리는 숨김 대기열(PID 24360)을 띄웠다. 실행 중인 seed 2는 건드리지 않았다. 커밋하지 않았다.
+
+### Assistant — 진행 안내 (원문)
+
+- 원인을 찾았습니다. seed 1의 5개 job은 11:17:21–28에 동시에 종료됐고, 로그에는 모두 `program aborting due to window-CLOSE event`가 남아 있습니다. 학습 오류가 아니라 **콘솔 창이 닫혀서** 죽은 것입니다. 앱 밖에서 띄운 대기열이 사용자 화면에 PowerShell 창을 하나 띄웠고, 그 창이 닫힌 것으로 보입니다. 그 순간 대기열 자신(PID 9684)도 죽었습니다. 죽기 직전에 seed 2 묶음은 시작해 두어서 seed 2의 5개 job은 지금 정상적으로 돌고 있습니다. 하지만 대기열이 없어서 seed 3은 시작되지 않습니다.
+- 고칠 순서는 이렇습니다. 실행 창이 화면에 보이지 않게 고칩니다. 죽은 seed 1 기록은 지우지 않고 별도 폴더로 옮겨 둡니다. seed 2가 끝나면 seed 1과 3을 이어서 돌리는 대기열을 다시 띄웁니다. 그 전에 seed 1을 지금 바로 띄우지 않는 이유는 동시 job이 10개가 되어 소음이 커지기 때문입니다.
+- seed 1 기록은 `_crashed_20261106_1117/` 폴더로 옮겨 보존했습니다. 집계 대상에서는 빠집니다. seed 2 job들에는 보이는 창이 없습니다. 이제 seed 2가 끝나면 seed 1·3을 이어서 돌리는 대기열을 숨김 창으로 띄웁니다.
+
+### Assistant — 최종 답변 (원문)
+
+seed 1이 죽은 원인을 찾아 고쳤고, 다시 돌도록 걸어 두었습니다.
+
+**원인**
+- 학습 오류가 아닙니다. seed 1의 5개 job이 11:17에 동시에 종료됐고, 로그에는 모두 "콘솔 창이 닫혀서 중단"(`window-CLOSE event`)이라고 남아 있습니다.
+- 제가 앱 밖에서 띄운 대기열이 화면에 PowerShell 창을 하나 띄웠는데, 그 창이 닫히면서 거기에 붙어 있던 job과 대기열이 함께 종료됐습니다. 창이 보이게 띄운 건 제 실수입니다.
+- 대기열이 죽기 직전에 seed 2의 5개 job을 시작해 두어서, seed 2는 지금 정상적으로 돌고 있습니다.
+
+**조치**
+- 실행 스크립트(`scripts/start_detached.ps1`)가 이제 창을 아예 숨긴 채 띄웁니다. 실수로 닫힐 창이 없습니다.
+- 죽은 seed 1 기록은 지우지 않고 `LBF/runs/lbf_main_5m/_crashed_20261106_1117/`로 옮겨 두었습니다. 최종 집계에서는 빠집니다. W&B에는 crashed run 5개로 남습니다.
+- seed 2가 끝나면 seed 1, 그다음 seed 3을 5개씩 돌리는 대기열을 숨김 상태로 걸어 두었습니다. 동시 job은 계속 5개로 유지돼 소음이 지금보다 커지지 않습니다.
+
+**예상 일정** (job당 초당 약 155 step 기준)
+- seed 2: 오늘 20시 전후
+- seed 1: 내일 05시 전후
+- seed 3: 내일 14시 전후
+
+최대 프로세서 상태를 99%로 낮추시면 각각 30% 정도 늦어집니다. 앞으로 화면에 PowerShell 창이 새로 뜨지 않을 것이니, 혹시 뜨더라도 닫지 말고 알려 주세요.
+
+기록은 E99와 `CONVERSATION_LOG.md` T243에 남겼습니다. 스크립트 수정과 T240–T243 기록은 아직 커밋하지 않았습니다.
+
+## 원문 기록 T244 — 2026-11-06 KST, Claude Code
+
+### 사용자 — 원문
+
+Commit and push
+
+### 수행 기록 — 원문 대화와 별도
+
+- `scripts/start_detached.ps1` 수정, E99, T240–T244 기록, RESEARCH_STATE 갱신을 한 커밋으로 push했다.
+
+### Assistant — 최종 답변 (원문)
+
+커밋하고 push했습니다(`feature/overcooked`). 숨김 창으로 바꾼 실행 스크립트, E99 기록, 대화 기록 T240–T244가 들어갔습니다. 학습 결과 폴더는 git 제외 대상이라 올라가지 않았습니다.

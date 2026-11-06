@@ -68,11 +68,47 @@ an event.
 | communication | Chebyshev distance ≤ 3, any step of the rollout |
 | evaluation only | `oracle_team_ids()`, per-team summaries |
 
-Comparability of probes across agents: the view is egocentric and contains only physical state, so the
-same transition (e.g. "holding a tomato soup, facing a serving window, interact → empty hands") has the same
-encoding whoever experienced it, at any position. No position, role or team normalisation is needed. The
-recipe is never observed: each agent has its own network, so its objective is learned from its reward.
-Unlike RWARE (which must drop private request channels), nothing has to be removed from the observation.
+Comparability of probes across agents: the view is egocentric and contains only physical state, so an
+identical local transition has an identical encoding whoever experienced it. The recipe is never observed:
+each agent has its own network, so its objective is learned from its reward. Unlike RWARE (which must drop
+private request channels), nothing has to be removed from the observation.
+
+**Correction (2026-11-05, E88).** "Identical encoding" does not make the *same kind of event* comparable.
+The view is egocentric but not rotated, so serving at the west window (facing west, window on the left of
+the crop) and at the east window (facing east, window on the right) are different inputs. In the 500k pilot
+(seed 1) the two tomato teammates served at opposite windows; each predictor answered its teammate's
+deliveries with 0.04 (own: 1.0), so the same-team distance stayed ≈ 0.92 and no pair was ever approved. The
+onion team's cook made only 2 deliveries and never matured (abstention by design). PGCT-D2 therefore stayed
+bit-identical to IPPO. Nothing was changed in the running experiments.
+
+**Probe v2 (D134, `configs/main_4p2t_probe_v2.json`, `adapter.probe_frame = "facing"`).** Each probe
+transition is expressed in the agent's heading frame before the step: the 3×3 crop is rotated so the heading
+points up, other agents' heading channels and the agent's own heading bits become relative, and move actions
+become forward/right/back/left. A rotation, not a mirror: the two cells beside a station keep their side, so
+west and east window deliveries still differ in the two front corners (dish dispenser vs counter). Only the
+gate's public view changes; observations, rewards, PPO, gate values and Max-GAE are as in v1, so `ippo`,
+`oracle` and `all` give bit-identical runs under both configs (tested). Checks before training:
+- scripted opposite-window teammates (`tests/test_probe_v2.py`): v1 same-team EMA .53/.54 (not approved), v2
+  .32/.27 (approved exactly the teammates), cross-team ≥ .92 in both;
+- replay of the 500k pilot policies with identical experience for both frames: see E90 in `EXPERIMENTS.md`.
+The cook who never serves still abstains in v2: identification needs each agent's own reward events.
+
+v2 in training (`oc_pilot_500k_probe_v2`, seed 1, 0.5M): same-team EMA 0.92 → 0.58, cross-team 0.82 / 1.00,
+still no approval (τ = 0.5), so PGCT-D2 again equalled IPPO.
+
+**Probe v3 (D135, `configs/main_4p2t_probe_v3.json`, `probe_frame = "facing_cross"`).** The v2 frame restricted to
+the agent's cell and its four neighbours; the four diagonal cells (where the west and east windows differ: dish
+dispenser vs counter) are dropped. Serving at either window becomes the same input
+(`docs/img/probe_views_v1_v2_v3.png`, made by `docs/make_probe_view_figure.py`). Everything that decides an
+Overcooked reward is in the front cell and the agent's own held item. Scripted opposite-window teammates:
+same-team EMA 0.001 / 0.004, cross-team 0.96–0.97 (v2: 0.32 / 0.27). Policy-replay results: E92.
+
+**Reward-event rule (D138–D139).** With the absolute rule (event ⇔ r ≥ 0.5) only deliveries are events, so an
+agent that cooks but never serves never matures. The environment's rewards are frozen at the current version
+(D138: not changed to suit PGCT). Instead the gate uses the scale-free relative rule shared with RWARE
+(`configs/main_4p2t_probe_v3_rel.json`): an event is a positive own reward ≥ 0.1 × the largest own reward so far
+(`docs/ALGORITHM.md`, "Reward-event rule"). This brings ingredient and soup events in for every agent. It does not
+solve the contrast problem (agents that never handle the other team's items cannot tell the teams apart; E93).
 
 Critic compatibility: all critic inputs live in one space with identical semantics, so a donor critic
 `V_j` can be run on the receiver's history. `V_j` estimates returns under **j's** reward function; for a true
@@ -124,8 +160,10 @@ Field names match RWARE where they exist (`max_gae_*`, `ac_v2_*`).
 - **Sparse events.** Gate maturity needs 20 own deliveries; until then there is no identification and no
   critic access. Time to first maturity is part of the result.
 - **Learning difficulty and budget.** Four agents with a long recipe chain may need several million steps.
-  At ≈37 env steps/s per process on this PC (measured with two processes in parallel), 5M steps take about
-  1.5 days per job; 6 methods × 3 seeds = 18 jobs. Run them yourself (scripts below), e.g. 2–4 at a time.
+  The 500k pilot (two jobs in parallel, nothing else running) ran at ≈135–150 env steps/s per job and learned
+  (own deliveries 0 → ≈25 per episode, greedy evaluation return ≈8.5 per agent at 0.5M); an early sanity run
+  measured only ≈37 steps/s while the test suites shared the CPU. 5M steps take roughly 10 hours per job at
+  the pilot rate; 6 methods × 3 seeds = 18 jobs. Run them yourself (scripts below), e.g. 2–4 at a time.
 - **Shaping.** The shaping terms are individual and recipe-specific. An ablation without shaping is one
   override away (`--set kitchen.pot_reward=0 kitchen.soup_pickup_reward=0`).
 - **Distance mode.** `action_max` was chosen for RWARE (D108). A pooled-distance ablation:
@@ -134,5 +172,10 @@ Field names match RWARE where they exist (`max_gae_*`, `ac_v2_*`).
   change; kept identical across methods.
 
 ## 8. How to run
+
+New queue-launched jobs are tracked in W&B project `pgct-overcooked` by default. The plan name is the W&B
+group and each `(method, seed)` is a separate run; `wandb.json` records the remote ID/URL in the job folder.
+Local `metrics.jsonl`, `gate.jsonl`, and `eval.jsonl` remain authoritative and are written whether W&B is
+online, offline, disabled, or encounters a logging failure.
 
 See `Overcooked/README.md`.

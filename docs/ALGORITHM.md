@@ -50,12 +50,37 @@ What counts as a public view is environment specific (`ProbeProjection.public_vi
 | view | own loaded/direction/highway bits + 11 public physical channels within radius 2 | own facing + held item + all 32 physical channels within radius 1 |
 | excluded | absolute coordinates, own-team request channel, goal/return ego info | nothing to exclude: observations hold no team or recipe information |
 | actions | 5 | 6 |
+| frame | north-up crop | v1: north-up crop; v2 (`probe_frame: facing`, D134): crop, heading channels and move actions relative to the pre-step heading (projection method `public_transition`) |
 
 ## 3. Maturity (abstention)
 
 Agent `i` votes only if `events_seen_i >= 20`, it has been refit at least once, and
 `mean_{q in E_i} r̂_i(q) >= 0.3`. An agent that never earned a reward event is never paired.
 Code: `RewardPredictor.mature`, `RewardProbeGate.maturity`.
+
+### Reward-event rule τ_r (D138–D139)
+
+Two different thresholds exist: τ_r decides which own experiences become reward events (probes, maturity) and τ_D
+(§5) decides approval. τ_D acts on a normalised distance; τ_r = 0.5 and the maturity level 0.3 are in **reward
+units**, so their meaning changes with an environment's reward scale (RWARE: deliveries and returns, 1.0, while
+the team-specific requested pickup, 0.15, is excluded; Overcooked: deliveries only, so a cook who never serves
+never matures). The value 0.5 was chosen to select RWARE's large events; no scale-free reason was recorded.
+
+Option `event_threshold="relative"` (default `"absolute"` keeps the rule above and every RWARE run unchanged):
+
+    event:     r > 0  and  r >= κ · M_i            M_i = largest own reward so far (κ = event_scale = 0.1)
+    maturity:  mean_{q in E_i} r̂_i(q) >= ρ · mean_{q in E_i} r(q)        (ρ = min_event_response_ratio = 0.3)
+
+- Label-free and local (each agent uses only its own rewards); invariant to multiplying all rewards by a constant.
+- κ = 0.1 is an order-of-magnitude rule fixed before any relative-rule run: per-step progress terms and penalties
+  are ≤ 2 % of the largest reward in both environments, sub-goal rewards ≥ 10 % (RWARE pickup 0.15; Overcooked
+  ingredient 0.1, soup 0.2). ρ = 0.3 equals the absolute rule where events pay 1.0 (RWARE).
+- When M_i grows, buffered events below the new threshold are dropped so the probes always follow the current rule.
+- Configs: `RWARE/latent_team/acv2_nomirror_relative.json` (job names `*_acv2_amax_rel_*`),
+  `Overcooked/configs/main_4p2t_probe_v3_rel.json`. Report κ ∈ {0.1, 0.5} as sensitivity (κ = 0.5 is close to the
+  absolute rule once an agent has earned the maximal reward).
+- It addresses event coverage (who can be compared). It does not create contrast experience: when neither agent
+  has experienced the other team's paid situations, no event rule or τ_D separates them (E93).
 
 ## 4. Pairwise reward-response distance
 
@@ -81,6 +106,47 @@ symmetric and does **not** require current contact:
 
 Losing contact does not erase the evidence; critic access still requires contact in the current rollout.
 Code: `RewardProbeGate.compare`, `approved`. Config: `ema_beta`, `min_rounds`, `distance_threshold`.
+
+### What τ = 0.5 means (D136; checked numerically in the D136 record)
+
+"D lies in [0, 1], so take the middle" is not a justification by itself. The value rests on these facts:
+
+1. **Ideal outcomes are exactly 0 and 1.** With perfect predictors, team-specific reward events and
+   `Q_ij = E_i ∪ E_j`: a same-team pair answers every probe alike (D = 0); a cross-team pair answers each
+   probe with "paid / not paid" in opposite ways (D = 1). This holds for any number of probes and any reward
+   scale (D is normalised). With pooled distances, events paid to both teams (fraction s of the probe
+   mass) pull the cross-team value down to (1 − s)/(1 + s), which is below 0.5 once s > 1/3; `action_max`
+   restores the ideal 1 whenever one public action is team-specific (D107–D108). τ = 0.5 is the midpoint of the
+   two ideal outcomes, not of the range.
+2. **Interpretation as a response ratio.** If a predictor answers its own events with a and the partner's
+   events with ρ·a (and vice versa), D = (1 − ρ)/(1 + ρ). Hence τ ↔ ρ* = (1 − τ)/(1 + τ): τ = 0.5 approves a pair
+   when each agent responds to the other's reward moments with more than one third of its own response. The
+   same number bounds both errors: a teammate whose predictor is three times weaker still passes; an
+   other-team agent that "leaks" up to one third of a response is still rejected.
+3. **Tolerance to prediction error.** If every prediction is within ε of its 0/1 target, same-team D ≤ ε and
+   cross-team D ≥ 1 − 2ε (both tight). τ separates the two whenever ε < τ < 1 − 2ε. τ = 0.5 is guaranteed for
+   ε < 1/4; the worst-case optimum would be τ = 1/3 (ε < 1/3). So 0.5 is not the minimax value under this
+   error model; it is a pre-registered value that is safe for ε < 1/4.
+4. **Empirical margin, not fitting.** RWARE D2: same-team EMA ≤ 0.28 and cross-team ≥ 0.98 over 25 offline
+   checkpoints (E74), same-team 0.07–0.25 and cross-team 0.99–1.00 in the running day_base run (E91): every
+   τ in roughly (0.28, 0.98) gives the same decisions there. τ was fixed before these runs and is not tuned per
+   environment; Overcooked failures are addressed in the probe representation (v2/v3), not by moving τ.
+
+5. **What no τ can fix: one-sided discrimination.** If only one of the two predictors separates the teams (the
+   other answers "paid" to every probe because it never experienced the other team's events), the pooled
+   distance is n_i / (n_i + 2 n_j) for n_i probes from the "blind" agent and n_j from the discriminating one —
+   exactly 1/3 for balanced probes, and smaller when the blind agent contributes fewer probes. Overcooked v3
+   policy replay showed this (E92: cross-team 0.30). Taking the maximum of D over the two probe owners
+   (E_i and E_j separately) removes the one-sided case in theory, but the replay analysis E93 showed it is not
+   a remedy there: both predictors were "blind" (owner distances 0.13 / 0.23), and the maximum also rejected a
+   true cook–server teammate pair (0.53). When neither agent has experienced the other team's paid situations,
+   no distance and no τ can separate the teams; the fix has to come from experience (contrast) or abstention
+   (D137). Not implemented.
+
+Recommended reporting: state (1)–(3), show a τ sweep of the identification metrics recomputed from logged EMAs
+(counterfactual decisions on the same trajectory; learning curves would need new runs), and mention τ = 1/3 as
+the worst-case-optimal alternative. A label-free data-driven variant (compare D_ij with each agent's own
+split-half self-distance) is a possible extension, not implemented.
 
 ## 6. Rollout-start snapshot (D103)
 

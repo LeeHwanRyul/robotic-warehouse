@@ -36,17 +36,29 @@ HELD_INDEX = {None: 0, "onion": 1, "tomato": 2, "dish": 3, "soup_onion": 4, "sou
 AGENT_CHANNELS = slice(CH["agent"], CH["agent_held_soup_mixed"] + 1)
 
 
+PROBE_FRAMES = ("absolute", "facing", "facing_cross")
+
+
 @dataclass
 class AdapterConfig:
     obs_radius: int = 3      # actor/critic window radius
     probe_radius: int = 1    # public probe view radius (must not exceed obs_radius)
     comm_range: int = 3      # Chebyshev communication range
+    # Public probe frame. "absolute" (v1, default): north-up egocentric crop. "facing" (v2, D133/D134): the
+    # crop, heading channels and move actions of a transition are expressed relative to the agent's heading
+    # before the step, so the same event at mirror-placed stations (e.g. west vs east serving window) is
+    # encoded alike. "facing_cross" (v3, D135): the facing frame restricted to the agent's own cell and its
+    # four neighbours (front, left, right, back), dropping the four diagonal cells. Only the gate's public view
+    # changes; actor/critic observations are identical.
+    probe_frame: str = "absolute"
 
     def __post_init__(self):
         if not 0 <= self.probe_radius <= self.obs_radius:
             raise ValueError("probe_radius must be in [0, obs_radius]")
         if self.comm_range < 0:
             raise ValueError("comm_range must be nonnegative")
+        if self.probe_frame not in PROBE_FRAMES:
+            raise ValueError(f"probe_frame must be one of {PROBE_FRAMES}")
 
 
 def obs_size(radius):
@@ -73,6 +85,78 @@ class KitchenProbeProjection(NoMirror):
         return observation[..., self.index].astype(np.uint8)
 
 
+# Absolute move action -> heading index (0 N, 1 E, 2 S, 3 W) and back; STAY (0) / INTERACT (5) are unchanged.
+MOVE_DIR = {1: 0, 3: 1, 2: 2, 4: 3}
+DIR_MOVE = {d: a for a, d in MOVE_DIR.items()}
+HEADING_CHANNELS = slice(CH["agent_facing_n"], CH["agent_facing_w"] + 1)
+
+
+def relative_action(action, heading):
+    """Move actions relative to `heading`: forward -> NORTH, right -> EAST, back -> SOUTH, left -> WEST."""
+    action = int(action)
+    return DIR_MOVE[(MOVE_DIR[action] - heading) % 4] if action in MOVE_DIR else action
+
+
+class FacingProbeProjection(KitchenProbeProjection):
+    """v2 public view: the transition is rotated into the agent's pre-step heading frame.
+
+    The (2r+1)x(2r+1) crop is rotated so that the heading points up, other agents' heading channels and the
+    agent's own heading bits become relative to that heading (own heading before the step is always 'up'),
+    and move actions become forward/right/back/left. Held items and all physical channels are unchanged.
+    Rotation preserves handedness: it does not mirror, so left/right neighbours of a station keep their side.
+    """
+
+    def _rotate(self, view, heading):
+        view = np.asarray(view)
+        side = 2 * self.probe_radius + 1
+        ego = view[:EGO_SIZE].copy()
+        grid = view[EGO_SIZE:].reshape(N_CHANNELS, side, side)
+        grid = np.rot90(grid, k=heading, axes=(1, 2)).copy()            # heading direction -> top
+        grid[HEADING_CHANNELS] = np.roll(grid[HEADING_CHANNELS], -heading, axis=0)  # d -> (d - heading) % 4
+        ego[:4] = np.roll(ego[:4], -heading)
+        return np.concatenate([ego, grid.reshape(-1)]).astype(np.uint8)
+
+    def public_view(self, observation):
+        view = super().public_view(observation)
+        return self._rotate(view, int(np.argmax(view[:4])))
+
+    def public_transition(self, before, action, after):
+        vb, va = super().public_view(before), super().public_view(after)
+        heading = int(np.argmax(vb[:4]))
+        return self._rotate(vb, heading), relative_action(action, heading), self._rotate(va, heading)
+
+
+CROSS_CELLS = ((0, 1), (1, 0), (1, 1), (1, 2), (2, 1))  # front, left, self, right, back in the facing frame
+
+
+class CrossProbeProjection(FacingProbeProjection):
+    """v3 public view: the v2 facing frame restricted to the agent's cell and its four neighbours.
+
+    The four diagonal cells are dropped. At mirror-placed stations (west vs east serving window) the diagonal
+    cells hold different fixtures (dish dispenser vs counter) even after rotation; the interaction target is
+    always the front cell, so the cross keeps everything that decides an Overcooked reward.
+    """
+
+    def __init__(self, obs_radius, probe_radius):
+        if probe_radius != 1:
+            raise ValueError("probe_frame 'facing_cross' needs probe_radius 1")
+        super().__init__(obs_radius, probe_radius)
+        self.view_size = EGO_SIZE + N_CHANNELS * len(CROSS_CELLS)
+
+    def _cross(self, view):
+        view = np.asarray(view)
+        grid = view[EGO_SIZE:].reshape(N_CHANNELS, 3, 3)
+        cells = np.stack([grid[:, r, c] for r, c in CROSS_CELLS], axis=1)
+        return np.concatenate([view[:EGO_SIZE], cells.reshape(-1)]).astype(np.uint8)
+
+    def public_view(self, observation):
+        return self._cross(super().public_view(observation))
+
+    def public_transition(self, before, action, after):
+        vb, action, va = super().public_transition(before, action, after)
+        return self._cross(vb), action, self._cross(va)
+
+
 class KitchenAdapter:
     """pgct_core.interfaces.EnvAdapter for the multi-team kitchen."""
 
@@ -83,7 +167,9 @@ class KitchenAdapter:
         self.n_agents = self.env.n_agents
         self.n_actions = N_ACTIONS
         self.obs_dim = obs_size(self.config.obs_radius)
-        self.projection = KitchenProbeProjection(self.config.obs_radius, self.config.probe_radius)
+        projection = {"absolute": KitchenProbeProjection, "facing": FacingProbeProjection,
+                      "facing_cross": CrossProbeProjection}[self.config.probe_frame]
+        self.projection = projection(self.config.obs_radius, self.config.probe_radius)
 
     def describe(self):
         return dict(kitchen=asdict(self.env.config), adapter=asdict(self.config), n_agents=self.n_agents,
